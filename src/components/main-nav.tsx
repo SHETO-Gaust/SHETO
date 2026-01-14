@@ -32,13 +32,14 @@ export function MainNav() {
           <SidebarMenuItem key={link.href}>
             <Link href={link.href} passHref>
               <SidebarMenuButton
-                asChild
                 className={cn('justify-start')}
                 isActive={pathname.startsWith(link.href)}
                 tooltip={link.label}
               >
-                <link.icon className="h-5 w-5" />
-                <span className="text-base">{link.label}</span>
+                <>
+                  <link.icon className="h-5 w-5" />
+                  <span className="text-base">{link.label}</span>
+                </>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
