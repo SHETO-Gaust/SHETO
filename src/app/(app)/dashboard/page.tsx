@@ -7,6 +7,7 @@ import type { Profile, Formacao } from "@/lib/types"
 import { format, isFuture, isPast, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from "next/link";
+import { cn } from "@/lib/utils"
 
 async function getFormacoes(): Promise<Formacao[]> {
     const cookieStore = cookies();
@@ -125,7 +126,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {processedFormacoes.map((formacao) => (
-          <Card key={formacao.id} className={`relative overflow-visible ${formacao.status === 'Em andamento' ? 'border-primary border-2' : ''}`}>
+          <Card key={formacao.id} className={cn('relative transition-all duration-300 ease-in-out shadow-lg rounded-xl', { 'border-2 border-blue-300 bg-blue-50/50': formacao.status === 'Em andamento' })}>
             <CardHeader>
               <CardTitle>{formacao.name}</CardTitle>
               <CardDescription className="flex items-center gap-2 pt-2">
