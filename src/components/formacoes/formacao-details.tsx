@@ -1,12 +1,14 @@
 'use client';
 
+import { useRouter } from "next/navigation";
 import type { Formacao } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, CheckCircle, Clock, MapPin, Monitor, Sun, Sunset, XCircle } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle, Clock, MapPin, Monitor, Sun, Sunset, XCircle } from "lucide-react";
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Separator } from "../ui/separator";
+import { Button } from "../ui/button";
 
 type FormacaoDetailsProps = {
     formacao: Formacao;
@@ -20,6 +22,8 @@ const PendencyItem = ({ name, done }: { name: string, done: boolean }) => (
 );
 
 export function FormacaoDetails({ formacao }: FormacaoDetailsProps) {
+    const router = useRouter();
+
     const pendenciasGFCPE = [
         { name: 'Detalhes da Inscrição', done: !!formacao.gfcpe_info?.inscricao_detalhes },
         { name: 'Formadores', done: !!formacao.gfcpe_info?.formadores },
@@ -49,7 +53,10 @@ export function FormacaoDetails({ formacao }: FormacaoDetailsProps) {
                             </Badge>
                         </CardDescription>
                     </div>
-                    {/* Add action buttons here if needed */}
+                    <Button variant="outline" onClick={() => router.back()}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Voltar
+                    </Button>
                 </div>
             </CardHeader>
             <CardContent className="space-y-6">
