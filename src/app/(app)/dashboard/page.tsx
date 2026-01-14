@@ -8,6 +8,7 @@ import { format, isFuture, isPast, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from "next/link";
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 
 async function getFormacoes(): Promise<Formacao[]> {
     const cookieStore = cookies();
@@ -32,15 +33,24 @@ function getStatusAndNextDate(dates: any): { status: string; nextDate: string, d
         .sort((a, b) => a.getTime() - b.getTime());
 
     const today = new Date();
-    const futureDates = dateObjects.filter(d => isFuture(d) || format(d, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
+    today.setHours(0, 0, 0, 0);
+
+    const futureDates = dateObjects.filter(d => {
+        const d_clone = new Date(d);
+        d_clone.setHours(0, 0, 0, 0);
+        return d_clone.getTime() >= today.getTime();
+    });
     
     if (futureDates.length > 0) {
         const nextDate = futureDates[0];
         const daysUntil = differenceInDays(nextDate, today);
-        const allPast = dateObjects.every(d => isPast(d) && format(d, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd'));
+        const hasPastDates = dateObjects.some(d => {
+            const d_clone = new Date(d);
+            d_clone.setHours(0, 0, 0, 0);
+            return d_clone.getTime() < today.getTime();
+        });
         
-        // If there are future dates but also past dates, it's in progress
-        if (!allPast) {
+        if (hasPastDates) {
              return { status: 'Em andamento', nextDate: format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntil };
         } else {
              return { status: 'Próxima', nextDate: format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntil };
@@ -54,7 +64,7 @@ function getStatusAndNextDate(dates: any): { status: string; nextDate: string, d
 
     // Default if no other condition is met
     const firstDate = dateObjects[0];
-    const daysUntilFirst = differenceInDays(firstDate, new Date());
+    const daysUntilFirst = differenceInDays(firstDate, today);
     return { status: 'Próxima', nextDate: format(firstDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntilFirst };
 }
 
@@ -126,7 +136,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {processedFormacoes.map((formacao) => (
-          <Card key={formacao.id} className={cn('relative transition-all duration-300 ease-in-out shadow-lg rounded-xl', { 'border-2 border-blue-300 bg-blue-50/50': formacao.status === 'Em andamento' })}>
+          <Card key={formacao.id} className={cn('relative transition-all duration-300 ease-in-out shadow-lg rounded-xl flex flex-col', { 'border-2 border-blue-300 bg-blue-50/50': formacao.status === 'Em andamento' })}>
             <CardHeader>
               <CardTitle>{formacao.name}</CardTitle>
               <CardDescription className="flex items-center gap-2 pt-2">
@@ -134,26 +144,35 @@ export default async function DashboardPage() {
                 {formacao.status === 'Próxima' || formacao.status === 'Em andamento' ? `Próxima data: ${formacao.nextDate}` : formacao.status}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-                <div>
-                    <h4 className="font-semibold text-sm mb-2">Pendências GFCPE</h4>
-                    <div className="space-y-1">
-                        {formacao.pendenciasGFCPE.map(p => <PendencyItem key={p.name} {...p}/>)}
+            <CardContent className="space-y-4 flex-grow flex flex-col">
+                <div className="flex-grow">
+                    <div>
+                        <h4 className="font-semibold text-sm mb-2">Pendências GFCPE</h4>
+                        <div className="space-y-1">
+                            {formacao.pendenciasGFCPE.map(p => <PendencyItem key={p.name} {...p}/>)}
+                        </div>
                     </div>
-                </div>
-                 <div>
-                    <h4 className="font-semibold text-sm mb-2">Pendências GADSG</h4>
-                    <div className="space-y-1">
-                        {formacao.pendenciasGADSG.map(p => <PendencyItem key={p.name} {...p}/>)}
+                     <div className="mt-4">
+                        <h4 className="font-semibold text-sm mb-2">Pendências GADSG</h4>
+                        <div className="space-y-1">
+                            {formacao.pendenciasGADSG.map(p => <PendencyItem key={p.name} {...p}/>)}
+                        </div>
                     </div>
                 </div>
 
-                <Link href={`/formacoes/${formacao.id}`} passHref>
-                  <Button variant="outline" className="w-full">
-                      <Info className="mr-2 h-4 w-4" />
-                      Detalhes
-                  </Button>
-                </Link>
+                <div className="mt-auto pt-4 space-y-2">
+                    {formacao.status === 'Em andamento' && (
+                        <div className="flex justify-end">
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">EM ANDAMENTO</Badge>
+                        </div>
+                    )}
+                    <Link href={`/formacoes/${formacao.id}`}>
+                      <Button variant="outline" className="w-full">
+                          <Info className="mr-2 h-4 w-4" />
+                          Detalhes
+                      </Button>
+                    </Link>
+                </div>
             </CardContent>
           </Card>
         ))}
