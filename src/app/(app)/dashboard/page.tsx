@@ -4,7 +4,7 @@ import { Calendar, CheckCircle, Info, XCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { cookies } from "next/headers"
 import type { Profile, Formacao } from "@/lib/types"
-import { format, isFuture, isPast, differenceInDays } from 'date-fns';
+import { format, isFuture, isPast, differenceInDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from "next/link";
 import { cn } from "@/lib/utils"
@@ -23,7 +23,7 @@ async function getFormacoes(): Promise<Formacao[]> {
     return data;
 }
 
-function getStatusAndNextDate(dates: any): { status: string; nextDate: string, daysUntilNext: number | null } {
+function getStatusAndNextDate(dates: any): { status: 'Próxima' | 'Em andamento' | 'Concluída' | 'Pendente'; nextDate: string, daysUntilNext: number | null } {
     if (!dates || !Array.isArray(dates) || dates.length === 0) {
         return { status: 'Pendente', nextDate: 'A definir', daysUntilNext: null };
     }
@@ -32,41 +32,45 @@ function getStatusAndNextDate(dates: any): { status: string; nextDate: string, d
         .map((d: any) => new Date(d.date))
         .sort((a, b) => a.getTime() - b.getTime());
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = startOfDay(new Date());
 
-    const futureDates = dateObjects.filter(d => {
-        const d_clone = new Date(d);
-        d_clone.setHours(0, 0, 0, 0);
-        return d_clone.getTime() >= today.getTime();
-    });
-    
-    if (futureDates.length > 0) {
-        const nextDate = futureDates[0];
-        const daysUntil = differenceInDays(nextDate, today);
-        const hasPastDates = dateObjects.some(d => {
-            const d_clone = new Date(d);
-            d_clone.setHours(0, 0, 0, 0);
-            return d_clone.getTime() < today.getTime();
-        });
-        
-        if (hasPastDates) {
-             return { status: 'Em andamento', nextDate: format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntil };
-        } else {
-             return { status: 'Próxima', nextDate: format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntil };
-        }
-    }
-    
-    // If all dates are in the past
-    if (dateObjects.every(d => isPast(d) && format(d, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd'))) {
+    // Rule 1: Check if all dates are in the past.
+    const allPast = dateObjects.every(d => isPast(d) && !isToday(d));
+    if (allPast) {
         return { status: 'Concluída', nextDate: 'N/A', daysUntilNext: null };
     }
+    
+    // Find the next upcoming date.
+    const futureDates = dateObjects.filter(d => d.getTime() >= today.getTime());
+    
+    let nextDate: Date | null = null;
+    let daysUntil: number | null = null;
+    
+    if (futureDates.length > 0) {
+        nextDate = futureDates[0];
+        daysUntil = differenceInDays(nextDate, today);
+    }
+    
+    const formattedNextDate = nextDate ? format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A';
 
-    // Default if no other condition is met
-    const firstDate = dateObjects[0];
-    const daysUntilFirst = differenceInDays(firstDate, today);
-    return { status: 'Próxima', nextDate: format(firstDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntilFirst };
+    // Rule 2: Check for "Em andamento"
+    const hasPastOrPresentDates = dateObjects.some(d => d.getTime() <= today.getTime());
+    if (hasPastOrPresentDates) {
+        return { status: 'Em andamento', nextDate: formattedNextDate, daysUntilNext: daysUntil };
+    }
+
+    // Rule 3: Otherwise, it's "Próxima"
+    return { status: 'Próxima', nextDate: formattedNextDate, daysUntilNext: daysUntil };
 }
+
+// Helper function to check if a date is today
+function isToday(date: Date) {
+    const today = new Date();
+    return date.getDate() === today.getDate() &&
+           date.getMonth() === today.getMonth() &&
+           date.getFullYear() === today.getFullYear();
+}
+
 
 export default async function DashboardPage() {
   const cookieStore = cookies();
@@ -98,13 +102,12 @@ export default async function DashboardPage() {
 
   const processFormacoes = (formacoes: Formacao[]) => {
     return formacoes.map(f => {
-        const { status, nextDate, daysUntilNext } = getStatusAndNextDate(f.dates);
+        const { status, nextDate } = getStatusAndNextDate(f.dates);
         return {
             id: f.id,
             name: f.name,
             status,
             nextDate,
-            daysUntilNext,
             pendenciasGFCPE: [
                 { name: 'Detalhes da Inscrição', done: !!f.gfcpe_info?.inscricao_detalhes },
                 { name: 'Formadores', done: !!f.gfcpe_info?.formadores },
@@ -117,7 +120,7 @@ export default async function DashboardPage() {
                 { name: 'Avaliação', done: !!f.gadsg_info?.avaliacao },
             ]
         }
-    })
+    }).filter(f => f.status !== 'Concluída'); // Filter out concluded formations
   }
 
   const processedFormacoes = processFormacoes(formacoes);
