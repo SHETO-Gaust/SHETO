@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 
 const links = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
-  { href: '/formacoes', label: 'Formações', icon: GraduationCap },
+  { href: '/formacoes', label: 'Cadastrar Formação', icon: GraduationCap },
   { href: '/ensalamentos', label: 'Ensalamentos', icon: School },
   { href: '/relatorios', label: 'Relatórios', icon: ClipboardList },
   { href: '/avaliacoes', label: 'Avaliações', icon: Star },
