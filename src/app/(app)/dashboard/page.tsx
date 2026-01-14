@@ -12,40 +12,40 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Fines (Unpaid)</CardTitle>
+            <CardTitle className="text-sm font-medium">Total de Multas (Não Pagas)</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${totalFinesValue.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">From 2 active fines</p>
+            <p className="text-xs text-muted-foreground">De 2 multas ativas</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Upcoming Reservations</CardTitle>
+            <CardTitle className="text-sm font-medium">Próximas Reservas</CardTitle>
             <CalendarCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">+{upcomingReservationsCount}</div>
-            <p className="text-xs text-muted-foreground">In the next 30 days</p>
+            <p className="text-xs text-muted-foreground">Nos próximos 30 dias</p>
           </CardContent>
         </Card>
          <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+            <CardTitle className="text-sm font-medium">Atividade Recente</CardTitle>
             <ReceiptText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3 New Items</div>
-            <p className="text-xs text-muted-foreground">1 fine, 2 notifications this week</p>
+            <div className="text-2xl font-bold">3 Novos Itens</div>
+            <p className="text-xs text-muted-foreground">1 multa, 2 notificações esta semana</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Overview</CardTitle>
-          <CardDescription>A summary of recent condominium activities.</CardDescription>
+          <CardTitle>Visão Geral</CardTitle>
+          <CardDescription>Um resumo das atividades recentes do condomínio.</CardDescription>
         </CardHeader>
         <CardContent>
            <OverviewChart />

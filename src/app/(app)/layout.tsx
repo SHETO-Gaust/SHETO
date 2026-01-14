@@ -38,7 +38,7 @@ export default async function AppLayout({
           <div className="flex items-center gap-2">
             <Building className="h-6 w-6 text-primary" />
             <h1 className="text-lg font-semibold font-headline text-sidebar-foreground">
-              Pantanal
+              GForms
             </h1>
           </div>
         </SidebarHeader>
@@ -51,7 +51,7 @@ export default async function AppLayout({
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
-          <SidebarTrigger className="md:hidden" />
+          <SidebarTrigger className="md/hidden" />
           <div className="ml-auto flex items-center gap-4">
             <NotificationsPopover />
             <UserNav user={user} />

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Reservation } from '@/lib/types';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 
 type ReservationsCalendarProps = {
@@ -43,8 +44,8 @@ export function ReservationsCalendar({
     if (selectedDate) {
       console.log('Reserving date:', selectedDate);
       toast({
-        title: "Reservation Requested",
-        description: `Your request for ${format(selectedDate, 'PPP')} has been submitted.`,
+        title: "Reserva Solicitada",
+        description: `Sua solicitação para ${format(selectedDate, 'PPP', { locale: ptBR })} foi enviada.`,
       });
     }
     setIsDialogOpen(false);
@@ -66,23 +67,24 @@ export function ReservationsCalendar({
         }}
         disabled={{ before: new Date() }}
         className="rounded-md border"
+        locale={ptBR}
       />
       <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Reservation</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar Reserva</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to reserve the gourmet area for{' '}
+              Você tem certeza que deseja reservar a área gourmet para{' '}
               <span className="font-semibold text-foreground">
-                {selectedDate ? format(selectedDate, 'PPP') : ''}
+                {selectedDate ? format(selectedDate, 'PPP', { locale: ptBR }) : ''}
               </span>
               ?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmReservation}>
-              Confirm
+              Confirmar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

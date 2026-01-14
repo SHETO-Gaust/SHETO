@@ -19,7 +19,7 @@ import { Loader2 } from 'lucide-react';
 
 const profileFormSchema = z.object({
   fullName: z.string().min(2, {
-    message: 'Full name must be at least 2 characters.',
+    message: 'O nome completo deve ter pelo menos 2 caracteres.',
   }),
   phone: z.string().optional(),
   email: z.string().email(),
@@ -44,8 +44,8 @@ export function ProfileForm({ userProfile }: ProfileFormProps) {
     await new Promise(resolve => setTimeout(resolve, 1000));
     console.log(data);
     toast({
-      title: 'Profile Updated',
-      description: 'Your profile information has been saved successfully.',
+      title: 'Perfil Atualizado',
+      description: 'Suas informações de perfil foram salvas com sucesso.',
     });
   };
 
@@ -62,7 +62,7 @@ export function ProfileForm({ userProfile }: ProfileFormProps) {
                 <Input {...field} readOnly disabled />
               </FormControl>
               <FormDescription>
-                Your email address cannot be changed.
+                Seu endereço de e-mail não pode ser alterado.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -73,12 +73,12 @@ export function ProfileForm({ userProfile }: ProfileFormProps) {
           name="fullName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Full Name</FormLabel>
+              <FormLabel>Nome Completo</FormLabel>
               <FormControl>
-                <Input placeholder="Your full name" {...field} />
+                <Input placeholder="Seu nome completo" {...field} />
               </FormControl>
               <FormDescription>
-                This is the name that will be displayed on reservations.
+                Este é o nome que será exibido nas reservas.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -89,12 +89,12 @@ export function ProfileForm({ userProfile }: ProfileFormProps) {
           name="phone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Phone Number</FormLabel>
+              <FormLabel>Número de Telefone</FormLabel>
               <FormControl>
-                <Input placeholder="Your phone number" {...field} />
+                <Input placeholder="Seu número de telefone" {...field} />
               </FormControl>
               <FormDescription>
-                Used by administrative staff for contact purposes.
+                Utilizado pela equipe administrativa para contato.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -102,7 +102,7 @@ export function ProfileForm({ userProfile }: ProfileFormProps) {
         />
         <Button type="submit" disabled={form.formState.isSubmitting}>
           {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Update Profile
+          Atualizar Perfil
         </Button>
       </form>
     </Form>

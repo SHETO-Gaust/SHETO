@@ -18,6 +18,7 @@ import {
 import { mockNotifications } from '@/lib/data';
 import type { Notification } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export function NotificationsPopover() {
   const [notifications, setNotifications] =
@@ -57,8 +58,8 @@ export function NotificationsPopover() {
       <PopoverContent className="w-80" align="end">
         <Card className="border-0 shadow-none">
           <CardHeader className="p-4">
-            <CardTitle>Notifications</CardTitle>
-            <CardDescription>You have {unreadCount} unread messages.</CardDescription>
+            <CardTitle>Notificações</CardTitle>
+            <CardDescription>Você tem {unreadCount} mensagens não lidas.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <div className="space-y-2">
@@ -77,6 +78,7 @@ export function NotificationsPopover() {
                     <p className="text-sm text-muted-foreground">
                       {formatDistanceToNow(new Date(notification.createdAt), {
                         addSuffix: true,
+                        locale: ptBR,
                       })}
                     </p>
                   </div>

@@ -16,10 +16,10 @@ import {
 import { cn } from '@/lib/utils';
 
 const links = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/fines', label: 'Fines', icon: ReceiptText },
-  { href: '/reservations', label: 'Reservations', icon: CalendarCheck },
-  { href: '/profile', label: 'Profile', icon: UserCircle },
+  { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
+  { href: '/fines', label: 'Multas', icon: ReceiptText },
+  { href: '/reservations', label: 'Reservas', icon: CalendarCheck },
+  { href: '/profile', label: 'Perfil', icon: UserCircle },
 ];
 
 export function MainNav() {

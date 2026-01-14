@@ -20,9 +20,9 @@ export default async function ProfilePage() {
         <div className="mx-auto max-w-2xl">
             <Card>
                 <CardHeader>
-                    <CardTitle>User Profile</CardTitle>
+                    <CardTitle>Perfil de Usuário</CardTitle>
                     <CardDescription>
-                        Manage your account settings and contact information.
+                        Gerencie as configurações da sua conta e informações de contato.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

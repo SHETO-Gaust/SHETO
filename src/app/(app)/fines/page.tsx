@@ -9,9 +9,9 @@ export default function FinesPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Fines Management</CardTitle>
+        <CardTitle>Gerenciamento de Multas</CardTitle>
         <CardDescription>
-          View and manage all fines issued to your unit.
+          Visualize e gerencie todas as multas emitidas para sua unidade.
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -9,9 +9,9 @@ export default function ReservationsPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Gourmet Area Reservations</CardTitle>
+        <CardTitle>Reservas da Área Gourmet</CardTitle>
         <CardDescription>
-          Select a date to reserve the gourmet area. Booked dates are marked.
+          Selecione uma data para reservar a área gourmet. As datas reservadas estão marcadas.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex justify-center">

@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import type { Fine } from '@/lib/types';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 type FinesTableProps = {
   data: Fine[];
@@ -22,11 +23,11 @@ export function FinesTable({ data }: FinesTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[100px]">Fine ID</TableHead>
-            <TableHead>Reason</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
+            <TableHead className="w-[100px]">ID da Multa</TableHead>
+            <TableHead>Motivo</TableHead>
+            <TableHead className="text-right">Valor</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Date</TableHead>
+            <TableHead>Data</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -43,11 +44,11 @@ export function FinesTable({ data }: FinesTableProps) {
                     fine.status === 'paid' ? 'secondary' : 'destructive'
                   }
                 >
-                  {fine.status}
+                  {fine.status === 'paid' ? 'Paga' : 'Não Paga'}
                 </Badge>
               </TableCell>
               <TableCell>
-                {format(new Date(fine.createdAt), 'MMM d, yyyy')}
+                {format(new Date(fine.createdAt), 'd MMM, yyyy', { locale: ptBR })}
               </TableCell>
             </TableRow>
           ))}
