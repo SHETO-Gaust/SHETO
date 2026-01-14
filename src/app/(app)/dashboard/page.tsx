@@ -1,27 +1,17 @@
+'use client';
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Calendar, CheckCircle, Info, XCircle } from "lucide-react"
-import { createClient } from "@/lib/supabase/server"
-import { cookies } from "next/headers"
 import type { Profile, Formacao } from "@/lib/types"
 import { format, isFuture, isPast, differenceInDays, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from "next/link";
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
-
-async function getFormacoes(): Promise<Formacao[]> {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
-    const { data, error } = await supabase.from('formacoes').select('*').order('created_at', { ascending: false });
-
-    if (error) {
-        console.error('Error fetching formacoes:', error);
-        return [];
-    }
-
-    return data;
-}
+import { createClient } from "@/lib/supabase/client"
+import { useEffect, useState } from "react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 function getStatusAndNextDate(dates: any): { status: 'Próxima' | 'Em andamento' | 'Concluída' | 'Pendente'; nextDate: string, daysUntilNext: number | null } {
     if (!dates || !Array.isArray(dates) || dates.length === 0) {
@@ -33,24 +23,23 @@ function getStatusAndNextDate(dates: any): { status: 'Próxima' | 'Em andamento'
         .sort((a, b) => a.getTime() - b.getTime());
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    
     const pastDates = dateObjects.filter(d => isPast(d) && !isToday(d));
     const futureDates = dateObjects.filter(d => isFuture(d) || isToday(d));
 
-    if (dateObjects.every(d => isPast(d) && !isToday(d))) {
+    if (futureDates.length === 0) {
         return { status: 'Concluída', nextDate: 'N/A', daysUntilNext: null };
     }
-
-    const nextDateCand = futureDates.length > 0 ? futureDates[0] : null;
     
-    if ( (pastDates.length > 0 && futureDates.length > 0) || (futureDates.length > 0 && isToday(futureDates[0])) ) {
+    const nextDateCand = futureDates.length > 0 ? futureDates[0] : null;
+
+    if ( pastDates.length > 0 || isToday(futureDates[0]) ) {
          const daysUntil = nextDateCand ? differenceInDays(nextDateCand, today) : null;
          const formattedNextDate = nextDateCand ? format(nextDateCand, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A';
          return { status: 'Em andamento', nextDate: formattedNextDate, daysUntilNext: daysUntil };
     }
     
-    if (futureDates.length === dateObjects.length) {
+    if (futureDates.length > 0) {
         const daysUntil = nextDateCand ? differenceInDays(nextDateCand, today) : null;
         const formattedNextDate = nextDateCand ? format(nextDateCand, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A';
         return { status: 'Próxima', nextDate: formattedNextDate, daysUntilNext: daysUntil };
@@ -63,26 +52,45 @@ function getStatusAndNextDate(dates: any): { status: 'Próxima' | 'Em andamento'
 }
 
 
-export default async function DashboardPage() {
-  const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
+export default function DashboardPage() {
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const [displayName, setDisplayName] = useState("Usuário");
+  const [formacoes, setFormacoes] = useState<Formacao[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const { data: { user } } = await supabase.auth.getUser();
+  useEffect(() => {
+    const supabase = createClient();
 
-  let userProfile: Profile | null = null;
-  let displayName = "Usuário";
+    async function fetchData() {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
 
-  if (user) {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-    userProfile = profileData;
-    displayName = userProfile?.name || user.email || "Usuário";
-  }
+      if (user) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        setUserProfile(profileData);
+        setDisplayName(profileData?.name || user.email || "Usuário");
+      }
 
-  const formacoes = await getFormacoes();
+      const { data: formacoesData, error } = await supabase
+        .from('formacoes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching formacoes:', error);
+        setFormacoes([]);
+      } else {
+        setFormacoes(formacoesData);
+      }
+      setLoading(false);
+    }
+
+    fetchData();
+  }, []);
 
   const PendencyItem = ({ name, done }: { name: string, done: boolean }) => (
     <div className="flex items-center gap-2">
@@ -127,47 +135,55 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {processedFormacoes.map((formacao) => (
-          <Card key={formacao.id} className={cn('relative transition-all duration-300 ease-in-out shadow-lg rounded-xl flex flex-col', { 'border-2 border-blue-300 bg-blue-50/50': formacao.status === 'Em andamento' })}>
-            <CardHeader>
-              <CardTitle>{formacao.name}</CardTitle>
-              <CardDescription className="flex items-center gap-2 pt-2">
-                <Calendar className="h-4 w-4" />
-                {formacao.status === 'Próxima' || formacao.status === 'Em andamento' ? `Próxima data: ${formacao.nextDate}` : formacao.status}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 flex-grow flex flex-col">
-                <div className="flex-grow">
-                    <div>
-                        <h4 className="font-semibold text-sm mb-2">Pendências GFCPE</h4>
-                        <div className="space-y-1">
-                            {formacao.pendenciasGFCPE.map(p => <PendencyItem key={p.name} {...p}/>)}
-                        </div>
-                    </div>
-                     <div className="mt-4">
-                        <h4 className="font-semibold text-sm mb-2">Pendências GADSG</h4>
-                        <div className="space-y-1">
-                            {formacao.pendenciasGADSG.map(p => <PendencyItem key={p.name} {...p}/>)}
-                        </div>
-                    </div>
-                </div>
+        {loading ? (
+          <>
+            <Skeleton className="h-96 w-full rounded-xl" />
+            <Skeleton className="h-96 w-full rounded-xl" />
+            <Skeleton className="h-96 w-full rounded-xl" />
+          </>
+        ) : (
+          processedFormacoes.map((formacao) => (
+            <Card key={formacao.id} className={cn('relative transition-all duration-300 ease-in-out shadow-lg rounded-xl flex flex-col', { 'border-2 border-blue-300 bg-blue-50/50': formacao.status === 'Em andamento' })}>
+              <CardHeader>
+                <CardTitle>{formacao.name}</CardTitle>
+                <CardDescription className="flex items-center gap-2 pt-2">
+                  <Calendar className="h-4 w-4" />
+                  {formacao.status === 'Próxima' || formacao.status === 'Em andamento' ? `Próxima data: ${formacao.nextDate}` : formacao.status}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 flex-grow flex flex-col">
+                  <div className="flex-grow">
+                      <div>
+                          <h4 className="font-semibold text-sm mb-2">Pendências GFCPE</h4>
+                          <div className="space-y-1">
+                              {formacao.pendenciasGFCPE.map(p => <PendencyItem key={p.name} {...p}/>)}
+                          </div>
+                      </div>
+                       <div className="mt-4">
+                          <h4 className="font-semibold text-sm mb-2">Pendências GADSG</h4>
+                          <div className="space-y-1">
+                              {formacao.pendenciasGADSG.map(p => <PendencyItem key={p.name} {...p}/>)}
+                          </div>
+                      </div>
+                  </div>
 
-                <div className="mt-auto pt-4 space-y-2">
-                    {formacao.status === 'Em andamento' && (
-                        <div className="flex justify-end">
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">EM ANDAMENTO</Badge>
-                        </div>
-                    )}
-                    <Link href={`/formacoes/${formacao.id}`}>
-                      <Button variant="outline" className="w-full">
-                          <Info className="mr-2 h-4 w-4" />
-                          Detalhes
-                      </Button>
-                    </Link>
-                </div>
-            </CardContent>
-          </Card>
-        ))}
+                  <div className="mt-auto pt-4 space-y-2">
+                      {formacao.status === 'Em andamento' && (
+                          <div className="flex justify-end">
+                              <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">EM ANDAMENTO</Badge>
+                          </div>
+                      )}
+                      <Link href={`/formacoes/${formacao.id}`} className="w-full">
+                        <Button variant="outline" className="w-full">
+                            <Info className="mr-2 h-4 w-4" />
+                            Detalhes
+                        </Button>
+                      </Link>
+                  </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   )

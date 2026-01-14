@@ -14,6 +14,7 @@ export type Formacao = {
   subscription_list_info?: any; // jsonb
   attendance_list_info?: any; // jsonb
   consolidation_info?: any; // jsonb
+  subscription_form_config?: any; // jsonb
 };
 
 export type Avaliacao = {
@@ -44,7 +45,7 @@ export type Inscricao = {
   formacao_id: string; // uuid
   cpf?: string;
   nome_completo?: string;
-  email?: string;
+  email: string;
   dados?: any; // jsonb
   created_at?: string; // timestamp with time zone
 };
