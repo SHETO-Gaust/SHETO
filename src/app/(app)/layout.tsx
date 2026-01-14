@@ -57,7 +57,7 @@ export default async function AppLayout({
             <UserNav user={user} />
           </div>
         </header>
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main className="flex-1 bg-white p-4 sm:p-6">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );
