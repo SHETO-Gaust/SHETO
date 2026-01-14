@@ -29,13 +29,12 @@ function getStatusAndNextDate(dates: any): { status: string; nextDate: string, d
         .map((d: any) => new Date(d.date))
         .sort((a, b) => a.getTime() - b.getTime());
 
-    const today = startOfDay(new Date());
+    const today = new Date();
     const futureDates = dateObjects.filter(d => isFuture(d) || format(d, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
     
     if (futureDates.length > 0) {
         const nextDate = futureDates[0];
-        const nextDateStartOfDay = startOfDay(nextDate);
-        const daysUntil = differenceInDays(nextDateStartOfDay, today);
+        const daysUntil = differenceInDays(nextDate, today);
         const allPast = dateObjects.every(d => isPast(d) && format(d, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd'));
         
         // If there are future dates but also past dates, it's in progress
@@ -53,8 +52,7 @@ function getStatusAndNextDate(dates: any): { status: string; nextDate: string, d
 
     // Default if no other condition is met
     const firstDate = dateObjects[0];
-    const firstDateStartOfDay = startOfDay(firstDate);
-    const daysUntilFirst = differenceInDays(firstDateStartOfDay, today);
+    const daysUntilFirst = differenceInDays(firstDate, today);
     return { status: 'Próxima', nextDate: format(firstDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntilFirst };
 }
 
