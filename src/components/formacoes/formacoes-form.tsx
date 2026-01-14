@@ -15,13 +15,11 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Loader2, PlusCircle, Trash } from 'lucide-react';
+import { Loader2, PlusCircle, Trash } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useState } from 'react';
 import { createFormacao } from '@/app/(app)/formacoes/actions';
@@ -61,6 +59,9 @@ type FormacaoFormValues = z.infer<typeof formacaoFormSchema>;
 export function FormacoesForm() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [dateStrings, setDateStrings] = useState<string[]>(['']);
+  const [weekDays, setWeekDays] = useState<string[]>(['']);
+
 
   const form = useForm<FormacaoFormValues>({
     resolver: zodResolver(formacaoFormSchema),
@@ -90,11 +91,48 @@ export function FormacoesForm() {
     if (count > currentDays) {
       for (let i = 0; i < count - currentDays; i++) {
         append({ date: new Date(), location: { morning: false, morning_location: '', afternoon: false, afternoon_location: '' } });
+        setDateStrings(prev => [...prev, '']);
+        setWeekDays(prev => [...prev, '']);
       }
     } else if (count < currentDays) {
       for (let i = 0; i < currentDays - count; i++) {
         remove(currentDays - 1 - i);
+        setDateStrings(prev => prev.slice(0, -1));
+        setWeekDays(prev => prev.slice(0, -1));
       }
+    }
+  };
+
+  const handleDateChange = (value: string, index: number, onChange: (date: Date) => void) => {
+    let formattedValue = value.replace(/\D/g, '');
+
+    if (formattedValue.length > 2) {
+      formattedValue = `${formattedValue.slice(0, 2)}/${formattedValue.slice(2)}`;
+    }
+    if (formattedValue.length > 5) {
+      formattedValue = `${formattedValue.slice(0, 5)}/${formattedValue.slice(5, 9)}`;
+    }
+
+    const newDateStrings = [...dateStrings];
+    newDateStrings[index] = formattedValue;
+    setDateStrings(newDateStrings);
+
+    if (formattedValue.length === 10) {
+      const parsedDate = parse(formattedValue, 'dd/MM/yyyy', new Date());
+      if (!isNaN(parsedDate.getTime())) {
+        onChange(parsedDate);
+        const newWeekDays = [...weekDays];
+        newWeekDays[index] = format(parsedDate, 'EEEE', { locale: ptBR });
+        setWeekDays(newWeekDays);
+      } else {
+        const newWeekDays = [...weekDays];
+        newWeekDays[index] = 'Data inválida';
+        setWeekDays(newWeekDays);
+      }
+    } else {
+        const newWeekDays = [...weekDays];
+        newWeekDays[index] = '';
+        setWeekDays(newWeekDays);
     }
   };
 
@@ -115,6 +153,8 @@ export function FormacoesForm() {
         description: 'A nova formação foi cadastrada com sucesso.',
       });
       form.reset();
+      setDateStrings(Array(form.getValues('days').length).fill(''));
+      setWeekDays(Array(form.getValues('days').length).fill(''));
     }
     setLoading(false);
   };
@@ -181,39 +221,20 @@ export function FormacoesForm() {
                         control={form.control}
                         name={`days.${index}.date`}
                         render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                            <FormLabel>Data</FormLabel>
-                            <Popover>
-                                <PopoverTrigger asChild>
+                            <FormItem>
+                                <FormLabel>Data</FormLabel>
+                                <div className="flex items-center gap-4">
                                 <FormControl>
-                                    <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                        "w-[240px] pl-3 text-left font-normal",
-                                        !field.value && "text-muted-foreground"
-                                    )}
-                                    >
-                                    {field.value ? (
-                                        format(field.value, "PPP", { locale: ptBR })
-                                    ) : (
-                                        <span>Escolha uma data</span>
-                                    )}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                    </Button>
+                                    <Input
+                                    placeholder="DD/MM/AAAA"
+                                    value={dateStrings[index]}
+                                    onChange={(e) => handleDateChange(e.target.value, index, field.onChange)}
+                                    className="w-[150px]"
+                                    />
                                 </FormControl>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                    mode="single"
-                                    selected={field.value}
-                                    onSelect={field.onChange}
-                                    disabled={(date) => date < new Date("1900-01-01")}
-                                    initialFocus
-                                    locale={ptBR}
-                                />
-                                </PopoverContent>
-                            </Popover>
-                            <FormMessage />
+                                {weekDays[index] && <span className="text-sm text-muted-foreground">{weekDays[index]}</span>}
+                                </div>
+                                <FormMessage />
                             </FormItem>
                         )}
                         />
