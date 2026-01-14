@@ -85,15 +85,6 @@ export default async function DashboardPage() {
     </div>
   )
 
-  const CountdownBadge = ({ days }: { days: number }) => {
-    const dayText = days === 1 ? 'dia' : 'dias';
-    return (
-        <div className="absolute -top-3 -right-3 z-10 animate-pulse rounded-full bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground shadow-lg">
-           {days > 0 ? `Falta ${days} ${dayText}` : 'É hoje!'}
-        </div>
-    )
-  }
-
   const processFormacoes = (formacoes: Formacao[]) => {
     return formacoes.map(f => {
         const { status, nextDate, daysUntilNext } = getStatusAndNextDate(f.dates);
@@ -135,9 +126,6 @@ export default async function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {processedFormacoes.map((formacao) => (
           <Card key={formacao.id} className={`relative overflow-visible ${formacao.status === 'Em andamento' ? 'border-primary border-2' : ''}`}>
-             {formacao.status === 'Próxima' && formacao.daysUntilNext !== null && formacao.daysUntilNext <= 7 && formacao.daysUntilNext >= 0 && (
-                <CountdownBadge days={formacao.daysUntilNext} />
-            )}
             <CardHeader>
               <CardTitle>{formacao.name}</CardTitle>
               <CardDescription className="flex items-center gap-2 pt-2">
@@ -159,11 +147,13 @@ export default async function DashboardPage() {
                     </div>
                 </div>
 
-                <Link href={`/formacoes/${formacao.id}`} passHref>
+                <Link href={`/formacoes/${formacao.id}`} passHref legacyBehavior>
+                  <a className="w-full">
                     <Button variant="outline" className="w-full">
                         <Info className="mr-2 h-4 w-4" />
                         Detalhes
                     </Button>
+                  </a>
                 </Link>
             </CardContent>
           </Card>
