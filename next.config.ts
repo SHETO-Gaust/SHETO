@@ -30,6 +30,25 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: '/fines',
+        destination: '/formacoes',
+        permanent: true,
+      },
+      {
+        source: '/reservations',
+        destination: '/ensalamentos',
+        permanent: true,
+      },
+       {
+        source: '/profile',
+        destination: '/relatorios',
+        permanent: true,
+      },
+    ]
+  },
 };
 
 export default nextConfig;

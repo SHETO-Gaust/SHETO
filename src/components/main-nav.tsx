@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
-  ReceiptText,
-  CalendarCheck,
-  UserCircle,
+  GraduationCap,
+  School,
+  ClipboardList,
+  Star,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -17,9 +18,10 @@ import { cn } from '@/lib/utils';
 
 const links = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
-  { href: '/fines', label: 'Multas', icon: ReceiptText },
-  { href: '/reservations', label: 'Reservas', icon: CalendarCheck },
-  { href: '/profile', label: 'Perfil', icon: UserCircle },
+  { href: '/formacoes', label: 'Formações', icon: GraduationCap },
+  { href: '/ensalamentos', label: 'Ensalamentos', icon: School },
+  { href: '/relatorios', label: 'Relatórios', icon: ClipboardList },
+  { href: '/avaliacoes', label: 'Avaliações', icon: Star },
 ];
 
 export function MainNav() {
@@ -36,10 +38,8 @@ export function MainNav() {
                 isActive={pathname.startsWith(link.href)}
                 tooltip={link.label}
               >
-                <>
-                  <link.icon className="h-5 w-5" />
-                  <span className="text-base">{link.label}</span>
-                </>
+                <link.icon className="h-5 w-5" />
+                <span className="text-base">{link.label}</span>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>

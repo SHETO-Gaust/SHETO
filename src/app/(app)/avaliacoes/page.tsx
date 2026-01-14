@@ -1,12 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function RelatoriosPage() {
+export default function AvaliacoesPage() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Relatórios</CardTitle>
+                <CardTitle>Avaliações</CardTitle>
                 <CardDescription>
-                    Gere e visualize relatórios sobre as formações.
+                    Acompanhe as avaliações das formações.
                 </CardDescription>
             </CardHeader>
             <CardContent>

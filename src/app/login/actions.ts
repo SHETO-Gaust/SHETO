@@ -22,28 +22,6 @@ export async function signIn(formData: FormData) {
   return redirect('/dashboard');
 }
 
-export async function signUp(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
-  const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
-
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `/dashboard`,
-    },
-  });
-
-  if (error) {
-    return redirect(`/login?error=${error.message}`);
-  }
-
-  // A confirmation email will be sent. For now, redirect to a page that tells the user to check their email.
-  return redirect('/login?message=Check your email to continue');
-}
-
 export async function signOut() {
   const cookieStore = cookies();
   const supabase = createClient(cookieStore);
