@@ -14,6 +14,7 @@ import {
 import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
 import { NotificationsPopover } from '@/components/notifications-popover';
+import type { Profile } from '@/lib/types';
 
 export default async function AppLayout({
   children,
@@ -29,6 +30,16 @@ export default async function AppLayout({
 
   if (!user) {
     return redirect('/login');
+  }
+
+  let userProfile: Profile | null = null;
+  if (user) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      userProfile = profileData;
   }
 
   return (
@@ -57,7 +68,7 @@ export default async function AppLayout({
           <SidebarTrigger className="md/hidden" />
           <div className="ml-auto flex items-center gap-4">
             <NotificationsPopover />
-            <UserNav user={user} />
+            <UserNav user={user} profile={userProfile} />
           </div>
         </header>
         <main className="flex-1 bg-white p-4 sm:p-6">{children}</main>

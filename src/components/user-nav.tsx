@@ -18,16 +18,19 @@ import {
 import { signOut } from '@/app/login/actions';
 import { User, LogOut } from 'lucide-react';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-import Link from 'next/link';
+import type { Profile } from '@/lib/types';
 
 type UserNavProps = {
   user: SupabaseUser;
+  profile: Profile | null;
 };
 
-export function UserNav({ user }: UserNavProps) {
+export function UserNav({ user, profile }: UserNavProps) {
   const getInitials = (email: string) => {
     return email ? email.charAt(0).toUpperCase() : '?';
   };
+  
+  const displayName = profile?.name || user.email;
 
   return (
     <DropdownMenu>
@@ -47,7 +50,7 @@ export function UserNav({ user }: UserNavProps) {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">
-              {user.user_metadata?.name || 'Prof Dutra'}
+              {displayName}
             </p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}

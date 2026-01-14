@@ -1,6 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Calendar, CheckCircle, Info, XCircle } from "lucide-react"
+import { createClient } from "@/lib/supabase/server"
+import { cookies } from "next/headers"
+import type { Profile } from "@/lib/types"
 
 // Mock data based on the new schema
 const formacoes = [
@@ -58,7 +61,25 @@ const formacoes = [
 ];
 
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const cookieStore = cookies();
+  const supabase = createClient(cookieStore);
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let userProfile: Profile | null = null;
+  let displayName = "Usuário";
+
+  if (user) {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+    userProfile = profileData;
+    displayName = userProfile?.name || user.email || "Usuário";
+  }
+
 
   const PendencyItem = ({ name, done }: { name: string, done: boolean }) => (
     <div className="flex items-center gap-2">
@@ -70,7 +91,7 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold">Olá, Prof Dutra!</h1>
+        <h1 className="text-2xl font-bold">Olá, {displayName}!</h1>
         <p className="text-muted-foreground">Bem-vindo(a) ao painel Gerenciamento de Formações.</p>
       </div>
 
