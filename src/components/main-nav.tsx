@@ -8,6 +8,7 @@ import {
   School,
   ClipboardList,
   Star,
+  ListChecks,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils';
 const links = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
   { href: '/formacoes', label: 'Cadastrar Formação', icon: GraduationCap },
+  { href: '/gerenciamento', label: 'Gerenciamento', icon: ListChecks },
   { href: '/ensalamentos', label: 'Ensalamentos', icon: School },
   { href: '/relatorios', label: 'Relatórios', icon: ClipboardList },
   { href: '/avaliacoes', label: 'Avaliações', icon: Star },

@@ -25,14 +25,12 @@ export function FormacaoDetails({ formacao }: FormacaoDetailsProps) {
     const router = useRouter();
 
     const pendenciasGFCPE = [
-        { name: 'Detalhes da Inscrição', done: !!formacao.gfcpe_info?.inscricao_detalhes },
         { name: 'Formadores', done: !!formacao.gfcpe_info?.formadores },
         { name: 'Ensalamento', done: !!formacao.gfcpe_info?.ensalamento },
     ];
     const pendenciasGADSG = [
         { name: 'Inscrição', done: !!formacao.gadsg_info?.inscricao },
         { name: 'Frequência', done: !!formacao.gadsg_info?.frequencia },
-        { name: 'Drive dos Materiais', done: !!formacao.gadsg_info?.drive_materiais },
         { name: 'Avaliação', done: !!formacao.gadsg_info?.avaliacao },
     ];
 

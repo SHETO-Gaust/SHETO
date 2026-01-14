@@ -33,40 +33,29 @@ function getStatusAndNextDate(dates: any): { status: 'Próxima' | 'Em andamento'
         .sort((a, b) => a.getTime() - b.getTime());
 
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     const pastDates = dateObjects.filter(d => isPast(d) && !isToday(d));
     const futureDates = dateObjects.filter(d => isFuture(d) || isToday(d));
 
-    // Rule 1: All dates are in the past -> Concluída
     if (dateObjects.every(d => isPast(d) && !isToday(d))) {
         return { status: 'Concluída', nextDate: 'N/A', daysUntilNext: null };
     }
 
-    // Rule 2: Some dates are past/today, and some are future -> Em andamento
-    if (pastDates.length > 0 && futureDates.length > 0) {
-       const nextDate = futureDates[0];
-       const daysUntil = differenceInDays(nextDate, today);
-       const formattedNextDate = format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-       return { status: 'Em andamento', nextDate: formattedNextDate, daysUntilNext: daysUntil };
+    const nextDateCand = futureDates.length > 0 ? futureDates[0] : null;
+    
+    if ( (pastDates.length > 0 && futureDates.length > 0) || (futureDates.length > 0 && isToday(futureDates[0])) ) {
+         const daysUntil = nextDateCand ? differenceInDays(nextDateCand, today) : null;
+         const formattedNextDate = nextDateCand ? format(nextDateCand, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A';
+         return { status: 'Em andamento', nextDate: formattedNextDate, daysUntilNext: daysUntil };
     }
     
-    // Rule 3: All dates are today or in the future -> Could be Em Andamento or Próxima
     if (futureDates.length === dateObjects.length) {
-        const nextDate = futureDates[0];
-        const daysUntil = differenceInDays(nextDate, today);
-        const formattedNextDate = format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-        
-        // If the first date is today, it's "Em andamento"
-        if (isToday(nextDate)) {
-             return { status: 'Em andamento', nextDate: formattedNextDate, daysUntilNext: daysUntil };
-        }
-        
-        // Otherwise, all dates are in the future -> Próxima
+        const daysUntil = nextDateCand ? differenceInDays(nextDateCand, today) : null;
+        const formattedNextDate = nextDateCand ? format(nextDateCand, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A';
         return { status: 'Próxima', nextDate: formattedNextDate, daysUntilNext: daysUntil };
     }
     
-    // Default fallback (should be rare)
-    const nextDateCand = futureDates.length > 0 ? futureDates[0] : null;
     const formattedNextDate = nextDateCand ? format(nextDateCand, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A';
     const daysUntil = nextDateCand ? differenceInDays(nextDateCand, today) : null;
     
@@ -111,18 +100,16 @@ export default async function DashboardPage() {
             status,
             nextDate,
             pendenciasGFCPE: [
-                { name: 'Detalhes da Inscrição', done: !!f.gfcpe_info?.inscricao_detalhes },
                 { name: 'Formadores', done: !!f.gfcpe_info?.formadores },
                 { name: 'Ensalamento', done: !!f.gfcpe_info?.ensalamento },
             ],
             pendenciasGADSG: [
                 { name: 'Inscrição', done: !!f.gadsg_info?.inscricao },
                 { name: 'Frequência', done: !!f.gadsg_info?.frequencia },
-                { name: 'Drive dos Materiais', done: !!f.gadsg_info?.drive_materiais },
                 { name: 'Avaliação', done: !!f.gadsg_info?.avaliacao },
             ]
         }
-    }).filter(f => f.status !== 'Concluída'); // Filter out concluded formations
+    }).filter(f => f.status !== 'Concluída');
   }
 
   const processedFormacoes = processFormacoes(formacoes);
