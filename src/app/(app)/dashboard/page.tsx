@@ -4,8 +4,9 @@ import { Calendar, CheckCircle, Info, XCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { cookies } from "next/headers"
 import type { Profile, Formacao } from "@/lib/types"
-import { format, isFuture, isPast, differenceInDays, startOfDay } from 'date-fns';
+import { format, isFuture, isPast, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import Link from "next/link";
 
 async function getFormacoes(): Promise<Formacao[]> {
     const cookieStore = cookies();
@@ -52,7 +53,7 @@ function getStatusAndNextDate(dates: any): { status: string; nextDate: string, d
 
     // Default if no other condition is met
     const firstDate = dateObjects[0];
-    const daysUntilFirst = differenceInDays(firstDate, today);
+    const daysUntilFirst = differenceInDays(firstDate, new Date());
     return { status: 'Próxima', nextDate: format(firstDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntilFirst };
 }
 
@@ -88,7 +89,7 @@ export default async function DashboardPage() {
     const dayText = days === 1 ? 'dia' : 'dias';
     return (
         <div className="absolute -top-3 -right-3 z-10 animate-pulse rounded-full bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground shadow-lg">
-           Falta {days} {dayText}
+           {days > 0 ? `Falta ${days} ${dayText}` : 'É hoje!'}
         </div>
     )
   }
@@ -158,10 +159,12 @@ export default async function DashboardPage() {
                     </div>
                 </div>
 
-              <Button variant="outline" className="w-full">
-                <Info className="mr-2 h-4 w-4" />
-                Detalhes
-              </Button>
+                <Link href={`/formacoes/${formacao.id}`} passHref>
+                    <Button variant="outline" className="w-full">
+                        <Info className="mr-2 h-4 w-4" />
+                        Detalhes
+                    </Button>
+                </Link>
             </CardContent>
           </Card>
         ))}
