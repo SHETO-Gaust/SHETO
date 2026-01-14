@@ -4,7 +4,7 @@ import { Calendar, CheckCircle, Info, XCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { cookies } from "next/headers"
 import type { Profile, Formacao } from "@/lib/types"
-import { format, isFuture, isPast, differenceInDays, startOfDay } from 'date-fns';
+import { format, isFuture, isPast, differenceInDays, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from "next/link";
 import { cn } from "@/lib/utils"
@@ -32,43 +32,45 @@ function getStatusAndNextDate(dates: any): { status: 'Próxima' | 'Em andamento'
         .map((d: any) => new Date(d.date))
         .sort((a, b) => a.getTime() - b.getTime());
 
-    const today = startOfDay(new Date());
+    const today = new Date();
 
-    // Rule 1: Check if all dates are in the past.
-    const allPast = dateObjects.every(d => isPast(d) && !isToday(d));
-    if (allPast) {
+    const pastDates = dateObjects.filter(d => isPast(d) && !isToday(d));
+    const futureDates = dateObjects.filter(d => isFuture(d) || isToday(d));
+
+    // Rule 1: All dates are in the past -> Concluída
+    if (dateObjects.every(d => isPast(d) && !isToday(d))) {
         return { status: 'Concluída', nextDate: 'N/A', daysUntilNext: null };
     }
-    
-    // Find the next upcoming date.
-    const futureDates = dateObjects.filter(d => d.getTime() >= today.getTime());
-    
-    let nextDate: Date | null = null;
-    let daysUntil: number | null = null;
-    
-    if (futureDates.length > 0) {
-        nextDate = futureDates[0];
-        daysUntil = differenceInDays(nextDate, today);
+
+    // Rule 2: Some dates are past/today, and some are future -> Em andamento
+    if (pastDates.length > 0 && futureDates.length > 0) {
+       const nextDate = futureDates[0];
+       const daysUntil = differenceInDays(nextDate, today);
+       const formattedNextDate = format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+       return { status: 'Em andamento', nextDate: formattedNextDate, daysUntilNext: daysUntil };
     }
     
-    const formattedNextDate = nextDate ? format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A';
-
-    // Rule 2: Check for "Em andamento"
-    const hasPastOrPresentDates = dateObjects.some(d => d.getTime() <= today.getTime());
-    if (hasPastOrPresentDates) {
-        return { status: 'Em andamento', nextDate: formattedNextDate, daysUntilNext: daysUntil };
+    // Rule 3: All dates are today or in the future -> Could be Em Andamento or Próxima
+    if (futureDates.length === dateObjects.length) {
+        const nextDate = futureDates[0];
+        const daysUntil = differenceInDays(nextDate, today);
+        const formattedNextDate = format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+        
+        // If the first date is today, it's "Em andamento"
+        if (isToday(nextDate)) {
+             return { status: 'Em andamento', nextDate: formattedNextDate, daysUntilNext: daysUntil };
+        }
+        
+        // Otherwise, all dates are in the future -> Próxima
+        return { status: 'Próxima', nextDate: formattedNextDate, daysUntilNext: daysUntil };
     }
-
-    // Rule 3: Otherwise, it's "Próxima"
-    return { status: 'Próxima', nextDate: formattedNextDate, daysUntilNext: daysUntil };
-}
-
-// Helper function to check if a date is today
-function isToday(date: Date) {
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-           date.getMonth() === today.getMonth() &&
-           date.getFullYear() === today.getFullYear();
+    
+    // Default fallback (should be rare)
+    const nextDateCand = futureDates.length > 0 ? futureDates[0] : null;
+    const formattedNextDate = nextDateCand ? format(nextDateCand, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : 'N/A';
+    const daysUntil = nextDateCand ? differenceInDays(nextDateCand, today) : null;
+    
+    return { status: 'Pendente', nextDate: formattedNextDate, daysUntilNext: daysUntil };
 }
 
 
