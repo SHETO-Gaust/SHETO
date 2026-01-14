@@ -147,13 +147,11 @@ export default async function DashboardPage() {
                     </div>
                 </div>
 
-                <Link href={`/formacoes/${formacao.id}`} passHref legacyBehavior>
-                  <a className="w-full">
-                    <Button variant="outline" className="w-full">
-                        <Info className="mr-2 h-4 w-4" />
-                        Detalhes
-                    </Button>
-                  </a>
+                <Link href={`/formacoes/${formacao.id}`} passHref>
+                  <Button variant="outline" className="w-full">
+                      <Info className="mr-2 h-4 w-4" />
+                      Detalhes
+                  </Button>
                 </Link>
             </CardContent>
           </Card>
