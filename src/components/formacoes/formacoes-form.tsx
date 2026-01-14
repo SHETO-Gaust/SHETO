@@ -230,7 +230,7 @@ export function FormacoesForm() {
                                     onCheckedChange={field.onChange}
                                 />
                                 </FormControl>
-                                <div className="space-y-1 leading-none">
+                                <div className="space-y-1 leading-none w-full">
                                     <FormLabel>Período Matutino</FormLabel>
                                     {form.watch(`days.${index}.location.morning`) && (
                                         <FormField
@@ -239,7 +239,7 @@ export function FormacoesForm() {
                                             render={({ field }) => (
                                                 <FormItem className="pt-2">
                                                     <FormControl>
-                                                        <Input placeholder="Local do período matutino" {...field} />
+                                                        <Input placeholder="Local do período matutino" {...field} className="w-full md:w-96" />
                                                     </FormControl>
                                                 </FormItem>
                                             )}
@@ -260,7 +260,7 @@ export function FormacoesForm() {
                                     onCheckedChange={field.onChange}
                                 />
                                 </FormControl>
-                                <div className="space-y-1 leading-none">
+                                <div className="space-y-1 leading-none w-full">
                                     <FormLabel>Período Vespertino</FormLabel>
                                     {form.watch(`days.${index}.location.afternoon`) && (
                                         <FormField
@@ -269,7 +269,7 @@ export function FormacoesForm() {
                                             render={({ field }) => (
                                                 <FormItem className="pt-2">
                                                     <FormControl>
-                                                        <Input placeholder="Local do período vespertino" {...field} />
+                                                        <Input placeholder="Local do período vespertino" {...field} className="w-full md:w-96" />
                                                     </FormControl>
                                                 </FormItem>
                                             )}
