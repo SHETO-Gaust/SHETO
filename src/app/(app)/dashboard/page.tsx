@@ -4,7 +4,7 @@ import { Calendar, CheckCircle, Info, XCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { cookies } from "next/headers"
 import type { Profile, Formacao } from "@/lib/types"
-import { format, isFuture, isPast } from 'date-fns';
+import { format, isFuture, isPast, differenceInDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 async function getFormacoes(): Promise<Formacao[]> {
@@ -20,40 +20,43 @@ async function getFormacoes(): Promise<Formacao[]> {
     return data;
 }
 
-function getStatusAndNextDate(dates: any): { status: string; nextDate: string } {
+function getStatusAndNextDate(dates: any): { status: string; nextDate: string, daysUntilNext: number | null } {
     if (!dates || !Array.isArray(dates) || dates.length === 0) {
-        return { status: 'Pendente', nextDate: 'A definir' };
+        return { status: 'Pendente', nextDate: 'A definir', daysUntilNext: null };
     }
 
     const dateObjects = dates
         .map((d: any) => new Date(d.date))
         .sort((a, b) => a.getTime() - b.getTime());
 
-    const now = new Date();
-    const futureDates = dateObjects.filter(d => isFuture(d) || format(d, 'yyyy-MM-dd') === format(now, 'yyyy-MM-dd'));
+    const today = startOfDay(new Date());
+    const futureDates = dateObjects.filter(d => isFuture(d) || format(d, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
     
     if (futureDates.length > 0) {
         const nextDate = futureDates[0];
-        const allPast = dateObjects.every(d => isPast(d) && format(d, 'yyyy-MM-dd') !== format(now, 'yyyy-MM-dd'));
+        const nextDateStartOfDay = startOfDay(nextDate);
+        const daysUntil = differenceInDays(nextDateStartOfDay, today);
+        const allPast = dateObjects.every(d => isPast(d) && format(d, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd'));
         
         // If there are future dates but also past dates, it's in progress
         if (!allPast) {
-             return { status: 'Em andamento', nextDate: format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) };
+             return { status: 'Em andamento', nextDate: format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntil };
         } else {
-             return { status: 'Próxima', nextDate: format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) };
+             return { status: 'Próxima', nextDate: format(nextDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntil };
         }
     }
     
     // If all dates are in the past
-    if (dateObjects.every(d => isPast(d) && format(d, 'yyyy-MM-dd') !== format(now, 'yyyy-MM-dd'))) {
-        return { status: 'Concluída', nextDate: 'N/A' };
+    if (dateObjects.every(d => isPast(d) && format(d, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd'))) {
+        return { status: 'Concluída', nextDate: 'N/A', daysUntilNext: null };
     }
 
     // Default if no other condition is met
     const firstDate = dateObjects[0];
-    return { status: 'Próxima', nextDate: format(firstDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) };
+    const firstDateStartOfDay = startOfDay(firstDate);
+    const daysUntilFirst = differenceInDays(firstDateStartOfDay, today);
+    return { status: 'Próxima', nextDate: format(firstDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR }), daysUntilNext: daysUntilFirst };
 }
-
 
 export default async function DashboardPage() {
   const cookieStore = cookies();
@@ -83,14 +86,24 @@ export default async function DashboardPage() {
     </div>
   )
 
+  const CountdownBadge = ({ days }: { days: number }) => {
+    const dayText = days === 1 ? 'dia' : 'dias';
+    return (
+        <div className="absolute -top-3 -right-3 z-10 animate-pulse rounded-full bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground shadow-lg">
+           Falta {days} {dayText}
+        </div>
+    )
+  }
+
   const processFormacoes = (formacoes: Formacao[]) => {
     return formacoes.map(f => {
-        const { status, nextDate } = getStatusAndNextDate(f.dates);
+        const { status, nextDate, daysUntilNext } = getStatusAndNextDate(f.dates);
         return {
             id: f.id,
             name: f.name,
             status,
             nextDate,
+            daysUntilNext,
             pendenciasGFCPE: [
                 { name: 'Detalhes da Inscrição', done: !!f.gfcpe_info?.inscricao_detalhes },
                 { name: 'Formadores', done: !!f.gfcpe_info?.formadores },
@@ -122,7 +135,10 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {processedFormacoes.map((formacao) => (
-          <Card key={formacao.id} className={formacao.status === 'Em andamento' ? 'border-primary border-2' : ''}>
+          <Card key={formacao.id} className={`relative overflow-visible ${formacao.status === 'Em andamento' ? 'border-primary border-2' : ''}`}>
+             {formacao.status === 'Próxima' && formacao.daysUntilNext !== null && formacao.daysUntilNext <= 7 && formacao.daysUntilNext >= 0 && (
+                <CountdownBadge days={formacao.daysUntilNext} />
+            )}
             <CardHeader>
               <CardTitle>{formacao.name}</CardTitle>
               <CardDescription className="flex items-center gap-2 pt-2">
