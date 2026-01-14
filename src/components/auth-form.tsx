@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -11,7 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { signIn } from '@/app/login/actions';
 import { useSearchParams } from 'next/navigation';
 
@@ -40,9 +41,15 @@ export function AuthForm() {
     <Card className="mx-auto max-w-sm">
       <CardHeader className="text-center">
         <div className="mb-4 inline-flex justify-center">
-          <Building className="h-10 w-10 text-primary" />
+          <Image
+            src="/img/logogforms.png"
+            alt="GForms Logo"
+            width={200}
+            height={50}
+            className="h-auto"
+          />
         </div>
-        <CardTitle className="text-2xl font-bold font-headline">
+        <CardTitle className="sr-only text-2xl font-bold font-headline">
           GForms
         </CardTitle>
         <CardDescription>

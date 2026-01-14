@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import Image from 'next/image';
 import {
   SidebarProvider,
   Sidebar,
@@ -13,7 +14,6 @@ import {
 import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
 import { NotificationsPopover } from '@/components/notifications-popover';
-import { Building } from 'lucide-react';
 
 export default async function AppLayout({
   children,
@@ -35,11 +35,14 @@ export default async function AppLayout({
     <SidebarProvider>
       <Sidebar>
         <SidebarHeader>
-          <div className="flex items-center gap-2">
-            <Building className="h-6 w-6 text-primary" />
-            <h1 className="text-lg font-semibold font-headline text-sidebar-foreground">
-              GForms
-            </h1>
+          <div className="flex items-center justify-center p-2">
+            <Image
+              src="/img/logogforms.png"
+              alt="GForms Logo"
+              width={150}
+              height={40}
+              className="h-auto"
+            />
           </div>
         </SidebarHeader>
         <SidebarContent>
