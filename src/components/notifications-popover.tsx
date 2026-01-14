@@ -15,10 +15,31 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { mockNotifications } from '@/lib/data';
 import type { Notification } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+const mockNotifications: Notification[] = [
+  {
+    id: '1',
+    message: 'Nova formação cadastrada: PROFE LÍDERES',
+    createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+    read: false,
+  },
+  {
+    id: '2',
+    message: 'Ensalamento para "CIÊNCIAS HUMANAS" atualizado.',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    read: false,
+  },
+  {
+    id: '3',
+    message: 'Relatório de avaliação disponível para download.',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+    read: true,
+  },
+];
+
 
 export function NotificationsPopover() {
   const [notifications, setNotifications] =
