@@ -3,23 +3,25 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
-import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
-import { parse, isWithinInterval } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+import { parse, isWithinInterval, set } from 'date-fns';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
 
 const getCurrentPeriod = (attendanceConfig: any) => {
-    const now = toZonedTime(new Date(), saoPauloTimeZone);
+    const nowInSaoPaulo = toZonedTime(new Date(), saoPauloTimeZone);
     const periods = attendanceConfig?.periods;
     if (!periods) return null;
 
     const checkPeriod = (periodName: 'morning' | 'afternoon', periodConfig: any) => {
         if (periodConfig?.enabled) {
-            const todayStr = formatInTimeZone(now, saoPauloTimeZone, 'yyyy-MM-dd');
-            const start = toZonedTime(parse(`${todayStr} ${periodConfig.startTime}`, 'yyyy-MM-dd HH:mm', new Date()), saoPauloTimeZone);
-            const end = toZonedTime(parse(`${todayStr} ${periodConfig.endTime}`, 'yyyy-MM-dd HH:mm', new Date()), saoPauloTimeZone);
+            const [startHour, startMinute] = periodConfig.startTime.split(':').map(Number);
+            const [endHour, endMinute] = periodConfig.endTime.split(':').map(Number);
             
-            if (isWithinInterval(now, { start, end })) {
+            const start = set(nowInSaoPaulo, { hours: startHour, minutes: startMinute, seconds: 0, milliseconds: 0 });
+            const end = set(nowInSaoPaulo, { hours: endHour, minutes: endMinute, seconds: 0, milliseconds: 0 });
+            
+            if (isWithinInterval(nowInSaoPaulo, { start, end })) {
                 return periodName;
             }
         }
