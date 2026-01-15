@@ -3,8 +3,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
-import { toZonedTime } from 'date-fns-tz';
-import { isWithinInterval, set } from 'date-fns';
+import { toZonedTime, isWithinInterval } from 'date-fns-tz';
+import { set } from 'date-fns';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
 
@@ -159,14 +159,18 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
     }
     
     // 3. Create inscricao record if it doesn't exist (avulso)
-    const { error: upsertError } = await supabase
-        .from('inscricoes')
-        .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados }, { onConflict: 'formacao_id, cpf' });
-    
-    if (upsertError) {
-         console.error('Error upserting inscricao:', upsertError);
-         return { success: false, error: 'Erro ao criar ou atualizar sua inscrição.' };
+    // Only do this if 'dados' is present, indicating it's a full registration from a new user.
+    if (dados) {
+        const { error: upsertError } = await supabase
+            .from('inscricoes')
+            .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados }, { onConflict: 'formacao_id, cpf' });
+        
+        if (upsertError) {
+             console.error('Error upserting inscricao:', upsertError);
+             return { success: false, error: 'Erro ao criar ou atualizar sua inscrição.' };
+        }
     }
+
 
     // 4. Create frequencia record
     const { error: insertError } = await supabase.from('frequencia').insert({

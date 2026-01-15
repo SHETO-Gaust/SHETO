@@ -50,7 +50,7 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
           nome_completo: inscricao.nome_completo,
           cpf: cpf,
           email: inscricao.email,
-          dados: inscricao.dados,
+          // Não passamos 'dados' aqui para que a action saiba que é um usuário existente
       };
       await handleFullRegistration(registrationData);
 
