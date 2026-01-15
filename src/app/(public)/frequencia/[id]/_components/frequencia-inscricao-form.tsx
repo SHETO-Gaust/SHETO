@@ -147,7 +147,7 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
                                         <FormItem>
                                         <FormLabel>CPF</FormLabel>
                                         <FormControl>
-                                            <Input {...field} readOnly disabled />
+                                            <Input {...field} readOnly />
                                         </FormControl>
                                         <FormMessage />
                                         </FormItem>
