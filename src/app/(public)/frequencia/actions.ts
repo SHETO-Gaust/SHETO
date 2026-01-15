@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { toZonedTime } from 'date-fns-tz';
-import { parse, isWithinInterval, set } from 'date-fns';
+import { isWithinInterval, set } from 'date-fns';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
 
