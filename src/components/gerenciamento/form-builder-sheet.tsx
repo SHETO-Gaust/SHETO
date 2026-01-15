@@ -12,12 +12,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { updateSubscriptionFormConfig } from '@/app/(app)/gerenciamento/actions';
 import type { Formacao } from '@/lib/types';
 import { Switch } from '../ui/switch';
 import { Separator } from '../ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 type FormBuilderSheetProps = {
   isOpen: boolean;
@@ -26,19 +27,29 @@ type FormBuilderSheetProps = {
 };
 
 const defaultFields = [
-    { id: 'nomeCompleto', label: 'Nome Completo', type: 'text', required: true },
-    { id: 'cpf', label: 'CPF', type: 'text', required: true },
-    { id: 'email', label: 'Email', type: 'email', required: true },
-    { id: 'regional', label: 'Regional', type: 'select', required: true },
-    { id: 'lotacao', label: 'Lotação', type: 'radio', required: true },
+    { id: 'nomeCompleto', label: 'Nome Completo', type: 'text', required: true, hidden: false },
+    { id: 'cpf', label: 'CPF', type: 'text', required: true, hidden: false },
+    { id: 'email', label: 'Email', type: 'email', required: true, hidden: false },
+    { id: 'regional', label: 'Regional', type: 'select', required: true, hidden: false },
+    { id: 'lotacao', label: 'Lotação', type: 'radio', required: true, hidden: false },
 ];
+
+const initialCustomField = {
+  id: '',
+  label: '',
+  type: 'text',
+  options: [],
+};
+
 
 export function FormBuilderSheet({ isOpen, setIsOpen, formacao }: FormBuilderSheetProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formConfig, setFormConfig] = useState(
-    formacao.subscription_form_config || { fields: defaultFields }
+    formacao.subscription_form_config || { fields: defaultFields, customFields: [] }
   );
+  const [newCustomField, setNewCustomField] = useState<any>(null);
+  const [optionInput, setOptionInput] = useState('');
 
   const handleFieldChange = (fieldId: string, property: string, value: any) => {
     setFormConfig((prevConfig: any) => ({
@@ -48,8 +59,61 @@ export function FormBuilderSheet({ isOpen, setIsOpen, formacao }: FormBuilderShe
       ),
     }));
   };
+  
+  const handleCustomFieldChange = (fieldId: string, property: string, value: any) => {
+    setFormConfig((prevConfig: any) => ({
+      ...prevConfig,
+      customFields: prevConfig.customFields.map((field: any) =>
+        field.id === fieldId ? { ...field, [property]: value } : field
+      ),
+    }));
+  };
+
+  const removeCustomField = (fieldId: string) => {
+    setFormConfig((prevConfig: any) => ({
+        ...prevConfig,
+        customFields: prevConfig.customFields.filter((field: any) => field.id !== fieldId),
+    }));
+  };
+
+  const handleAddNewCustomField = () => {
+    setNewCustomField({ ...initialCustomField, id: `custom_${Date.now()}` });
+  };
+  
+  const handleSaveNewCustomField = () => {
+    if (newCustomField && newCustomField.label) {
+      setFormConfig((prevConfig: any) => ({
+        ...prevConfig,
+        customFields: [...(prevConfig.customFields || []), newCustomField],
+      }));
+      setNewCustomField(null);
+    } else {
+        toast({ title: "O título da pergunta é obrigatório.", variant: 'destructive' })
+    }
+  };
+
+  const addOptionToNewField = () => {
+    if (optionInput.trim() !== '') {
+      setNewCustomField((prev: any) => ({
+        ...prev,
+        options: [...(prev.options || []), optionInput.trim()],
+      }));
+      setOptionInput('');
+    }
+  };
+
+  const removeOptionFromNewField = (option: string) => {
+    setNewCustomField((prev: any) => ({
+        ...prev,
+        options: prev.options.filter((o: string) => o !== option),
+    }));
+  };
 
   const handleSave = async () => {
+    if (newCustomField) {
+        toast({ title: "Você tem um campo personalizado não salvo.", description: "Salve ou cancele a criação do novo campo antes de salvar as configurações.", variant: 'destructive'});
+        return;
+    }
     setLoading(true);
     const result = await updateSubscriptionFormConfig(formacao.id, formConfig);
     setLoading(false);
@@ -71,7 +135,7 @@ export function FormBuilderSheet({ isOpen, setIsOpen, formacao }: FormBuilderShe
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-2xl w-full flex flex-col">
+      <SheetContent className="sm:max-w-3xl w-full flex flex-col">
         <SheetHeader>
           <SheetTitle>Construtor de Formulário de Inscrição</SheetTitle>
           <SheetDescription>
@@ -83,8 +147,8 @@ export function FormBuilderSheet({ isOpen, setIsOpen, formacao }: FormBuilderShe
             <div>
                 <h4 className="text-lg font-semibold mb-4">Campos Padrão</h4>
                 <div className="space-y-4">
-                    {formConfig.fields.filter((f: any) => f.required).map((field: any) => (
-                        <div key={field.id} className="p-4 border rounded-lg">
+                    {formConfig.fields.map((field: any) => (
+                        <div key={field.id} className="p-4 border rounded-lg bg-slate-50/50">
                             <div className="flex items-center justify-between">
                                 <Label htmlFor={`field-${field.id}`} className="text-base">{field.label}</Label>
                                 <div className="flex items-center space-x-2">
@@ -97,7 +161,7 @@ export function FormBuilderSheet({ isOpen, setIsOpen, formacao }: FormBuilderShe
                                 </div>
                             </div>
                              <p className="text-sm text-muted-foreground mt-1">
-                                Este campo é obrigatório no sistema.
+                                {field.id !== 'email' && field.id !== 'nomeCompleto' && field.id !== 'cpf' ? 'Este campo é obrigatório no sistema.' : 'Este campo é obrigatório e sempre visível.'}
                              </p>
                         </div>
                     ))}
@@ -107,9 +171,95 @@ export function FormBuilderSheet({ isOpen, setIsOpen, formacao }: FormBuilderShe
             <Separator />
 
             <div>
-                <h4 className="text-lg font-semibold mb-4">Campos Personalizados</h4>
-                 <div className="text-center text-muted-foreground border-2 border-dashed rounded-lg p-8">
-                    <p>Funcionalidade de adicionar campos personalizados em breve.</p>
+                <div className="flex justify-between items-center mb-4">
+                    <h4 className="text-lg font-semibold">Campos Personalizados</h4>
+                    <Button variant="outline" size="sm" onClick={handleAddNewCustomField} disabled={!!newCustomField}>
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Adicionar Campo
+                    </Button>
+                </div>
+                 <div className="space-y-4">
+                    {/* Saved Custom Fields */}
+                    {formConfig.customFields?.map((field: any) => (
+                         <div key={field.id} className="p-4 border rounded-lg">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-semibold">{field.label}</p>
+                                    <p className="text-sm text-muted-foreground">Tipo: {field.type}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={() => removeCustomField(field.id)}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                            </div>
+                         </div>
+                    ))}
+
+                    {/* New Custom Field Builder */}
+                    {newCustomField && (
+                        <div className="p-4 border-2 border-primary/50 rounded-lg space-y-4 bg-primary/5">
+                            <h5 className="font-semibold">Novo Campo Personalizado</h5>
+                            <div className="space-y-2">
+                                <Label>Título da Pergunta</Label>
+                                <Input 
+                                    placeholder="Ex: Qual sua função?" 
+                                    value={newCustomField.label}
+                                    onChange={(e) => setNewCustomField({ ...newCustomField, label: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Tipo de Campo</Label>
+                                <Select
+                                    value={newCustomField.type}
+                                    onValueChange={(value) => setNewCustomField({ ...newCustomField, type: value })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione o tipo" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="text">Texto</SelectItem>
+                                        <SelectItem value="multiple-choice">Múltipla Escolha</SelectItem>
+                                        <SelectItem value="checkboxes">Caixas de Seleção</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {(newCustomField.type === 'multiple-choice' || newCustomField.type === 'checkboxes') && (
+                                <div className="space-y-2 pt-2">
+                                    <Label>Opções de Resposta</Label>
+                                    <div className="flex gap-2">
+                                        <Input 
+                                            placeholder="Digite a opção" 
+                                            value={optionInput}
+                                            onChange={(e) => setOptionInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && addOptionToNewField()}
+                                        />
+                                        <Button onClick={addOptionToNewField}>Adicionar</Button>
+                                    </div>
+                                    <div className="space-y-2 mt-2">
+                                        {newCustomField.options.map((option: string, index: number) => (
+                                            <div key={index} className="flex items-center justify-between bg-background p-2 rounded-md border">
+                                                <span>{option}</span>
+                                                <Button variant="ghost" size="icon" onClick={() => removeOptionFromNewField(option)}>
+                                                    <Trash2 className="h-4 w-4 text-destructive/70"/>
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-2 pt-4">
+                                <Button variant="ghost" onClick={() => setNewCustomField(null)}>Cancelar</Button>
+                                <Button onClick={handleSaveNewCustomField}>Salvar Campo</Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {!formConfig.customFields?.length && !newCustomField && (
+                        <div className="text-center text-muted-foreground border-2 border-dashed rounded-lg p-8">
+                            <p>Nenhum campo personalizado adicionado.</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
