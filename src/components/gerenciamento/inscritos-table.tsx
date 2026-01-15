@@ -10,8 +10,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
-import type { Inscricao } from '@/lib/types';
+import { MoreHorizontal, Pencil, Trash2, Eye } from 'lucide-react';
+import type { Formacao, Inscricao } from '@/lib/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -35,20 +35,35 @@ import {
 import { deleteInscricao } from '@/app/(app)/gerenciamento/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { EditInscricaoSheet } from './edit-inscricao-sheet';
+import { DetailsInscricaoDialog } from './details-inscricao-dialog';
 
 type InscritosTableProps = {
   data: Inscricao[];
+  formacao: Formacao;
 };
 
-export function InscritosTable({ data }: InscritosTableProps) {
+export function InscritosTable({ data, formacao }: InscritosTableProps) {
     const { toast } = useToast();
     const [selectedInscricao, setSelectedInscricao] = useState<Inscricao | null>(null);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+    const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+    const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
 
     const handleDeleteClick = (inscricao: Inscricao) => {
         setSelectedInscricao(inscricao);
         setIsDeleteDialogOpen(true);
+    };
+
+    const handleEditClick = (inscricao: Inscricao) => {
+        setSelectedInscricao(inscricao);
+        setIsEditSheetOpen(true);
+    };
+
+    const handleDetailsClick = (inscricao: Inscricao) => {
+        setSelectedInscricao(inscricao);
+        setIsDetailsDialogOpen(true);
     };
 
     const handleConfirmDelete = async () => {
@@ -86,7 +101,7 @@ export function InscritosTable({ data }: InscritosTableProps) {
             <TableRow>
               <TableHead>Nome Completo</TableHead>
               <TableHead>CPF</TableHead>
-              <TableHead>Email</TableHead>
+              <TableHead>Regional</TableHead>
               <TableHead>Data da Inscrição</TableHead>
               <TableHead>
                 <span className="sr-only">Ações</span>
@@ -98,11 +113,15 @@ export function InscritosTable({ data }: InscritosTableProps) {
               <TableRow key={inscricao.id}>
                 <TableCell className="font-medium">{inscricao.nome_completo}</TableCell>
                 <TableCell>{inscricao.cpf}</TableCell>
-                <TableCell>{inscricao.email}</TableCell>
+                <TableCell>{inscricao.dados?.regional || 'N/A'}</TableCell>
                 <TableCell>
                   {inscricao.created_at ? format(new Date(inscricao.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : 'N/A'}
                 </TableCell>
-                <TableCell>
+                <TableCell className="flex items-center justify-end gap-2">
+                   <Button variant="outline" size="sm" onClick={() => handleDetailsClick(inscricao)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Detalhes
+                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button aria-haspopup="true" size="icon" variant="ghost">
@@ -112,7 +131,7 @@ export function InscritosTable({ data }: InscritosTableProps) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleEditClick(inscricao)}>
                         <Pencil className="mr-2 h-4 w-4" />
                         Editar
                       </DropdownMenuItem>
@@ -151,6 +170,23 @@ export function InscritosTable({ data }: InscritosTableProps) {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+
+        {selectedInscricao && (
+            <EditInscricaoSheet 
+                isOpen={isEditSheetOpen}
+                setIsOpen={setIsEditSheetOpen}
+                inscricao={selectedInscricao}
+                formacao={formacao}
+            />
+        )}
+        
+        {selectedInscricao && (
+            <DetailsInscricaoDialog
+                isOpen={isDetailsDialogOpen}
+                setIsOpen={setIsDetailsDialogOpen}
+                inscricao={selectedInscricao}
+            />
+        )}
     </>
   );
 }

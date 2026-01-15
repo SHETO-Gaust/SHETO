@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 export async function updateSubscriptionFormConfig(formacaoId: string, config: any) {
   const cookieStore = cookies();
@@ -66,4 +67,51 @@ export async function deleteInscricao(id: string) {
 
     revalidatePath('/gerenciamento');
     return { success: true };
+}
+
+
+const formSchema = z.object({
+  id: z.string(),
+  nome_completo: z.string().min(3, 'Nome completo é obrigatório.'),
+  cpf: z.string().length(14, 'CPF inválido.'),
+  email: z.string().email('Email inválido.'),
+  dados: z.record(z.any()),
+});
+
+
+export async function updateInscricao(formData: z.infer<typeof formSchema>) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const validatedFields = formSchema.safeParse(formData);
+
+    if (!validatedFields.success) {
+        return {
+        error: 'Dados inválidos. Verifique o formulário.',
+        errors: validatedFields.error.flatten().fieldErrors,
+        };
+    }
+
+    const { id, cpf, email, nome_completo, dados } = validatedFields.data;
+
+    const { data, error } = await supabase
+        .from('inscricoes')
+        .update(
+        {
+            cpf,
+            nome_completo,
+            email,
+            dados,
+        },
+        )
+        .eq('id', id)
+        .select();
+
+    if (error) {
+        console.error('Error updating inscricao:', error);
+        return { error: 'Ocorreu um erro ao atualizar a inscrição. Tente novamente.' };
+    }
+
+    revalidatePath('/gerenciamento');
+    return { data };
 }
