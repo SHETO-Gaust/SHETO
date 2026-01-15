@@ -110,8 +110,8 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
     <Card className="w-full max-w-2xl mx-auto">
         <CardHeader>
             <CardTitle className="text-2xl">Finalize sua Inscrição</CardTitle>
-            <CardDescription>
-                Seu CPF não foi encontrado. Por favor, complete seu cadastro para registrar sua frequência na formação <span className="font-semibold text-foreground">{formacao.name}</span>.
+            <CardDescription className="text-destructive">
+                Seu CPF não foi encontrado. Por favor, complete seu cadastro para registrar sua frequência na formação <span className="font-semibold text-destructive/90">{formacao.name}</span>.
             </CardDescription>
         </CardHeader>
         <CardContent>
