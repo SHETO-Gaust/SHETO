@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -79,8 +80,28 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
   const formSchema = generateSchema(formacao.subscription_form_config);
   type InscricaoFormValues = z.infer<typeof formSchema>;
 
+  const initialValues = {
+    nomeCompleto: '',
+    cpf: '',
+    email: '',
+    regional: undefined,
+    lotacao: undefined,
+    lotacao_especifica: '',
+    escola: undefined,
+    ...(formacao.subscription_form_config?.customFields || []).reduce((acc: any, field: any) => {
+      if (field.type === 'checkboxes') {
+        acc[field.id] = [];
+      } else {
+        acc[field.id] = '';
+      }
+      return acc;
+    }, {})
+  };
+
+
   const form = useForm<InscricaoFormValues>({
     resolver: zodResolver(formSchema),
+    defaultValues: initialValues as any,
     mode: 'onChange',
   });
 
@@ -345,7 +366,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                 <FormLabel>{field.label}</FormLabel>
                                 {field.type === 'text' && (
                                      <FormControl>
-                                        <Input {...formField} />
+                                        <Input {...formField} value={formField.value || ''} />
                                      </FormControl>
                                 )}
                                 {(field.type === 'multiple-choice') && (
@@ -415,3 +436,5 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
     </Card>
   );
 }
+
+    
