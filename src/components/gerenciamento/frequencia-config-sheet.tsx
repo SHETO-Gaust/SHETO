@@ -30,17 +30,27 @@ const defaultPeriod: Period = {
   endTime: '12:00',
 };
 
+const getDefaultConfig = () => ({
+  periods: {
+    morning: { ...defaultPeriod, startTime: '08:00', endTime: '12:00' },
+    afternoon: { ...defaultPeriod, startTime: '13:00', endTime: '17:00' },
+  },
+});
+
 export function FrequenciaConfigSheet({ isOpen, setIsOpen, formacao }: FrequenciaConfigSheetProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [config, setConfig] = useState(
-    formacao.attendance_list_info || {
+  const [config, setConfig] = useState(() => {
+    const existingConfig = formacao.attendance_list_info;
+    const defaultConfig = getDefaultConfig();
+    return {
+      open: existingConfig?.open || false,
       periods: {
-        morning: { ...defaultPeriod, startTime: '08:00', endTime: '12:00' },
-        afternoon: { ...defaultPeriod, startTime: '13:00', endTime: '17:00' },
+        morning: { ...defaultConfig.periods.morning, ...(existingConfig?.periods?.morning || {}) },
+        afternoon: { ...defaultConfig.periods.afternoon, ...(existingConfig?.periods?.afternoon || {}) },
       },
-    }
-  );
+    };
+  });
 
   const handlePeriodChange = (period: 'morning' | 'afternoon', property: keyof Period, value: any) => {
     setConfig((prevConfig: any) => ({
