@@ -125,10 +125,13 @@ const fullRegistrationSchema = z.object({
 export async function registerFrequency(formacaoId: string, formData: z.infer<typeof fullRegistrationSchema>) {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
+    console.log('--- Registering Frequency ---');
+    console.log('Received data:', { formacaoId, formData });
 
     // 1. Validate data
     const validatedFields = fullRegistrationSchema.safeParse(formData);
      if (!validatedFields.success) {
+        console.error('Validation failed:', validatedFields.error);
         return { success: false, error: 'Dados inválidos.' };
     }
     const { cpf, nome_completo, email, dados } = validatedFields.data;
@@ -141,10 +144,12 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
         .single();
 
     if (formacaoError || !formacao || !formacao.attendance_list_info?.open) {
+        console.error('Attendance check failed:', { formacaoError, formacao });
         return { success: false, error: 'O registro de frequência está fechado.' };
     }
     const currentPeriod = getCurrentPeriod(formacao.attendance_list_info);
     if (!currentPeriod) {
+        console.error('Out of period. Current time is not within any enabled period.');
         return { success: false, error: 'Fora do horário de registro de frequência.' };
     }
     const { data: existingFrequencia } = await supabase
@@ -156,12 +161,14 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
         .limit(1);
 
     if (existingFrequencia && existingFrequencia.length > 0) {
+        console.error('Duplicate frequency detected for CPF:', cpf, 'and period:', currentPeriod);
         return { success: false, error: 'Frequência já registrada para este período.' };
     }
     
     // 3. Create inscricao record if it doesn't exist (avulso)
     // Only do this if 'dados' is present, indicating it's a full registration from a new user.
     if (dados) {
+        console.log('Attempting to upsert "avulso" inscricao for CPF:', cpf);
         const { error: upsertError } = await supabase
             .from('inscricoes')
             .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados }, { onConflict: 'formacao_id, cpf' });
@@ -174,7 +181,7 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
 
 
     // 4. Create frequencia record
-    const { error: insertError } = await supabase.from('frequencia').insert({
+    const frequenciaPayload = {
         formacao_id: formacaoId,
         cpf: cpf,
         nome_completo: nome_completo,
@@ -182,12 +189,15 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
         dados: dados,
         periodo: currentPeriod,
         fonte: dados ? 'avulso' : 'inscrito' // From on-the-spot registration or pre-registered
-    });
+    };
+    console.log('Attempting to insert frequencia record with payload:', frequenciaPayload);
+    const { error: insertError } = await supabase.from('frequencia').insert(frequenciaPayload);
 
      if (insertError) {
         console.error('Error inserting frequency:', insertError);
         return { success: false, error: 'Não foi possível registrar sua frequência.' };
     }
     
+    console.log('--- Frequency Registered Successfully! ---');
     return { success: true, nome_completo: nome_completo };
 }
