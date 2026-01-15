@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { Formacao, Inscricao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, XCircle, Settings, AlertCircle, Users } from 'lucide-react';
+import { CheckCircle, XCircle, Settings, AlertCircle, Users, FileUp } from 'lucide-react';
 import { FormBuilderSheet } from './form-builder-sheet';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { toggleSubscription } from '@/app/(app)/gerenciamento/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { InscritosSheet } from './inscritos-sheet';
+import { UploadInscritosDialog } from './upload-inscritos-dialog';
 
 type GerenciamentoCardProps = {
   formacao: Formacao;
@@ -22,6 +23,7 @@ const PendencyItem = ({
   name, 
   status, 
   onManageClick,
+  onUploadClick,
   onToggle,
   isToggleVisible,
   isToggleOn,
@@ -32,6 +34,7 @@ const PendencyItem = ({
   name: string;
   status: 'done' | 'pending' | 'configured';
   onManageClick?: () => void;
+  onUploadClick?: () => void;
   onToggle?: (checked: boolean) => void;
   isToggleVisible?: boolean;
   isToggleOn?: boolean;
@@ -79,6 +82,12 @@ const PendencyItem = ({
                         Gerenciar
                     </Button>
                 )}
+                {onUploadClick && (
+                    <Button variant="outline" size="sm" onClick={onUploadClick}>
+                        <FileUp className="mr-2 h-4 w-4" />
+                        Importar via Planilha
+                    </Button>
+                )}
                 {onViewClick && (
                     <Button variant="secondary" size="sm" onClick={onViewClick}>
                         <Users className="mr-2 h-4 w-4" />
@@ -94,6 +103,7 @@ const PendencyItem = ({
 export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardProps) {
     const { toast } = useToast();
     const [isFormBuilderOpen, setIsFormBuilderOpen] = useState(false);
+    const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
     const [isInscritosSheetOpen, setIsInscritosSheetOpen] = useState(false);
     const [isToggleLoading, setIsToggleLoading] = useState(false);
     
@@ -136,6 +146,7 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
             name: 'Inscrição', 
             status: getSubscriptionStatus(), 
             onManageClick: () => setIsFormBuilderOpen(true),
+            onUploadClick: formacao.subscription_form_config ? () => setIsUploadDialogOpen(true) : undefined,
             onToggle: handleSubscriptionToggle,
             isToggleVisible: !!formacao.subscription_form_config,
             isToggleOn: isSubscriptionOpen,
@@ -165,6 +176,7 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
                         name={p.name} 
                         status={p.status as any} 
                         onManageClick={p.onManageClick}
+                        onUploadClick={p.onUploadClick}
                         onToggle={p.onToggle}
                         isToggleVisible={p.isToggleVisible}
                         isToggleOn={p.isToggleOn}
@@ -180,6 +192,13 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
             <FormBuilderSheet
                 isOpen={isFormBuilderOpen}
                 setIsOpen={setIsFormBuilderOpen}
+                formacao={formacao}
+            />
+        )}
+        {isUploadDialogOpen && (
+            <UploadInscritosDialog
+                isOpen={isUploadDialogOpen}
+                setIsOpen={setIsUploadDialogOpen}
                 formacao={formacao}
             />
         )}

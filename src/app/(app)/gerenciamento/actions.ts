@@ -115,3 +115,52 @@ export async function updateInscricao(formData: z.infer<typeof formSchema>) {
     revalidatePath('/gerenciamento');
     return { data };
 }
+
+
+const bulkInscricaoSchema = z.array(z.object({
+    cpf: z.string(),
+    nome_completo: z.string(),
+    email: z.string().email(),
+    dados: z.record(z.any()),
+}));
+
+export async function bulkCreateInscricao(formacao_id: string, inscritos: z.infer<typeof bulkInscricaoSchema>) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const cpfs = inscritos.map(i => i.cpf);
+    const { data: existing, error: existingError } = await supabase
+        .from('inscricoes')
+        .select('cpf')
+        .eq('formacao_id', formacao_id)
+        .in('cpf', cpfs);
+
+    if (existingError) {
+        console.error('Error checking for existing inscricoes:', existingError);
+        return { error: 'Ocorreu um erro ao verificar as inscrições existentes.' };
+    }
+
+    const existingCpfs = new Set(existing.map(e => e.cpf));
+    const newInscritos = inscritos
+        .filter(i => !existingCpfs.has(i.cpf))
+        .map(i => ({ ...i, formacao_id }));
+    
+    const duplicates = inscritos.length - newInscritos.length;
+
+    if (newInscritos.length === 0) {
+        return { 
+            data: { inserted: 0, duplicates },
+            message: 'Nenhum novo inscrito para adicionar. Todos os CPFs da lista já constam como inscritos.'
+        };
+    }
+
+    const { error } = await supabase.from('inscricoes').insert(newInscritos);
+
+    if (error) {
+        console.error('Error on bulk insert:', error);
+        return { error: 'Ocorreu um erro ao inserir a lista de inscritos.' };
+    }
+
+    revalidatePath('/gerenciamento');
+    return { data: { inserted: newInscritos.length, duplicates } };
+}
