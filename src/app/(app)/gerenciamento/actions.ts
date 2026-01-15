@@ -190,3 +190,22 @@ export async function bulkCreateInscricao(formacao_id: string, inscritos: z.infe
     revalidatePath('/gerenciamento');
     return { data: { inserted: newInscritos.length, duplicates } };
 }
+
+export async function updateAttendanceConfig(formacaoId: string, config: any) {
+  const cookieStore = cookies();
+  const supabase = createClient(cookieStore);
+
+  const { data, error } = await supabase
+    .from('formacoes')
+    .update({ attendance_list_info: config })
+    .eq('id', formacaoId)
+    .select();
+
+  if (error) {
+    console.error('Error updating attendance config:', error);
+    return { error: 'Ocorreu um erro ao salvar as configurações de frequência.' };
+  }
+
+  revalidatePath('/gerenciamento');
+  return { data };
+}

@@ -2,6 +2,20 @@
 
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
+export type Period = {
+    enabled: boolean;
+    startTime: string;
+    endTime: string;
+};
+
+export type AttendanceListInfo = {
+    open?: boolean;
+    periods?: {
+        morning?: Period;
+        afternoon?: Period;
+    }
+};
+
 export type Formacao = {
   id: string; // uuid
   name: string;
@@ -13,7 +27,7 @@ export type Formacao = {
   gfcpe_info?: any; // jsonb
   gadsg_info?: any; // jsonb
   subscription_list_info?: any; // jsonb
-  attendance_list_info?: { open?: boolean }; // jsonb
+  attendance_list_info?: AttendanceListInfo;
   consolidation_info?: any; // jsonb
   subscription_form_config?: any; // jsonb
 };
@@ -32,7 +46,7 @@ export type Avaliacao = {
 export type Frequencia = {
   id: string; // uuid
   formacao_id: string; // uuid
-  cpf?: string;
+  cpf: string;
   nome_completo?: string;
   email?: string;
   periodo?: string;
