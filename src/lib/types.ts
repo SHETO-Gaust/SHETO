@@ -1,4 +1,5 @@
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Formacao = {
@@ -12,7 +13,7 @@ export type Formacao = {
   gfcpe_info?: any; // jsonb
   gadsg_info?: any; // jsonb
   subscription_list_info?: any; // jsonb
-  attendance_list_info?: any; // jsonb
+  attendance_list_info?: { open?: boolean }; // jsonb
   consolidation_info?: any; // jsonb
   subscription_form_config?: any; // jsonb
 };

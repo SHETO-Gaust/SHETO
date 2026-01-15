@@ -31,8 +31,8 @@ export async function toggleSubscription(formacaoId: string, currentState: any) 
     const supabase = createClient(cookieStore);
 
     const newConfig = {
-        ...currentState,
-        open: !currentState.open,
+        ...(currentState || {}),
+        open: !currentState?.open,
     };
 
     const { data, error } = await supabase
@@ -50,6 +50,32 @@ export async function toggleSubscription(formacaoId: string, currentState: any) 
     revalidatePath('/inscricoes');
     return { data };
 }
+
+export async function toggleAttendance(formacaoId: string, currentState: any) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const newConfig = {
+        ...(currentState || {}),
+        open: !currentState?.open,
+    };
+
+    const { data, error } = await supabase
+        .from('formacoes')
+        .update({ attendance_list_info: newConfig })
+        .eq('id', formacaoId)
+        .select();
+
+    if (error) {
+        console.error('Error toggling attendance:', error);
+        return { error: 'Ocorreu um erro ao alterar o status da frequência.' };
+    }
+
+    revalidatePath('/gerenciamento');
+    revalidatePath('/frequencia');
+    return { data };
+}
+
 
 export async function deleteInscricao(id: string) {
     const cookieStore = cookies();

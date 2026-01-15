@@ -8,7 +8,7 @@ import { CheckCircle, XCircle, Settings, AlertCircle, Users, FileUp } from 'luci
 import { FormBuilderSheet } from './form-builder-sheet';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { toggleSubscription } from '@/app/(app)/gerenciamento/actions';
+import { toggleSubscription, toggleAttendance } from '@/app/(app)/gerenciamento/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { InscritosSheet } from './inscritos-sheet';
@@ -105,15 +105,17 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
     const [isFormBuilderOpen, setIsFormBuilderOpen] = useState(false);
     const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
     const [isInscritosSheetOpen, setIsInscritosSheetOpen] = useState(false);
-    const [isToggleLoading, setIsToggleLoading] = useState(false);
-    
+    const [isSubToggleLoading, setIsSubToggleLoading] = useState(false);
+    const [isAttToggleLoading, setIsAttToggleLoading] = useState(false);
+
     const isSubscriptionOpen = formacao.subscription_form_config?.open || false;
+    const isAttendanceOpen = formacao.attendance_list_info?.open || false;
     const inscritosCount = inscricoes.length;
 
     const handleSubscriptionToggle = async () => {
-        setIsToggleLoading(true);
+        setIsSubToggleLoading(true);
         const result = await toggleSubscription(formacao.id, formacao.subscription_form_config);
-        setIsToggleLoading(false);
+        setIsSubToggleLoading(false);
 
         if (result.error) {
             toast({
@@ -128,6 +130,25 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
             });
         }
     };
+    
+    const handleAttendanceToggle = async () => {
+        setIsAttToggleLoading(true);
+        const result = await toggleAttendance(formacao.id, formacao.attendance_list_info);
+        setIsAttToggleLoading(false);
+
+        if (result.error) {
+            toast({
+                title: 'Erro',
+                description: result.error,
+                variant: 'destructive',
+            });
+        } else {
+            toast({
+                title: 'Status da frequência alterado!',
+                description: `A coleta de frequência para "${formacao.name}" foi ${!isAttendanceOpen ? 'ligada' : 'desligada'}.`,
+            });
+        }
+    };
 
     const getSubscriptionStatus = (): 'done' | 'pending' | 'configured' => {
         if (!formacao.subscription_form_config) {
@@ -138,6 +159,17 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
         }
         return 'configured';
     }
+
+    const getAttendanceStatus = (): 'done' | 'pending' | 'configured' => {
+        if (!formacao.attendance_list_info) {
+            return 'pending';
+        }
+        if (isAttendanceOpen) {
+            return 'done';
+        }
+        return 'configured';
+    }
+
 
     const pendencias = [
         { name: 'Formadores', status: formacao.gfcpe_info?.formadores ? 'done' : 'pending' },
@@ -150,11 +182,18 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
             onToggle: handleSubscriptionToggle,
             isToggleVisible: !!formacao.subscription_form_config,
             isToggleOn: isSubscriptionOpen,
-            isToggleLoading,
+            isToggleLoading: isSubToggleLoading,
             onViewClick: inscritosCount > 0 ? () => setIsInscritosSheetOpen(true) : undefined,
             viewCount: inscritosCount,
         },
-        { name: 'Frequência', status: formacao.attendance_list_info ? 'done' : 'pending' },
+        { 
+            name: 'Frequência', 
+            status: getAttendanceStatus(),
+            onToggle: handleAttendanceToggle,
+            isToggleVisible: true,
+            isToggleOn: isAttendanceOpen,
+            isToggleLoading: isAttToggleLoading,
+        },
         { name: 'Avaliação', status: formacao.gadsg_info?.avaliacao ? 'done' : 'pending' },
     ];
 
