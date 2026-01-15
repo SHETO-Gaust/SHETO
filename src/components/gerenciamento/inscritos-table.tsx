@@ -185,6 +185,7 @@ export function InscritosTable({ data, formacao }: InscritosTableProps) {
                 isOpen={isDetailsDialogOpen}
                 setIsOpen={setIsDetailsDialogOpen}
                 inscricao={selectedInscricao}
+                formacao={formacao}
             />
         )}
     </>

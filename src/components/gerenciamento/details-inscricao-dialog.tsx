@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -11,12 +10,14 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import type { Inscricao } from '@/lib/types';
+import type { Formacao, Inscricao } from '@/lib/types';
+import { useMemo } from 'react';
 
 type DetailsInscricaoDialogProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   inscricao: Inscricao;
+  formacao: Formacao;
 };
 
 const DetailItem = ({ label, value }: { label: string; value: any }) => (
@@ -29,7 +30,7 @@ const DetailItem = ({ label, value }: { label: string; value: any }) => (
 );
 
 
-export function DetailsInscricaoDialog({ isOpen, setIsOpen, inscricao }: DetailsInscricaoDialogProps) {
+export function DetailsInscricaoDialog({ isOpen, setIsOpen, inscricao, formacao }: DetailsInscricaoDialogProps) {
     if (!inscricao) return null;
 
     const allData = {
@@ -39,6 +40,35 @@ export function DetailsInscricaoDialog({ isOpen, setIsOpen, inscricao }: Details
         ...inscricao.dados,
     };
     
+    const fieldLabelMap = useMemo(() => {
+        const map = new Map<string, string>();
+        const config = formacao.subscription_form_config;
+        if (!config) return map;
+
+        // Mapeia campos padrão
+        config.fields?.forEach((field: any) => {
+            map.set(field.id, field.label);
+        });
+
+        // Mapeia campos customizados
+        config.customFields?.forEach((field: any) => {
+            map.set(field.id, field.label);
+        });
+        
+        // Fallbacks para campos que podem estar nos dados mas não na config (ex: lotacao_especifica, escola)
+        map.set('lotacao_especifica', 'Lotação Específica');
+        map.set('escola', 'Unidade Escolar');
+        map.set('regional', 'Regional');
+        map.set('lotacao', 'Lotação');
+
+
+        return map;
+    }, [formacao]);
+
+    const getLabel = (key: string) => {
+        return fieldLabelMap.get(key) || key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
+    }
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-lg">
@@ -54,10 +84,7 @@ export function DetailsInscricaoDialog({ isOpen, setIsOpen, inscricao }: Details
                 {Object.entries(allData).map(([key, value]) => {
                     if (key === 'formacao_id' || key === 'id') return null;
 
-                    // Converte camelCase para Título (ex: nomeCompleto -> Nome Completo)
-                    const formattedKey = key
-                        .replace(/([A-Z])/g, ' $1')
-                        .replace(/^./, (str) => str.toUpperCase());
+                    const formattedKey = getLabel(key);
                     
                     return <DetailItem key={key} label={formattedKey} value={value} />
                 })}
