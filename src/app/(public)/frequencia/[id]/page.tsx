@@ -11,7 +11,7 @@ import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { RealTimeClock } from './_components/real-time-clock';
 import { FrequenciaInscricaoForm } from './_components/frequencia-inscricao-form';
-import { checkInscricao, registerFrequency } from './actions';
+import { checkInscricao, registerFrequency } from '../actions';
 import { createClient } from '@/lib/supabase/client';
 import { useEffect } from 'react';
 
