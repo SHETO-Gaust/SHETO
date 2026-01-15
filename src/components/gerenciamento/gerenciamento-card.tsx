@@ -8,6 +8,9 @@ import { CheckCircle, XCircle, Settings, AlertCircle } from 'lucide-react';
 import { FormBuilderSheet } from './form-builder-sheet';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { toggleSubscription } from '@/app/(app)/gerenciamento/actions';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
 
 type GerenciamentoCardProps = {
   formacao: Formacao;
@@ -19,7 +22,8 @@ const PendencyItem = ({
   onManageClick,
   onToggle,
   isToggleVisible,
-  isToggleOn
+  isToggleOn,
+  isToggleLoading,
 }: { 
   name: string;
   status: 'done' | 'pending' | 'configured';
@@ -27,6 +31,7 @@ const PendencyItem = ({
   onToggle?: (checked: boolean) => void;
   isToggleVisible?: boolean;
   isToggleOn?: boolean;
+  isToggleLoading?: boolean;
 }) => {
     const getStatusIcon = () => {
         switch (status) {
@@ -42,7 +47,7 @@ const PendencyItem = ({
     }
 
     return (
-        <div className="flex items-center justify-between p-3 border rounded-md">
+        <div className="flex items-center justify-between p-3 border rounded-md min-h-[62px]">
             <div className="flex items-center gap-3">
             {getStatusIcon()}
             <span className="font-medium">{name}</span>
@@ -50,11 +55,15 @@ const PendencyItem = ({
             <div className="flex items-center gap-4">
                  {isToggleVisible && onToggle && (
                     <div className="flex items-center space-x-2">
-                        <Switch
-                            id={`toggle-${name.toLowerCase()}`}
-                            checked={isToggleOn}
-                            onCheckedChange={onToggle}
-                        />
+                        {isToggleLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                           <Switch
+                                id={`toggle-${name.toLowerCase()}`}
+                                checked={isToggleOn}
+                                onCheckedChange={onToggle}
+                           />
+                        )}
                         <Label htmlFor={`toggle-${name.toLowerCase()}`}>{isToggleOn ? 'Ligada' : 'Desligada'}</Label>
                     </div>
                 )}
@@ -71,19 +80,36 @@ const PendencyItem = ({
 
 
 export function GerenciamentoCard({ formacao }: GerenciamentoCardProps) {
+    const { toast } = useToast();
     const [isFormBuilderOpen, setIsFormBuilderOpen] = useState(false);
-    const [isSubscriptionOn, setIsSubscriptionOn] = useState(false); // In a real app, this would come from `formacao.subscription_form_config.open`
+    const [isToggleLoading, setIsToggleLoading] = useState(false);
+    
+    const isSubscriptionOpen = formacao.subscription_form_config?.open || false;
 
-    const handleSubscriptionToggle = (checked: boolean) => {
-        setIsSubscriptionOn(checked);
-        // Here you would call a server action to update the `subscription_form_config.open` status in the database.
+    const handleSubscriptionToggle = async () => {
+        setIsToggleLoading(true);
+        const result = await toggleSubscription(formacao.id, formacao.subscription_form_config);
+        setIsToggleLoading(false);
+
+        if (result.error) {
+            toast({
+                title: 'Erro',
+                description: result.error,
+                variant: 'destructive',
+            });
+        } else {
+            toast({
+                title: 'Status da inscrição alterado!',
+                description: `As inscrições para "${formacao.name}" foram ${!isSubscriptionOpen ? 'abertas' : 'fechadas'}.`,
+            });
+        }
     };
 
     const getSubscriptionStatus = (): 'done' | 'pending' | 'configured' => {
         if (!formacao.subscription_form_config) {
             return 'pending';
         }
-        if (isSubscriptionOn) {
+        if (isSubscriptionOpen) {
             return 'done';
         }
         return 'configured';
@@ -98,7 +124,8 @@ export function GerenciamentoCard({ formacao }: GerenciamentoCardProps) {
             onManageClick: () => setIsFormBuilderOpen(true),
             onToggle: handleSubscriptionToggle,
             isToggleVisible: !!formacao.subscription_form_config,
-            isToggleOn: isSubscriptionOn
+            isToggleOn: isSubscriptionOpen,
+            isToggleLoading,
         },
         { name: 'Frequência', status: formacao.attendance_list_info ? 'done' : 'pending' },
         { name: 'Avaliação', status: formacao.gadsg_info?.avaliacao ? 'done' : 'pending' },
@@ -125,6 +152,7 @@ export function GerenciamentoCard({ formacao }: GerenciamentoCardProps) {
                         onToggle={p.onToggle}
                         isToggleVisible={p.isToggleVisible}
                         isToggleOn={p.isToggleOn}
+                        isToggleLoading={p.isToggleLoading}
                     />
                 ))}
                 </div>
