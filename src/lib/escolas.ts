@@ -10,8 +10,14 @@ export async function getRegionais(): Promise<string[]> {
         return [];
     }
     
-    // Get unique regionais and sort them
-    const regionais = [...new Set(data.map(item => item.regional))].sort((a, b) => a.localeCompare(b));
+    if (!data) {
+        return [];
+    }
+    
+    // Get unique regionais, filter out null/undefined/empty, and sort them
+    const regionais = [...new Set(data.map(item => item.regional))]
+        .filter((r): r is string => r != null && r !== '')
+        .sort((a, b) => a.localeCompare(b));
     
     return regionais;
 }
@@ -31,5 +37,10 @@ export async function getEscolasPorRegional(regional: string): Promise<string[]>
         return [];
     }
 
-    return data.map(item => item.escolar);
+    if (!data) {
+        return [];
+    }
+
+    return data.map(item => item.escolar)
+        .filter((e): e is string => e != null && e !== '');
 }
