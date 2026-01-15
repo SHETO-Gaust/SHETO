@@ -44,7 +44,7 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
         .single();
     
     if (formacaoError || !formacao) {
-        return { status: 'ERROR', error: 'Formação não encontrada.' };
+        return { status: 'ERROR', error: `Formação não encontrada: ${formacaoError?.message}` };
     }
     if (!formacao.attendance_list_info?.open) {
         return { status: 'ERROR', error: 'O registro de frequência está fechado para esta formação.' };
@@ -86,7 +86,7 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
     
     if (frequenciaError) {
         console.error('Error checking for existing frequency:', frequenciaError);
-        return { status: 'ERROR', error: 'Erro ao verificar registro de frequência.' };
+        return { status: 'ERROR', error: `Erro ao verificar frequência: ${frequenciaError.message}` };
     }
     if (existingFrequencia.length > 0) {
         return { 
@@ -99,7 +99,7 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
 
     if (inscricaoError && inscricaoError.code !== 'PGRST116') { // Ignore 'no rows' error
         console.error('Error checking for existing inscricao:', inscricaoError);
-        return { status: 'ERROR', error: 'Ocorreu um erro ao verificar sua inscrição.' };
+        return { status: 'ERROR', error: `Erro ao verificar inscrição: ${inscricaoError.message}` };
     }
     
     if (inscricao) {
@@ -175,7 +175,7 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
         
         if (upsertError) {
              console.error('Error upserting inscricao:', upsertError);
-             return { success: false, error: 'Erro ao criar ou atualizar sua inscrição.' };
+             return { success: false, error: `Erro ao inscrever: ${upsertError.message}` };
         }
     }
 
@@ -195,7 +195,7 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
 
      if (insertError) {
         console.error('Error inserting frequency:', insertError);
-        return { success: false, error: 'Não foi possível registrar sua frequência.' };
+        return { success: false, error: `Erro do banco de dados: ${insertError.message}` };
     }
     
     console.log('--- Frequency Registered Successfully! ---');
