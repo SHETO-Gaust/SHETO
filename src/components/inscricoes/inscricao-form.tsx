@@ -174,7 +174,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
         <CardHeader>
             <CardTitle className="text-2xl">Formulário de Inscrição</CardTitle>
             <CardDescription>
-                Preencha seus dados para se inscrever na formação <span className="font-semibold">{formacao.name}</span>.
+                Preencha seus dados para se inscrever na formação <span className="font-semibold text-foreground">{formacao.name}</span>.
             </CardDescription>
         </CardHeader>
         <CardContent>
