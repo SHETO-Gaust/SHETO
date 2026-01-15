@@ -47,10 +47,8 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
       const { inscricao } = result;
       // If found, immediately try to register frequency
       const registrationData = {
+          inscricao_id: inscricao.id,
           nome_completo: inscricao.nome_completo,
-          cpf: cpf,
-          email: inscricao.email,
-          // Não passamos 'dados' aqui para que a action saiba que é um usuário existente
       };
       await handleFullRegistration(registrationData);
 
@@ -74,7 +72,7 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
           setFormacaoName(formacao.name);
           setPageState('success');
       } else {
-          setErrorMessage(result.error || 'Ocorreu um erro ao registrar.');
+          setErrorMessage(result.error || 'Não foi possível registrar sua frequência.');
           setPageState('error');
       }
       setLoading(false);

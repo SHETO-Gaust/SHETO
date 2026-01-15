@@ -46,20 +46,16 @@ export type Avaliacao = {
 export type Frequencia = {
   id: string; // uuid
   formacao_id: string; // uuid
-  cpf: string;
-  nome_completo?: string;
-  email?: string;
+  inscricao_id: string; // uuid
   periodo?: string;
-  fonte?: string;
-  dados?: any; // jsonb
   registered_at: string; // timestamp with time zone
 };
 
 export type Inscricao = {
   id: string; // uuid
   formacao_id: string; // uuid
-  cpf?: string;
-  nome_completo?: string;
+  cpf: string;
+  nome_completo: string;
   email: string;
   dados?: any; // jsonb
   created_at?: string; // timestamp with time zone
