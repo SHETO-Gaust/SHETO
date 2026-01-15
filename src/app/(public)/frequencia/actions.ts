@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
-import { toZonedTime } from 'date-fns-tz';
+import { toZonedTime, formatInTimeZone } from 'date-fns-tz';
 import { parse, isWithinInterval } from 'date-fns';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
@@ -115,7 +115,7 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
         return { status: 'FOUND', nome_completo: inscricao.nome_completo, formacao_name: formacao.name };
     } else {
         // Not found, prompt for full registration
-        return { status: 'NOT_FOUND' };
+        return { status: 'NOT_FOUND', formacao_name: formacao.name };
     }
 }
 
