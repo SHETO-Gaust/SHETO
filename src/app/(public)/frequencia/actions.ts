@@ -111,14 +111,15 @@ const registrationSchema = z.union([
     })
 ]);
 
-export async function registerFrequency(formacaoId: string, formData: any) {
+export async function registerFrequency(formacaoId: string, formData: any): Promise<any> {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     
     const validatedFields = registrationSchema.safeParse(formData);
     if (!validatedFields.success) {
-        console.error('Validation failed:', validatedFields.error.flatten());
-        return { success: false, error: `Dados de registro inválidos: ${validatedFields.error.message}` };
+        const errorMsg = `Dados de registro inválidos: ${JSON.stringify(validatedFields.error.flatten())}`;
+        console.error('[SERVER_ACTION_ERROR] registerFrequency/validation:', errorMsg);
+        return { success: false, error: errorMsg };
     }
 
     const { data: formacao, error: formacaoError } = await supabase
@@ -128,11 +129,15 @@ export async function registerFrequency(formacaoId: string, formData: any) {
         .single();
 
     if (formacaoError || !formacao || !formacao.attendance_list_info?.open) {
-        return { success: false, error: 'O registro de frequência está fechado.' };
+        const errorMsg = 'O registro de frequência está fechado.';
+        console.error('[SERVER_ACTION_ERROR] registerFrequency:', errorMsg);
+        return { success: false, error: errorMsg };
     }
     const currentPeriod = getCurrentPeriod(formacao.attendance_list_info);
     if (!currentPeriod) {
-        return { success: false, error: 'Fora do horário de registro de frequência.' };
+        const errorMsg = 'Fora do horário de registro de frequência.';
+        console.error('[SERVER_ACTION_ERROR] registerFrequency:', errorMsg);
+        return { success: false, error: errorMsg };
     }
     
     let inscricaoId: string;
@@ -149,7 +154,11 @@ export async function registerFrequency(formacaoId: string, formData: any) {
             .single();
 
         if (upsertError) {
-            console.error('Error upserting inscricao:', upsertError);
+             console.error('[SERVER_ACTION_ERROR] registerFrequency/upsertError:', {
+                message: upsertError.message,
+                details: upsertError.details,
+                code: upsertError.code,
+            });
             return { success: false, error: `Erro ao criar ou atualizar sua inscrição: ${upsertError.message}` };
         }
         inscricaoId = newInscrito.id;
@@ -170,7 +179,11 @@ export async function registerFrequency(formacaoId: string, formData: any) {
         .limit(1);
 
     if (frequenciaError) {
-        console.error('Error checking for existing frequency:', frequenciaError);
+        console.error('[SERVER_ACTION_ERROR] registerFrequency/frequenciaError:', {
+            message: frequenciaError.message,
+            details: frequenciaError.details,
+            code: frequenciaError.code,
+        });
         return { success: false, error: `Erro ao verificar frequência: ${frequenciaError.message}` };
     }
     if (existingFrequencia && existingFrequencia.length > 0) {
@@ -185,9 +198,13 @@ export async function registerFrequency(formacaoId: string, formData: any) {
     });
 
     if (insertError) {
-        console.error('Error inserting frequency:', insertError);
+        console.error('[SERVER_ACTION_ERROR] registerFrequency/insertError:', {
+            message: insertError.message,
+            details: insertError.details,
+            code: insertError.code,
+        });
         return { success: false, error: `Erro ao registrar frequência: ${insertError.message}` };
     }
     
-    return { success: true, nome_completo: nomeCompleto };
+    return { success: true, nome_completo: nomeCompleto, periodo: currentPeriod };
 }

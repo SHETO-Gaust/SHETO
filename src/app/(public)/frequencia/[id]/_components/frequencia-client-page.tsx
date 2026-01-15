@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { RealTimeClock } from './real-time-clock';
 import { FrequenciaInscricaoForm } from './frequencia-inscricao-form';
 import { checkInscricao, registerFrequency } from '../../actions';
+import { format } from 'date-fns';
 
 type PageState = 'idle' | 'registering' | 'success' | 'already_registered' | 'error';
 
@@ -22,6 +23,8 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
   const [userName, setUserName] = useState('');
   const [formacaoName, setFormacaoName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [registrationPeriod, setRegistrationPeriod] = useState<'MAT' | 'VESP' | null>(null);
+  const [registrationTime, setRegistrationTime] = useState<Date | null>(null);
 
   const formatCPF = (value: string) => {
     return value
@@ -71,6 +74,8 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
       if (result.success) {
           setUserName(result.nome_completo || '');
           setFormacaoName(formacao.name);
+          setRegistrationPeriod(result.periodo || null);
+          setRegistrationTime(new Date());
           setPageState('success');
       } else {
           setErrorMessage(result.error || 'Não foi possível registrar sua frequência.');
@@ -105,12 +110,22 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
   );
   
   if (pageState === 'success') {
+      const periodText = registrationPeriod === 'MAT' ? 'matutino' : 'vespertino';
+      const timeText = registrationTime ? format(registrationTime, 'HH:mm:ss') : '';
+
       return (
            <SuccessCard title="Frequência Registrada!">
-                <p className="text-center text-lg text-muted-foreground">
-                    Bem-vindo(a), <span className="font-bold text-foreground">{userName}</span>!
-                </p>
-                <p className="text-center text-muted-foreground mt-2">Sua presença na formação <strong>{formacaoName}</strong> foi confirmada com sucesso.</p>
+                <div className="space-y-2 text-center">
+                    <p className="text-lg text-muted-foreground">
+                        Bem-vindo(a), <span className="font-bold text-foreground">{userName}</span>!
+                    </p>
+                    <p className="text-muted-foreground">Sua presença na formação <strong>{formacaoName}</strong> foi confirmada com sucesso.</p>
+                     {registrationPeriod && registrationTime && (
+                        <p className="text-sm text-muted-foreground pt-2">
+                            Frequência para o período <strong>{periodText}</strong> registrada às <strong>{timeText}</strong>.
+                        </p>
+                    )}
+                </div>
            </SuccessCard>
       );
   }
