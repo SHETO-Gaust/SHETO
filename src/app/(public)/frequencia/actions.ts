@@ -155,19 +155,19 @@ export async function registerFrequency(formacaoId: string, formData: any): Prom
 
     if (isAvulso) {
         const { nome_completo, cpf, email, dados } = validatedFields.data;
-        const { data: newInscrito, error: upsertError } = await supabase
+        const { data: newInscrito, error: insertError } = await supabase
             .from('inscricoes')
-            .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados }, { onConflict: 'formacao_id, cpf' })
+            .insert({ formacao_id: formacaoId, cpf, nome_completo, email, dados })
             .select('id, nome_completo')
             .single();
 
-        if (upsertError) {
-             console.error('[SERVER_ACTION_ERROR] registerFrequency/upsertError:', {
-                message: upsertError.message,
-                details: upsertError.details,
-                code: upsertError.code,
+        if (insertError) {
+             console.error('[SERVER_ACTION_ERROR] registerFrequency/insertError:', {
+                message: insertError.message,
+                details: insertError.details,
+                code: insertError.code,
             });
-            return { success: false, error: `Erro ao criar ou atualizar sua inscrição: ${upsertError.message}` };
+            return { success: false, error: `Erro ao criar ou atualizar sua inscrição: ${insertError.message}` };
         }
         inscricaoId = newInscrito.id;
         nomeCompleto = newInscrito.nome_completo;
