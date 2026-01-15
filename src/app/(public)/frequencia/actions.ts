@@ -3,18 +3,21 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
+import { toZonedTime } from 'date-fns-tz';
 import { parse, isWithinInterval } from 'date-fns';
 
+const saoPauloTimeZone = 'America/Sao_Paulo';
+
 const getCurrentPeriod = (attendanceConfig: any) => {
-    const now = new Date();
+    const now = toZonedTime(new Date(), saoPauloTimeZone);
     const periods = attendanceConfig?.periods;
     if (!periods) return null;
 
     const checkPeriod = (periodName: 'morning' | 'afternoon', periodConfig: any) => {
         if (periodConfig?.enabled) {
-            const todayStr = now.toISOString().split('T')[0];
-            const start = parse(`${todayStr} ${periodConfig.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-            const end = parse(`${todayStr} ${periodConfig.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+            const todayStr = formatInTimeZone(now, saoPauloTimeZone, 'yyyy-MM-dd');
+            const start = toZonedTime(parse(`${todayStr} ${periodConfig.startTime}`, 'yyyy-MM-dd HH:mm', new Date()), saoPauloTimeZone);
+            const end = toZonedTime(parse(`${todayStr} ${periodConfig.endTime}`, 'yyyy-MM-dd HH:mm', new Date()), saoPauloTimeZone);
             
             if (isWithinInterval(now, { start, end })) {
                 return periodName;
@@ -33,7 +36,7 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
     // 1. Get formacao to check if attendance is open and get config
     const { data: formacao, error: formacaoError } = await supabase
         .from('formacoes')
-        .select('id, attendance_list_info')
+        .select('id, attendance_list_info, name')
         .eq('id', formacaoId)
         .single();
     
@@ -63,7 +66,20 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
         return { status: 'ERROR', error: 'Erro ao verificar registro de frequência.' };
     }
     if (existingFrequencia.length > 0) {
-        return { status: 'ERROR', error: `Frequência para o período da ${currentPeriod === 'morning' ? 'manhã' : 'tarde'} já registrada.` };
+        // To provide a better error message, we get the user's name
+        const { data: existingInscricao } = await supabase
+            .from('inscricoes')
+            .select('nome_completo')
+            .eq('formacao_id', formacaoId)
+            .eq('cpf', cpf)
+            .single();
+
+        return { 
+            status: 'ALREADY_REGISTERED', 
+            error: `Frequência já registrada para o período da ${currentPeriod === 'morning' ? 'manhã' : 'tarde'}.`,
+            nome_completo: existingInscricao?.nome_completo || 'Participante',
+            formacao_name: formacao.name
+        };
     }
 
 
@@ -96,7 +112,7 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
             console.error('Error inserting frequency:', insertError);
             return { status: 'ERROR', error: 'Não foi possível registrar sua frequência.' };
         }
-        return { status: 'FOUND', nome_completo: inscricao.nome_completo };
+        return { status: 'FOUND', nome_completo: inscricao.nome_completo, formacao_name: formacao.name };
     } else {
         // Not found, prompt for full registration
         return { status: 'NOT_FOUND' };

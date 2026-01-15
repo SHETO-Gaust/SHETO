@@ -6,18 +6,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { RealTimeClock } from './real-time-clock';
 import { FrequenciaInscricaoForm } from './frequencia-inscricao-form';
 import { checkInscricao, registerFrequency } from '../../actions';
 
+type PageState = 'idle' | 'registering' | 'success' | 'already_registered' | 'error';
+
 export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [cpf, setCpf] = useState('');
-  const [pageState, setPageState] = useState<'idle' | 'registering' | 'success' | 'error'>('idle');
+  const [pageState, setPageState] = useState<PageState>('idle');
   const [userName, setUserName] = useState('');
+  const [formacaoName, setFormacaoName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
   const formatCPF = (value: string) => {
@@ -37,12 +40,18 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
     setLoading(true);
     const result = await checkInscricao(formacao.id, cpf);
     
+    setFormacaoName(result.formacao_name || formacao.name);
+
     if (result.status === 'FOUND') {
       setUserName(result.nome_completo || '');
       setPageState('success');
     } else if (result.status === 'NOT_FOUND') {
       setPageState('registering');
-    } else {
+    } else if (result.status === 'ALREADY_REGISTERED') {
+      setUserName(result.nome_completo || '');
+      setErrorMessage(result.error || 'Frequência já registrada.');
+      setPageState('already_registered');
+    } else { // ERROR
       setErrorMessage(result.error || 'Ocorreu um erro desconhecido.');
       setPageState('error');
     }
@@ -54,6 +63,7 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
       const result = await registerFrequency(formacao.id, formData);
       if (result.success) {
           setUserName(result.nome_completo || '');
+          setFormacaoName(formacao.name);
           setPageState('success');
       } else {
           setErrorMessage(result.error || 'Ocorreu um erro ao registrar.');
@@ -62,33 +72,58 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
       setLoading(false);
   }
   
+  const SuccessCard = ({ title, children }: { title: string, children: React.ReactNode }) => (
+    <Card className="w-full max-w-lg mx-auto border-green-500 bg-green-50/50">
+        <CardHeader className="text-center">
+            <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+            <CardTitle className="text-2xl">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+            {children}
+        </CardContent>
+    </Card>
+  );
+
+  const ErrorCard = ({ title, children, showRetry = true }: { title: string, children: React.ReactNode, showRetry?: boolean }) => (
+    <Card className="w-full max-w-lg mx-auto border-destructive bg-destructive/5">
+        <CardHeader className="text-center">
+            <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+            <CardTitle className="text-2xl text-destructive">{title}</CardTitle>
+        </CardHeader>
+        <CardContent className="text-center space-y-4">
+            {children}
+            {showRetry && <Button variant="outline" onClick={() => { setPageState('idle'); setCpf(''); }}>Tentar Novamente</Button>}
+        </CardContent>
+    </Card>
+  );
+  
   if (pageState === 'success') {
       return (
-           <Card className="w-full max-w-lg mx-auto">
-            <CardHeader className="text-center">
-                <CardTitle className="text-2xl">Frequência Registrada!</CardTitle>
-                <CardDescription className="text-lg pt-2">
+           <SuccessCard title="Frequência Registrada!">
+                <p className="text-center text-lg text-muted-foreground">
                     Bem-vindo(a), <span className="font-bold text-foreground">{userName}</span>!
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <p className="text-center text-muted-foreground">Sua presença na formação <strong>{formacao.name}</strong> foi confirmada com sucesso.</p>
-            </CardContent>
-        </Card>
+                </p>
+                <p className="text-center text-muted-foreground mt-2">Sua presença na formação <strong>{formacaoName}</strong> foi confirmada com sucesso.</p>
+           </SuccessCard>
       );
+  }
+
+  if (pageState === 'already_registered') {
+    return (
+         <ErrorCard title="Frequência Duplicada">
+              <p className="text-center text-lg text-muted-foreground">
+                  Olá, <span className="font-bold text-foreground">{userName}</span>!
+              </p>
+              <p className="text-muted-foreground mt-2">{errorMessage}</p>
+         </ErrorCard>
+    );
   }
   
    if (pageState === 'error') {
       return (
-           <Card className="w-full max-w-lg mx-auto border-destructive">
-            <CardHeader className="text-center">
-                <CardTitle className="text-2xl text-destructive">Ocorreu um Erro</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center space-y-4">
-                <p className="text-muted-foreground">{errorMessage}</p>
-                <Button onClick={() => { setPageState('idle'); setCpf(''); }}>Tentar Novamente</Button>
-            </CardContent>
-        </Card>
+           <ErrorCard title="Ocorreu um Erro">
+              <p className="text-muted-foreground">{errorMessage}</p>
+           </ErrorCard>
       );
   }
 
