@@ -59,7 +59,6 @@ export type Inscricao = {
   nome_completo: string;
   email: string;
   dados?: any; // jsonb
-  fonte?: string;
   created_at?: string; // timestamp with time zone
 };
 

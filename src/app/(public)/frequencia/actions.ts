@@ -62,7 +62,11 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
         .single();
     
     if (inscricaoError && inscricaoError.code !== 'PGRST116') { // Ignore 'no rows' error
-        console.error('Error checking for existing inscricao:', inscricaoError);
+        console.error('[SERVER_ACTION_ERROR] checkInscricao/inscricaoError:', {
+            message: inscricaoError.message,
+            details: inscricaoError.details,
+            code: inscricaoError.code,
+        });
         return { status: 'ERROR', error: `Erro ao verificar inscrição: ${inscricaoError.message}` };
     }
     
@@ -76,7 +80,11 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
             .limit(1);
 
         if (frequenciaError) {
-            console.error('Error checking for existing frequency:', frequenciaError);
+             console.error('[SERVER_ACTION_ERROR] checkInscricao/frequenciaError:', {
+                message: frequenciaError.message,
+                details: frequenciaError.details,
+                code: frequenciaError.code,
+            });
             return { status: 'ERROR', error: `Erro ao verificar frequência: ${frequenciaError.message}` };
         }
         if (existingFrequencia.length > 0) {
@@ -119,7 +127,7 @@ export async function registerFrequency(formacaoId: string, formData: any): Prom
     if (!validatedFields.success) {
         const errorMsg = `Dados de registro inválidos: ${JSON.stringify(validatedFields.error.flatten())}`;
         console.error('[SERVER_ACTION_ERROR] registerFrequency/validation:', errorMsg);
-        return { success: false, error: errorMsg };
+        return { success: false, error: `Dados de registro inválidos: ${validatedFields.error.message}` };
     }
 
     const { data: formacao, error: formacaoError } = await supabase
@@ -149,7 +157,7 @@ export async function registerFrequency(formacaoId: string, formData: any): Prom
         const { nome_completo, cpf, email, dados } = validatedFields.data;
         const { data: newInscrito, error: upsertError } = await supabase
             .from('inscricoes')
-            .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados, fonte: 'avulso' }, { onConflict: 'formacao_id, cpf' })
+            .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados }, { onConflict: 'formacao_id, cpf' })
             .select('id, nome_completo')
             .single();
 
