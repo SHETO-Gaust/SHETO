@@ -39,12 +39,21 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
     }
     setLoading(true);
     const result = await checkInscricao(formacao.id, cpf);
+    setLoading(false);
     
     setFormacaoName(result.formacao_name || formacao.name);
 
     if (result.status === 'FOUND') {
-      setUserName(result.nome_completo || '');
-      setPageState('success');
+      const { inscricao } = result;
+      // If found, immediately try to register frequency
+      const registrationData = {
+          nome_completo: inscricao.nome_completo,
+          cpf: cpf,
+          email: inscricao.email,
+          dados: inscricao.dados,
+      };
+      await handleFullRegistration(registrationData);
+
     } else if (result.status === 'NOT_FOUND') {
       setPageState('registering');
     } else if (result.status === 'ALREADY_REGISTERED') {
@@ -55,7 +64,6 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
       setErrorMessage(result.error || 'Ocorreu um erro desconhecido.');
       setPageState('error');
     }
-    setLoading(false);
   };
   
   const handleFullRegistration = async (formData: any) => {

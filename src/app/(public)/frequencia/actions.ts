@@ -38,7 +38,7 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
     // 1. Get formacao to check if attendance is open and get config
     const { data: formacao, error: formacaoError } = await supabase
         .from('formacoes')
-        .select('id, attendance_list_info, name')
+        .select('id, attendance_list_info, name, subscription_form_config')
         .eq('id', formacaoId)
         .single();
     
@@ -54,7 +54,27 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
         return { status: 'ERROR', error: 'Fora do horário de registro de frequência.' };
     }
 
-    // 2. Check for duplicate frequency
+    // 2. Check for existing inscricao
+    const { data: inscricao, error: inscricaoError } = await supabase
+        .from('inscricoes')
+        .select('id, nome_completo, email, dados')
+        .eq('formacao_id', formacaoId)
+        .eq('cpf', cpf)
+        .single();
+    
+    // To provide a better error message, get the user's name even if already registered
+    const getNomeCompleto = async () => {
+        if (inscricao?.nome_completo) return inscricao.nome_completo;
+        const { data: existingInscricao } = await supabase
+            .from('inscricoes')
+            .select('nome_completo')
+            .eq('formacao_id', formacaoId)
+            .eq('cpf', cpf)
+            .single();
+        return existingInscricao?.nome_completo || 'Participante';
+    };
+    
+    // 3. Check for duplicate frequency
     const { data: existingFrequencia, error: frequenciaError } = await supabase
         .from('frequencia')
         .select('id')
@@ -68,30 +88,13 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
         return { status: 'ERROR', error: 'Erro ao verificar registro de frequência.' };
     }
     if (existingFrequencia.length > 0) {
-        // To provide a better error message, we get the user's name
-        const { data: existingInscricao } = await supabase
-            .from('inscricoes')
-            .select('nome_completo')
-            .eq('formacao_id', formacaoId)
-            .eq('cpf', cpf)
-            .single();
-
         return { 
             status: 'ALREADY_REGISTERED', 
             error: `Frequência já registrada para o período da ${currentPeriod === 'morning' ? 'manhã' : 'tarde'}.`,
-            nome_completo: existingInscricao?.nome_completo || 'Participante',
+            nome_completo: await getNomeCompleto(),
             formacao_name: formacao.name
         };
     }
-
-
-    // 3. Check for existing inscricao
-    const { data: inscricao, error: inscricaoError } = await supabase
-        .from('inscricoes')
-        .select('id, nome_completo, email, dados')
-        .eq('formacao_id', formacaoId)
-        .eq('cpf', cpf)
-        .single();
 
     if (inscricaoError && inscricaoError.code !== 'PGRST116') { // Ignore 'no rows' error
         console.error('Error checking for existing inscricao:', inscricaoError);
@@ -99,24 +102,13 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
     }
     
     if (inscricao) {
-        // Found, so register frequency right away
-        const { error: insertError } = await supabase.from('frequencia').insert({
-            formacao_id: formacaoId,
-            cpf: cpf,
-            nome_completo: inscricao.nome_completo,
-            email: inscricao.email,
-            dados: inscricao.dados,
-            periodo: currentPeriod,
-            fonte: 'inscrito'
-        });
-
-        if (insertError) {
-            console.error('Error inserting frequency:', insertError);
-            return { status: 'ERROR', error: 'Não foi possível registrar sua frequência.' };
-        }
-        return { status: 'FOUND', nome_completo: inscricao.nome_completo, formacao_name: formacao.name };
+        // Found, return user data so client can call registerFrequency
+        return { status: 'FOUND', inscricao, formacao_name: formacao.name };
     } else {
         // Not found, prompt for full registration
+        if (!formacao.subscription_form_config) {
+            return { status: 'ERROR', error: 'O formulário de inscrição para esta formação não foi configurado. Não é possível registrar participantes avulsos.' };
+        }
         return { status: 'NOT_FOUND', formacao_name: formacao.name };
     }
 }
@@ -126,7 +118,7 @@ const fullRegistrationSchema = z.object({
   nome_completo: z.string().min(3),
   cpf: z.string().length(14),
   email: z.string().email(),
-  dados: z.record(z.any()),
+  dados: z.record(z.any()).optional(),
 });
 
 export async function registerFrequency(formacaoId: string, formData: z.infer<typeof fullRegistrationSchema>) {
@@ -166,16 +158,14 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
         return { success: false, error: 'Frequência já registrada para este período.' };
     }
     
-    // 3. Create inscricao record (or do nothing if it somehow exists now)
-    const { data: inscricao, error: upsertError } = await supabase
+    // 3. Create inscricao record if it doesn't exist (avulso)
+    const { error: upsertError } = await supabase
         .from('inscricoes')
-        .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados }, { onConflict: 'formacao_id, cpf' })
-        .select()
-        .single();
+        .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados }, { onConflict: 'formacao_id, cpf' });
     
     if (upsertError) {
          console.error('Error upserting inscricao:', upsertError);
-         return { success: false, error: 'Erro ao criar sua inscrição.' };
+         return { success: false, error: 'Erro ao criar ou atualizar sua inscrição.' };
     }
 
     // 4. Create frequencia record
@@ -186,7 +176,7 @@ export async function registerFrequency(formacaoId: string, formData: z.infer<ty
         email: email,
         dados: dados,
         periodo: currentPeriod,
-        fonte: 'avulso' // From on-the-spot registration
+        fonte: dados ? 'avulso' : 'inscrito' // From on-the-spot registration or pre-registered
     });
 
      if (insertError) {
