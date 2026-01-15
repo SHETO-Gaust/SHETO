@@ -17,9 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from 'lucide-react';
-import { REGIONAIS, ESCOLAS_POR_REGIONAL } from '@/lib/escolas-mock';
+import { getRegionais, getEscolasPorRegional } from '@/lib/escolas';
 import type { Formacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect, useState } from 'react';
 
 const generateSchema = (formConfig: any) => {
     let schema: any = {
@@ -93,9 +94,40 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
     defaultValues: initialValues as any,
     mode: 'onChange',
   });
+  
+  const [regionais, setRegionais] = useState<string[]>([]);
+  const [escolas, setEscolas] = useState<string[]>([]);
+  const [loadingRegionais, setLoadingRegionais] = useState(true);
+  const [loadingEscolas, setLoadingEscolas] = useState(false);
 
   const selectedRegional = form.watch('regional');
   const selectedLotacao = form.watch('lotacao');
+
+  useEffect(() => {
+    const fetchRegionais = async () => {
+        setLoadingRegionais(true);
+        const data = await getRegionais();
+        setRegionais(data);
+        setLoadingRegionais(false);
+    };
+    fetchRegionais();
+  }, []);
+
+  useEffect(() => {
+    if (selectedRegional) {
+        const fetchEscolas = async () => {
+            setLoadingEscolas(true);
+            form.setValue('escola', undefined, { shouldValidate: true });
+            const data = await getEscolasPorRegional(selectedRegional);
+            setEscolas(data);
+            setLoadingEscolas(false);
+        };
+        fetchEscolas();
+    } else {
+        setEscolas([]);
+    }
+  }, [selectedRegional, form]);
+
 
   const handleFormSubmit = (data: InscricaoFormValues) => {
       const { nome_completo, cpf, email, ...dados } = data;
@@ -180,14 +212,14 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
                                     render={({ field }) => (
                                         <FormItem>
                                         <FormLabel>Regional</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value}>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={loadingRegionais}>
                                             <FormControl>
                                             <SelectTrigger>
-                                                <SelectValue placeholder="Selecione sua regional" />
+                                                <SelectValue placeholder={loadingRegionais ? "Carregando..." : "Selecione sua regional"} />
                                             </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
-                                                {REGIONAIS.map(regional => (
+                                                {regionais.map(regional => (
                                                     <SelectItem key={regional} value={regional}>{regional}</SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -270,14 +302,17 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel>Unidade Escolar</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedRegional}>
+                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedRegional || loadingEscolas}>
                                 <FormControl>
                                 <SelectTrigger>
-                                    <SelectValue placeholder={!selectedRegional ? "Selecione uma regional primeiro" : "Selecione sua escola"} />
+                                    <SelectValue placeholder={
+                                        loadingEscolas ? "Carregando escolas..." :
+                                        !selectedRegional ? "Selecione uma regional primeiro" : "Selecione sua escola"
+                                    } />
                                 </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    {(ESCOLAS_POR_REGIONAL[selectedRegional] || []).map(escola => (
+                                    {escolas.map(escola => (
                                         <SelectItem key={escola} value={escola}>{escola}</SelectItem>
                                     ))}
                                 </SelectContent>
