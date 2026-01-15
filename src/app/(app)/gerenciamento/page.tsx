@@ -2,37 +2,58 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { Formacao } from '@/lib/types';
+import type { Formacao, Inscricao } from '@/lib/types';
 import { GerenciamentoCard } from '@/components/gerenciamento/gerenciamento-card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function GerenciamentoPage() {
   const [formacoes, setFormacoes] = useState<Formacao[]>([]);
+  const [inscricoes, setInscricoes] = useState<{[formacaoId: string]: Inscricao[]}>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const supabase = createClient();
     async function getFormacoes() {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data: formacoesData, error: formacoesError } = await supabase
         .from('formacoes')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching formacoes:', error);
+      if (formacoesError) {
+        console.error('Error fetching formacoes:', formacoesError);
         setFormacoes([]);
       } else {
-        // Simple filter to get active formations (not concluded)
-        const activeFormacoes = data.filter(f => {
+        const activeFormacoes = formacoesData.filter(f => {
             if (!f.dates || !Array.isArray(f.dates) || f.dates.length === 0) {
-                return true; // Keep if no dates are set
+                return true; 
             }
             const dateObjects = f.dates.map((d: any) => new Date(d.date));
             const lastDate = new Date(Math.max.apply(null, dateObjects.map(d => d.getTime())));
             return lastDate >= new Date();
         });
         setFormacoes(activeFormacoes);
+
+        if (activeFormacoes.length > 0) {
+            const formacaoIds = activeFormacoes.map(f => f.id);
+            const { data: inscricoesData, error: inscricoesError } = await supabase
+                .from('inscricoes')
+                .select('*')
+                .in('formacao_id', formacaoIds);
+            
+            if (inscricoesError) {
+                console.error('Error fetching inscricoes:', inscricoesError);
+            } else {
+                const inscricoesByFormacao = inscricoesData.reduce((acc, inscricao) => {
+                    if (!acc[inscricao.formacao_id]) {
+                        acc[inscricao.formacao_id] = [];
+                    }
+                    acc[inscricao.formacao_id].push(inscricao);
+                    return acc;
+                }, {} as {[formacaoId: string]: Inscricao[]});
+                setInscricoes(inscricoesByFormacao);
+            }
+        }
       }
       setLoading(false);
     }
@@ -58,7 +79,11 @@ export default function GerenciamentoPage() {
       ) : formacoes.length > 0 ? (
         <div className="space-y-4">
           {formacoes.map((formacao) => (
-            <GerenciamentoCard key={formacao.id} formacao={formacao} />
+            <GerenciamentoCard 
+                key={formacao.id} 
+                formacao={formacao}
+                inscricoes={inscricoes[formacao.id] || []}
+            />
           ))}
         </div>
       ) : (

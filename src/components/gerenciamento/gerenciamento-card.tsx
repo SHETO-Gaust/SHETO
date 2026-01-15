@@ -1,19 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import type { Formacao } from '@/lib/types';
+import type { Formacao, Inscricao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, XCircle, Settings, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Settings, AlertCircle, Users } from 'lucide-react';
 import { FormBuilderSheet } from './form-builder-sheet';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { toggleSubscription } from '@/app/(app)/gerenciamento/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { InscritosSheet } from './inscritos-sheet';
 
 type GerenciamentoCardProps = {
   formacao: Formacao;
+  inscricoes: Inscricao[];
 };
 
 const PendencyItem = ({ 
@@ -24,6 +26,8 @@ const PendencyItem = ({
   isToggleVisible,
   isToggleOn,
   isToggleLoading,
+  onViewClick,
+  viewCount
 }: { 
   name: string;
   status: 'done' | 'pending' | 'configured';
@@ -32,6 +36,8 @@ const PendencyItem = ({
   isToggleVisible?: boolean;
   isToggleOn?: boolean;
   isToggleLoading?: boolean;
+  onViewClick?: () => void;
+  viewCount?: number;
 }) => {
     const getStatusIcon = () => {
         switch (status) {
@@ -68,10 +74,16 @@ const PendencyItem = ({
                     </div>
                 )}
                 {onManageClick && (
-                <Button variant="outline" size="sm" onClick={onManageClick}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Gerenciar
-                </Button>
+                    <Button variant="outline" size="sm" onClick={onManageClick}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Gerenciar
+                    </Button>
+                )}
+                {onViewClick && (
+                    <Button variant="secondary" size="sm" onClick={onViewClick}>
+                        <Users className="mr-2 h-4 w-4" />
+                        Ver Inscritos ({viewCount})
+                    </Button>
                 )}
             </div>
         </div>
@@ -79,12 +91,14 @@ const PendencyItem = ({
 };
 
 
-export function GerenciamentoCard({ formacao }: GerenciamentoCardProps) {
+export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardProps) {
     const { toast } = useToast();
     const [isFormBuilderOpen, setIsFormBuilderOpen] = useState(false);
+    const [isInscritosSheetOpen, setIsInscritosSheetOpen] = useState(false);
     const [isToggleLoading, setIsToggleLoading] = useState(false);
     
     const isSubscriptionOpen = formacao.subscription_form_config?.open || false;
+    const inscritosCount = inscricoes.length;
 
     const handleSubscriptionToggle = async () => {
         setIsToggleLoading(true);
@@ -126,6 +140,8 @@ export function GerenciamentoCard({ formacao }: GerenciamentoCardProps) {
             isToggleVisible: !!formacao.subscription_form_config,
             isToggleOn: isSubscriptionOpen,
             isToggleLoading,
+            onViewClick: inscritosCount > 0 ? () => setIsInscritosSheetOpen(true) : undefined,
+            viewCount: inscritosCount,
         },
         { name: 'Frequência', status: formacao.attendance_list_info ? 'done' : 'pending' },
         { name: 'Avaliação', status: formacao.gadsg_info?.avaliacao ? 'done' : 'pending' },
@@ -153,6 +169,8 @@ export function GerenciamentoCard({ formacao }: GerenciamentoCardProps) {
                         isToggleVisible={p.isToggleVisible}
                         isToggleOn={p.isToggleOn}
                         isToggleLoading={p.isToggleLoading}
+                        onViewClick={p.onViewClick}
+                        viewCount={p.viewCount}
                     />
                 ))}
                 </div>
@@ -163,6 +181,14 @@ export function GerenciamentoCard({ formacao }: GerenciamentoCardProps) {
                 isOpen={isFormBuilderOpen}
                 setIsOpen={setIsFormBuilderOpen}
                 formacao={formacao}
+            />
+        )}
+        {isInscritosSheetOpen && (
+            <InscritosSheet
+                isOpen={isInscritosSheetOpen}
+                setIsOpen={setIsInscritosSheetOpen}
+                formacao={formacao}
+                inscricoes={inscricoes}
             />
         )}
     </>

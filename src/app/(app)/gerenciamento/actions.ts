@@ -49,3 +49,21 @@ export async function toggleSubscription(formacaoId: string, currentState: any) 
     revalidatePath('/inscricoes');
     return { data };
 }
+
+export async function deleteInscricao(id: string) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const { error } = await supabase
+        .from('inscricoes')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting inscricao:', error);
+        return { error: 'Ocorreu um erro ao remover a inscrição.' };
+    }
+
+    revalidatePath('/gerenciamento');
+    return { success: true };
+}
