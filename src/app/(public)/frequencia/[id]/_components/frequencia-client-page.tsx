@@ -10,7 +10,7 @@ import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { RealTimeClock } from './real-time-clock';
 import { FrequenciaInscricaoForm } from './frequencia-inscricao-form';
-import { checkInscricao, registerFrequency } from '../actions';
+import { checkInscricao, registerFrequency } from '../../actions';
 
 export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
   const { toast } = useToast();
