@@ -22,14 +22,14 @@ export async function getEscolasPorRegional(regional: string): Promise<string[]>
     const supabase = createClient();
     const { data, error } = await supabase
         .from('escolas')
-        .select('escola')
+        .select('escolar')
         .eq('regional', regional)
-        .order('escola', { ascending: true });
+        .order('escolar', { ascending: true });
 
     if (error) {
         console.error(`Error fetching escolas for regional ${regional}:`, error);
         return [];
     }
 
-    return data.map(item => item.escola);
+    return data.map(item => item.escolar);
 }
