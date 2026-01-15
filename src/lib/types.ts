@@ -47,6 +47,7 @@ export type Frequencia = {
   id: string; // uuid
   formacao_id: string; // uuid
   inscricao_id: string; // uuid
+  cpf: string;
   periodo?: string;
   registered_at: string; // timestamp with time zone
 };
@@ -58,6 +59,7 @@ export type Inscricao = {
   nome_completo: string;
   email: string;
   dados?: any; // jsonb
+  fonte?: string;
   created_at?: string; // timestamp with time zone
 };
 

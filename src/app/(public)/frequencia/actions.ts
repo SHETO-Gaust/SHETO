@@ -100,7 +100,8 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
 const registrationSchema = z.union([
     z.object({ // Existing user
         inscricao_id: z.string().uuid(),
-        nome_completo: z.string(), 
+        nome_completo: z.string(),
+        cpf: z.string().length(14),
     }),
     z.object({ // New user
         nome_completo: z.string().min(3),
@@ -117,7 +118,7 @@ export async function registerFrequency(formacaoId: string, formData: any) {
     const validatedFields = registrationSchema.safeParse(formData);
     if (!validatedFields.success) {
         console.error('Validation failed:', validatedFields.error.flatten());
-        return { success: false, error: 'Dados de registro inválidos.' };
+        return { success: false, error: `Dados de registro inválidos: ${validatedFields.error.message}` };
     }
 
     const { data: formacao, error: formacaoError } = await supabase
@@ -136,13 +137,14 @@ export async function registerFrequency(formacaoId: string, formData: any) {
     
     let inscricaoId: string;
     let nomeCompleto: string;
+    let finalCpf: string;
     const isAvulso = !('inscricao_id' in validatedFields.data);
 
     if (isAvulso) {
         const { nome_completo, cpf, email, dados } = validatedFields.data;
         const { data: newInscrito, error: upsertError } = await supabase
             .from('inscricoes')
-            .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados }, { onConflict: 'formacao_id, cpf' })
+            .upsert({ formacao_id: formacaoId, cpf, nome_completo, email, dados, fonte: 'avulso' }, { onConflict: 'formacao_id, cpf' })
             .select('id, nome_completo')
             .single();
 
@@ -152,9 +154,11 @@ export async function registerFrequency(formacaoId: string, formData: any) {
         }
         inscricaoId = newInscrito.id;
         nomeCompleto = newInscrito.nome_completo;
+        finalCpf = cpf;
     } else {
         inscricaoId = validatedFields.data.inscricao_id;
         nomeCompleto = validatedFields.data.nome_completo;
+        finalCpf = validatedFields.data.cpf;
     }
 
     const { data: existingFrequencia, error: frequenciaError } = await supabase
@@ -176,6 +180,7 @@ export async function registerFrequency(formacaoId: string, formData: any) {
     const { error: insertError } = await supabase.from('frequencia').insert({
         formacao_id: formacaoId,
         inscricao_id: inscricaoId,
+        cpf: finalCpf,
         periodo: currentPeriod,
     });
 

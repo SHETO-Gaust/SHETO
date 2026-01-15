@@ -49,6 +49,7 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
       const registrationData = {
           inscricao_id: inscricao.id,
           nome_completo: inscricao.nome_completo,
+          cpf: cpf,
       };
       await handleFullRegistration(registrationData);
 
