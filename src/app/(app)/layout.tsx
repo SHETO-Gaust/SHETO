@@ -71,7 +71,10 @@ export default async function AppLayout({
             <UserNav user={user} profile={userProfile} />
           </div>
         </header>
-        <main className="flex-1 bg-white p-4 sm:p-6">{children}</main>
+        <div className="flex-1 bg-white p-4 sm:p-6">{children}</div>
+        <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">
+          Desenvolvido pela Gerência de Apoio ao Usuário e Suporte Técnico da Seduc Tocantins - Todos os direitos reservados © 2026
+        </footer>
       </SidebarInset>
     </SidebarProvider>
   );
