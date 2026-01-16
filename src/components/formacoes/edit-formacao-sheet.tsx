@@ -23,7 +23,6 @@ import { useState, useEffect } from 'react';
 import { updateFormacao } from '@/app/(app)/formacoes/actions';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetFooter } from '../ui/sheet';
 import type { Formacao } from '@/lib/types';
-import { revalidatePath } from 'next/cache';
 
 const locationSchema = z.object({
   morning: z.boolean().default(false),
