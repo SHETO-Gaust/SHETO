@@ -69,7 +69,7 @@ const generateSchema = (formConfig: any) => {
 };
 
 
-export function EditInscricaoSheet({ isOpen, setIsOpen, inscricao, formacao }: { isOpen: boolean, setIsOpen: (open: boolean) => void, inscricao: Inscricao, formacao: Formacao }) {
+export function EditInscricaoSheet({ isOpen, setIsOpen, inscricao, formacao, onUpdate }: { isOpen: boolean, setIsOpen: (open: boolean) => void, inscricao: Inscricao, formacao: Formacao, onUpdate: () => void }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   
@@ -169,6 +169,7 @@ export function EditInscricaoSheet({ isOpen, setIsOpen, inscricao, formacao }: {
         title: 'Inscrição Atualizada!',
         description: 'Os dados foram atualizados com sucesso.',
       });
+      onUpdate();
       setIsOpen(false);
     }
   };

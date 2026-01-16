@@ -30,9 +30,10 @@ type FormadoresSheetProps = {
   setIsOpen: (open: boolean) => void;
   formacao: Formacao;
   formadores: Formador[];
+  onUpdate: () => void;
 };
 
-export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores }: FormadoresSheetProps) {
+export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpdate }: FormadoresSheetProps) {
   const { toast } = useToast();
   const [loadingStates, setLoadingStates] = useState<{ [key: string]: boolean }>({});
   const [newFormadores, setNewFormadores] = useState<{ [date: string]: { name: string; reference: string } }>({});
@@ -86,6 +87,7 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores }: For
       toast({ title: 'Formador adicionado com sucesso!' });
       handleInputChange(date, 'name', '');
       handleInputChange(date, 'reference', '');
+      onUpdate();
     }
   };
 
@@ -98,6 +100,7 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores }: For
       toast({ title: 'Erro ao deletar formador', description: result.error, variant: 'destructive' });
     } else {
       toast({ title: 'Formador removido com sucesso!' });
+      onUpdate();
     }
   };
 

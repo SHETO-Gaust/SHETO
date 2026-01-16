@@ -20,6 +20,7 @@ type GerenciamentoCardProps = {
   formacao: Formacao;
   inscricoes: Inscricao[];
   formadores: Formador[];
+  onUpdate: () => void;
 };
 
 const PendencyItem = ({ 
@@ -107,7 +108,7 @@ const PendencyItem = ({
 };
 
 
-export function GerenciamentoCard({ formacao, inscricoes, formadores }: GerenciamentoCardProps) {
+export function GerenciamentoCard({ formacao, inscricoes, formadores, onUpdate }: GerenciamentoCardProps) {
     const { toast } = useToast();
     const [isFormBuilderOpen, setIsFormBuilderOpen] = useState(false);
     const [isFrequenciaConfigOpen, setIsFrequenciaConfigOpen] = useState(false);
@@ -137,6 +138,7 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores }: Gerencia
                 title: 'Status da inscrição alterado!',
                 description: `As inscrições para "${formacao.name}" foram ${!isSubscriptionOpen ? 'abertas' : 'fechadas'}.`,
             });
+            onUpdate();
         }
     };
     
@@ -156,6 +158,7 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores }: Gerencia
                 title: 'Status da frequência alterado!',
                 description: `A coleta de frequência para "${formacao.name}" foi ${!isAttendanceOpen ? 'ligada' : 'desligada'}.`,
             });
+            onUpdate();
         }
     };
 
@@ -248,6 +251,7 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores }: Gerencia
                 isOpen={isFormBuilderOpen}
                 setIsOpen={setIsFormBuilderOpen}
                 formacao={formacao}
+                onUpdate={onUpdate}
             />
         )}
         {isFrequenciaConfigOpen && (
@@ -255,6 +259,7 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores }: Gerencia
                 isOpen={isFrequenciaConfigOpen}
                 setIsOpen={setIsFrequenciaConfigOpen}
                 formacao={formacao}
+                onUpdate={onUpdate}
             />
         )}
         {isUploadDialogOpen && (
@@ -262,6 +267,7 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores }: Gerencia
                 isOpen={isUploadDialogOpen}
                 setIsOpen={setIsUploadDialogOpen}
                 formacao={formacao}
+                onUpdate={onUpdate}
             />
         )}
         {isInscritosSheetOpen && (
@@ -270,6 +276,7 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores }: Gerencia
                 setIsOpen={setIsInscritosSheetOpen}
                 formacao={formacao}
                 inscricoes={inscricoes}
+                onUpdate={onUpdate}
             />
         )}
         {isFormadoresSheetOpen && (
@@ -278,6 +285,7 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores }: Gerencia
                 setIsOpen={setIsFormadoresSheetOpen}
                 formacao={formacao}
                 formadores={formadores}
+                onUpdate={onUpdate}
             />
         )}
     </>

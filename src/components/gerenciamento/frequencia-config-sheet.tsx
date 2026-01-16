@@ -23,6 +23,7 @@ type FrequenciaConfigSheetProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   formacao: Formacao;
+  onUpdate: () => void;
 };
 
 const defaultPeriod: Period = {
@@ -43,7 +44,7 @@ const getDefaultConfig = () => ({
   }
 });
 
-export function FrequenciaConfigSheet({ isOpen, setIsOpen, formacao }: FrequenciaConfigSheetProps) {
+export function FrequenciaConfigSheet({ isOpen, setIsOpen, formacao, onUpdate }: FrequenciaConfigSheetProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState(() => {
@@ -130,6 +131,7 @@ export function FrequenciaConfigSheet({ isOpen, setIsOpen, formacao }: Frequenci
         title: 'Configurações Salvas',
         description: 'As configurações de frequência foram atualizadas.',
       });
+      onUpdate();
       setIsOpen(false);
     }
   };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { Formacao, Inscricao, Formador } from '@/lib/types';
 import { GerenciamentoCard } from '@/components/gerenciamento/gerenciamento-card';
@@ -12,73 +12,80 @@ export default function GerenciamentoPage() {
   const [formadores, setFormadores] = useState<{[formacaoId: string]: Formador[]}>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchGerenciamentoData = useCallback(async () => {
+    setLoading(true);
     const supabase = createClient();
-    async function getFormacoes() {
-      setLoading(true);
-      const { data: formacoesData, error: formacoesError } = await supabase
-        .from('formacoes')
-        .select('*')
-        .order('created_at', { ascending: false });
+    const { data: formacoesData, error: formacoesError } = await supabase
+      .from('formacoes')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (formacoesError) {
-        console.error('Error fetching formacoes:', formacoesError);
-        setFormacoes([]);
-      } else {
-        const activeFormacoes = formacoesData.filter(f => {
-            if (!f.dates || !Array.isArray(f.dates) || f.dates.length === 0) {
-                return true; 
-            }
-            const dateObjects = f.dates.map((d: any) => new Date(d.date));
-            const lastDate = new Date(Math.max.apply(null, dateObjects.map(d => d.getTime())));
-            return lastDate >= new Date();
-        });
-        setFormacoes(activeFormacoes);
-
-        if (activeFormacoes.length > 0) {
-            const formacaoIds = activeFormacoes.map(f => f.id);
-            const { data: inscricoesData, error: inscricoesError } = await supabase
-                .from('inscricoes')
-                .select('*')
-                .in('formacao_id', formacaoIds);
-            
-            if (inscricoesError) {
-                console.error('Error fetching inscricoes:', inscricoesError);
-            } else {
-                const inscricoesByFormacao = inscricoesData.reduce((acc, inscricao) => {
-                    if (!acc[inscricao.formacao_id]) {
-                        acc[inscricao.formacao_id] = [];
-                    }
-                    acc[inscricao.formacao_id].push(inscricao);
-                    return acc;
-                }, {} as {[formacaoId: string]: Inscricao[]});
-                setInscricoes(inscricoesByFormacao);
-            }
-
-            const { data: formadoresData, error: formadoresError } = await supabase
-              .from('formadores')
-              .select('*')
-              .in('formacao_id', formacaoIds);
-          
-            if (formadoresError) {
-                console.error('Error fetching formadores:', formadoresError);
-            } else {
-                const formadoresByFormacao = formadoresData.reduce((acc, formador) => {
-                    if (!acc[formador.formacao_id]) {
-                        acc[formador.formacao_id] = [];
-                    }
-                    acc[formador.formacao_id].push(formador);
-                    return acc;
-                }, {} as {[formacaoId: string]: Formador[]});
-                setFormadores(formadoresByFormacao);
-            }
-        }
-      }
+    if (formacoesError) {
+      console.error('Error fetching formacoes:', formacoesError);
+      setFormacoes([]);
       setLoading(false);
+      return;
     }
+    
+    const activeFormacoes = formacoesData.filter(f => {
+        if (!f.dates || !Array.isArray(f.dates) || f.dates.length === 0) {
+            return true; 
+        }
+        const dateObjects = f.dates.map((d: any) => new Date(d.date));
+        const lastDate = new Date(Math.max.apply(null, dateObjects.map(d => d.getTime())));
+        return lastDate >= new Date();
+    });
+    setFormacoes(activeFormacoes);
 
-    getFormacoes();
+    if (activeFormacoes.length > 0) {
+        const formacaoIds = activeFormacoes.map(f => f.id);
+        
+        const { data: inscricoesData, error: inscricoesError } = await supabase
+            .from('inscricoes')
+            .select('*')
+            .in('formacao_id', formacaoIds);
+        
+        if (inscricoesError) {
+            console.error('Error fetching inscricoes:', inscricoesError);
+        } else {
+            const inscricoesByFormacao = inscricoesData.reduce((acc, inscricao) => {
+                if (!acc[inscricao.formacao_id]) {
+                    acc[inscricao.formacao_id] = [];
+                }
+                acc[inscricao.formacao_id].push(inscricao);
+                return acc;
+            }, {} as {[formacaoId: string]: Inscricao[]});
+            setInscricoes(inscricoesByFormacao);
+        }
+
+        const { data: formadoresData, error: formadoresError } = await supabase
+          .from('formadores')
+          .select('*')
+          .in('formacao_id', formacaoIds);
+      
+        if (formadoresError) {
+            console.error('Error fetching formadores:', formadoresError);
+        } else {
+            const formadoresByFormacao = formadoresData.reduce((acc, formador) => {
+                if (!acc[formador.formacao_id]) {
+                    acc[formador.formacao_id] = [];
+                }
+                acc[formador.formacao_id].push(formador);
+                return acc;
+            }, {} as {[formacaoId: string]: Formador[]});
+            setFormadores(formadoresByFormacao);
+        }
+    } else {
+        setInscricoes({});
+        setFormadores({});
+    }
+    
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    fetchGerenciamentoData();
+  }, [fetchGerenciamentoData]);
 
   return (
     <div className="space-y-6">
@@ -103,6 +110,7 @@ export default function GerenciamentoPage() {
                 formacao={formacao}
                 inscricoes={inscricoes[formacao.id] || []}
                 formadores={formadores[formacao.id] || []}
+                onUpdate={fetchGerenciamentoData}
             />
           ))}
         </div>

@@ -24,6 +24,7 @@ type FormBuilderSheetProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   formacao: Formacao;
+  onUpdate: () => void;
 };
 
 const defaultFields = [
@@ -42,7 +43,7 @@ const initialCustomField = {
 };
 
 
-export function FormBuilderSheet({ isOpen, setIsOpen, formacao }: FormBuilderSheetProps) {
+export function FormBuilderSheet({ isOpen, setIsOpen, formacao, onUpdate }: FormBuilderSheetProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formConfig, setFormConfig] = useState(
@@ -129,6 +130,7 @@ export function FormBuilderSheet({ isOpen, setIsOpen, formacao }: FormBuilderShe
         title: 'Configurações Salvas',
         description: 'O formulário de inscrição foi atualizado com sucesso.',
       });
+      onUpdate();
       setIsOpen(false);
     }
   };

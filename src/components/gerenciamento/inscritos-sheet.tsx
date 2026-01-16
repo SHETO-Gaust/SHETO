@@ -17,9 +17,10 @@ type InscritosSheetProps = {
   setIsOpen: (open: boolean) => void;
   formacao: Formacao;
   inscricoes: Inscricao[];
+  onUpdate: () => void;
 };
 
-export function InscritosSheet({ isOpen, setIsOpen, formacao, inscricoes }: InscritosSheetProps) {
+export function InscritosSheet({ isOpen, setIsOpen, formacao, inscricoes, onUpdate }: InscritosSheetProps) {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetContent className="sm:max-w-4xl w-full flex flex-col">
@@ -31,7 +32,7 @@ export function InscritosSheet({ isOpen, setIsOpen, formacao, inscricoes }: Insc
         </SheetHeader>
         
         <div className="flex-1 overflow-y-auto pr-6 pl-1 space-y-6 py-4">
-            <InscritosTable data={inscricoes} formacao={formacao} />
+            <InscritosTable data={inscricoes} formacao={formacao} onUpdate={onUpdate} />
         </div>
 
         <SheetFooter className="mt-auto pt-4 border-t">

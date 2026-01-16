@@ -22,6 +22,7 @@ type UploadInscritosDialogProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   formacao: Formacao;
+  onUpdate: () => void;
 };
 
 const formatCPF = (cpf: string | number): string => {
@@ -38,7 +39,7 @@ const formatCPF = (cpf: string | number): string => {
 const normalizeKey = (key: string) => key.toLowerCase().replace(/\s+/g, '_');
 
 
-export function UploadInscritosDialog({ isOpen, setIsOpen, formacao }: UploadInscritosDialogProps) {
+export function UploadInscritosDialog({ isOpen, setIsOpen, formacao, onUpdate }: UploadInscritosDialogProps) {
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -136,6 +137,7 @@ export function UploadInscritosDialog({ isOpen, setIsOpen, formacao }: UploadIns
           title: 'Importação Concluída!',
           description: `${result.data?.inserted} novos participantes foram inscritos. ${result.data?.duplicates} duplicados foram ignorados.`,
         });
+        onUpdate();
         setFile(null);
         setIsOpen(false);
 

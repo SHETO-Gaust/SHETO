@@ -41,9 +41,10 @@ import { DetailsInscricaoDialog } from './details-inscricao-dialog';
 type InscritosTableProps = {
   data: Inscricao[];
   formacao: Formacao;
+  onUpdate: () => void;
 };
 
-export function InscritosTable({ data, formacao }: InscritosTableProps) {
+export function InscritosTable({ data, formacao, onUpdate }: InscritosTableProps) {
     const { toast } = useToast();
     const [selectedInscricao, setSelectedInscricao] = useState<Inscricao | null>(null);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -84,6 +85,7 @@ export function InscritosTable({ data, formacao }: InscritosTableProps) {
                 title: 'Inscrição Removida',
                 description: 'A inscrição foi removida com sucesso.',
             });
+            onUpdate();
             setIsDeleteDialogOpen(false);
             setSelectedInscricao(null);
         }
@@ -177,6 +179,7 @@ export function InscritosTable({ data, formacao }: InscritosTableProps) {
                 setIsOpen={setIsEditSheetOpen}
                 inscricao={selectedInscricao}
                 formacao={formacao}
+                onUpdate={onUpdate}
             />
         )}
         
