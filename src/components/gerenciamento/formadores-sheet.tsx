@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, PlusCircle, Trash2, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { addFormador, deleteFormador } from '@/app/(app)/gerenciamento/actions';
+import { syncFormadores } from '@/app/(app)/gerenciamento/actions';
 import type { Formacao, Formador } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -33,21 +33,32 @@ type FormadoresSheetProps = {
   onUpdate: () => void;
 };
 
-export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpdate }: FormadoresSheetProps) {
+export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores: initialFormadores, onUpdate }: FormadoresSheetProps) {
   const { toast } = useToast();
-  const [loadingStates, setLoadingStates] = useState<{ [key: string]: boolean }>({});
-  const [newFormadores, setNewFormadores] = useState<{ [date: string]: { name: string; reference: string } }>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [newFormadoresInput, setNewFormadoresInput] = useState<{ [date: string]: { name: string; reference: string } }>({});
+  
+  const [stagedFormadores, setStagedFormadores] = useState<Formador[]>([]);
+  const [deletedFormadorIds, setDeletedFormadorIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (isOpen) {
+      setStagedFormadores([...initialFormadores]);
+      setDeletedFormadorIds(new Set());
+    }
+  }, [isOpen, initialFormadores]);
 
   const formadoresByDate = useMemo(() => {
-    return formadores.reduce((acc, formador) => {
-      const dateKey = formador.formacao_date;
+    const visibleFormadores = stagedFormadores.filter(f => !deletedFormadorIds.has(f.id));
+    return visibleFormadores.reduce((acc, formador) => {
+      const dateKey = format(parseISO(formador.formacao_date), 'yyyy-MM-dd');
       if (!acc[dateKey]) {
         acc[dateKey] = [];
       }
       acc[dateKey].push(formador);
       return acc;
     }, {} as { [date: string]: Formador[] });
-  }, [formadores]);
+  }, [stagedFormadores, deletedFormadorIds]);
 
   const sortedDates = useMemo(() => {
     return formacao.dates
@@ -56,7 +67,7 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpd
   }, [formacao.dates]);
 
   const handleInputChange = (date: string, field: 'name' | 'reference', value: string) => {
-    setNewFormadores(prev => ({
+    setNewFormadoresInput(prev => ({
       ...prev,
       [date]: {
         ...(prev[date] || { name: '', reference: '' }),
@@ -64,45 +75,57 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpd
       },
     }));
   };
-
-  const handleAddFormador = async (date: string) => {
-    const formadorData = newFormadores[date];
+  
+  const handleAddFormador = (dateKey: string) => {
+    const formadorData = newFormadoresInput[dateKey];
     if (!formadorData || !formadorData.name) {
       toast({ title: 'O nome do formador é obrigatório.', variant: 'destructive' });
       return;
     }
+    const newFormador: Formador = {
+        id: `new_${Date.now()}`,
+        formacao_id: formacao.id,
+        formacao_date: dateKey,
+        name: formadorData.name,
+        reference: formadorData.reference,
+        created_at: new Date().toISOString(),
+    };
+    setStagedFormadores(prev => [...prev, newFormador]);
+    handleInputChange(dateKey, 'name', '');
+    handleInputChange(dateKey, 'reference', '');
+  }
 
-    setLoadingStates(prev => ({ ...prev, [`add-${date}`]: true }));
-    const result = await addFormador({
-      formacao_id: formacao.id,
-      formacao_date: date,
-      name: formadorData.name,
-      reference: formadorData.reference,
-    });
-    setLoadingStates(prev => ({ ...prev, [`add-${date}`]: false }));
-
-    if (result.error) {
-      toast({ title: 'Erro ao adicionar formador', description: result.error, variant: 'destructive' });
+  const handleDeleteFormador = (idToDelete: string) => {
+    if (idToDelete.startsWith('new_')) {
+      setStagedFormadores(prev => prev.filter(f => f.id !== idToDelete));
     } else {
-      toast({ title: 'Formador adicionado com sucesso!' });
-      handleInputChange(date, 'name', '');
-      handleInputChange(date, 'reference', '');
-      onUpdate();
+      setDeletedFormadorIds(prev => new Set(prev).add(idToDelete));
+    }
+  }
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    
+    const toAdd = stagedFormadores
+      // @ts-ignore
+      .filter((f: Formador & { _status?: string }) => f.id.startsWith('new_'))
+      .map(({ name, reference, formacao_date }) => ({ name, reference: reference || '', formacao_date }));
+
+    const toDelete = Array.from(deletedFormadorIds);
+
+    const result = await syncFormadores(formacao.id, toAdd, toDelete);
+    
+    setIsSaving(false);
+    
+    if (result.error) {
+        toast({ title: 'Erro ao salvar', description: result.error, variant: 'destructive' });
+    } else {
+        toast({ title: 'Formadores salvos com sucesso!' });
+        onUpdate();
+        setIsOpen(false);
     }
   };
 
-  const handleDeleteFormador = async (id: string) => {
-    setLoadingStates(prev => ({ ...prev, [`delete-${id}`]: true }));
-    const result = await deleteFormador(id);
-    setLoadingStates(prev => ({ ...prev, [`delete-${id}`]: false }));
-
-    if (result.error) {
-      toast({ title: 'Erro ao deletar formador', description: result.error, variant: 'destructive' });
-    } else {
-      toast({ title: 'Formador removido com sucesso!' });
-      onUpdate();
-    }
-  };
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -115,7 +138,7 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpd
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto pr-6 pl-1 space-y-4 py-4">
-          <Accordion type="single" collapsible className="w-full">
+          <Accordion type="single" collapsible className="w-full" defaultValue={sortedDates[0]?.date}>
             {sortedDates.length > 0 ? sortedDates.map((day) => {
               const dateKey = format(parseISO(day.date), 'yyyy-MM-dd');
               const formadoresDoDia = formadoresByDate[dateKey] || [];
@@ -130,7 +153,7 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpd
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-4">
-                      {formadoresDoDia.length > 0 ? (
+                      {formadoresDoDia.length > 0 && (
                         <div className="space-y-2">
                           {formadoresDoDia.map(formador => (
                             <div key={formador.id} className="flex items-center justify-between p-2 border rounded-md bg-background">
@@ -145,18 +168,13 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpd
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleDeleteFormador(formador.id)}
-                                disabled={loadingStates[`delete-${formador.id}`]}
                               >
-                                {loadingStates[`delete-${formador.id}`] ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                )}
+                                <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </div>
                           ))}
                         </div>
-                      ) : <p className="text-sm text-center text-muted-foreground py-2">Nenhum formador para esta data.</p>}
+                      )}
 
                       <div className="p-4 border-t space-y-3">
                         <h4 className="font-semibold">Adicionar Novo Formador</h4>
@@ -165,7 +183,7 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpd
                           <Input
                             id={`name-${dateKey}`}
                             placeholder="Nome completo do formador"
-                            value={newFormadores[dateKey]?.name || ''}
+                            value={newFormadoresInput[dateKey]?.name || ''}
                             onChange={(e) => handleInputChange(dateKey, 'name', e.target.value)}
                           />
                         </div>
@@ -174,20 +192,15 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpd
                           <Input
                             id={`ref-${dateKey}`}
                             placeholder="Ex: Prof. de Química"
-                            value={newFormadores[dateKey]?.reference || ''}
+                            value={newFormadoresInput[dateKey]?.reference || ''}
                             onChange={(e) => handleInputChange(dateKey, 'reference', e.target.value)}
                           />
                         </div>
                         <Button
                           className="w-full"
                           onClick={() => handleAddFormador(dateKey)}
-                          disabled={loadingStates[`add-${dateKey}`]}
                         >
-                          {loadingStates[`add-${dateKey}`] ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                          )}
+                          <PlusCircle className="mr-2 h-4 w-4" />
                           Adicionar Formador
                         </Button>
                       </div>
@@ -204,6 +217,10 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores, onUpd
         <SheetFooter className="mt-auto pt-4 border-t">
           <Button variant="outline" onClick={() => setIsOpen(false)}>
             Fechar
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Salvar Alterações
           </Button>
         </SheetFooter>
       </SheetContent>

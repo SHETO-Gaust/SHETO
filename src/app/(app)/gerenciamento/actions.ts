@@ -210,52 +210,49 @@ export async function updateAttendanceConfig(formacaoId: string, config: any) {
   return { data };
 }
 
-const formadorSchema = z.object({
-  formacao_id: z.string().uuid(),
+const syncFormadoresToAddSchema = z.object({
   formacao_date: z.string(),
-  name: z.string().min(3, 'O nome é obrigatório.'),
+  name: z.string(),
   reference: z.string().optional(),
 });
 
-export async function addFormador(formData: z.infer<typeof formadorSchema>) {
+export async function syncFormadores(
+  formacao_id: string,
+  to_add: z.infer<typeof syncFormadoresToAddSchema>[],
+  to_delete: string[]
+) {
   const cookieStore = cookies();
   const supabase = createClient(cookieStore);
 
-  const validatedFields = formadorSchema.safeParse(formData);
-
-  if (!validatedFields.success) {
-    return {
-      error: 'Dados inválidos.',
-      errors: validatedFields.error.flatten().fieldErrors,
-    };
+  if (to_delete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from('formadores')
+      .delete()
+      .in('id', to_delete);
+    
+    if (deleteError) {
+      console.error('Error deleting formadores:', deleteError);
+      return { error: 'Ocorreu um erro ao remover formadores.' };
+    }
   }
 
-  const { data, error } = await supabase
-    .from('formadores')
-    .insert([validatedFields.data])
-    .select()
-    .single();
+  if (to_add.length > 0) {
+    const dataToAdd = to_add.map(f => ({
+      formacao_id,
+      formacao_date: f.formacao_date,
+      name: f.name,
+      reference: f.reference,
+    }));
+    const { error: addError } = await supabase
+      .from('formadores')
+      .insert(dataToAdd);
 
-  if (error) {
-    console.error('Error adding formador:', error);
-    return { error: 'Ocorreu um erro ao adicionar o formador.' };
+    if (addError) {
+      console.error('Error adding formadores:', addError);
+      return { error: `Ocorreu um erro ao adicionar novos formadores: ${addError.message}` };
+    }
   }
   
   revalidatePath('/gerenciamento');
-  return { data };
-}
-
-export async function deleteFormador(id: string) {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
-
-    const { error } = await supabase.from('formadores').delete().eq('id', id);
-
-    if (error) {
-        console.error('Error deleting formador:', error);
-        return { error: 'Ocorreu um erro ao deletar o formador.' };
-    }
-
-    revalidatePath('/gerenciamento');
-    return { success: true };
+  return { success: true };
 }
