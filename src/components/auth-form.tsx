@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -12,9 +13,10 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { Loader2, GraduationCap, CheckCircle, Star } from 'lucide-react';
 import { signIn } from '@/app/login/actions';
 import { useSearchParams } from 'next/navigation';
+import { Separator } from './ui/separator';
 
 export function AuthForm() {
   const [loading, setLoading] = useState(false);
@@ -82,6 +84,35 @@ export function AuthForm() {
             Entrar
           </Button>
         </form>
+
+        <Separator className="my-6" />
+
+        <div className="space-y-3">
+          <p className="text-center text-sm font-medium text-muted-foreground">
+              Acesso Rápido
+          </p>
+          <div className="flex flex-col gap-2">
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/inscricoes">
+                    <GraduationCap className="mr-2 h-4 w-4" />
+                    Inscrições Abertas
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/frequencia">
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Registrar Frequência
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/avaliacoes">
+                    <Star className="mr-2 h-4 w-4" />
+                    Avaliar Formação
+                </Link>
+              </Button>
+          </div>
+        </div>
+
       </CardContent>
     </Card>
   );
