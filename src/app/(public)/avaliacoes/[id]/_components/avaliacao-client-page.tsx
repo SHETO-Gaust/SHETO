@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Formacao, Inscricao, Formador } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, AlertTriangle, CheckCircle, UserCheck } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle, UserCheck, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { checkParticipantForAvaliacao } from '../../actions';
 import { AvaliacaoForm } from './avaliacao-form';
@@ -32,6 +33,8 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
   const [inscricao, setInscricao] = useState<Inscricao | null>(null);
   const [allFormadores, setAllFormadores] = useState<Formador[]>([]);
   const [selectedFormadores, setSelectedFormadores] = useState<Formador[]>([]);
+  const [hasFrequencia, setHasFrequencia] = useState(false);
+  const [isFrequenciaOpen, setIsFrequenciaOpen] = useState(false);
 
   const handleCpfCheck = async () => {
     if (cpf.length !== 14) {
@@ -46,6 +49,8 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
     if (result.success) {
         setInscricao(result.inscricao!);
         setAllFormadores(result.formadores!);
+        setHasFrequencia(result.hasFrequencia);
+        setIsFrequenciaOpen(result.isFrequenciaOpen);
         setStep('select_formadores');
     } else {
         setErrorMessage(result.error || 'Ocorreu um erro desconhecido.');
@@ -85,6 +90,21 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
                     Obrigado, <span className="font-bold text-foreground">{inscricao?.nome_completo}</span>!
                 </p>
                 <p>Sua avaliação sobre a formação <strong>{formacao.name}</strong> foi registrada com sucesso.</p>
+
+                { !hasFrequencia && isFrequenciaOpen && (
+                    <div className="pt-4 mt-4 border-t">
+                         <div className="pt-4 space-y-2">
+                             <p className="font-semibold text-orange-600">Ação necessária!</p>
+                             <p className="text-muted-foreground text-sm">Percebemos que você ainda não registrou sua frequência. Por favor, faça isso agora.</p>
+                             <Link href={`/frequencia/${formacao.id}`} passHref>
+                                <Button>
+                                    <Clock className="mr-2 h-4 w-4" />
+                                    Registrar Frequência
+                                </Button>
+                            </Link>
+                        </div>
+                    </div>
+                )}
             </CardContent>
         </Card>
       )
@@ -99,7 +119,8 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
                 formacao={formacao} 
                 inscricao={inscricao!} 
                 formadoresToRate={selectedFormadores} 
-                onSuccess={() => setStep('success')} 
+                onSuccess={() => setStep('success')}
+                showFrequenciaWarning={!hasFrequencia && isFrequenciaOpen}
              />
   }
 

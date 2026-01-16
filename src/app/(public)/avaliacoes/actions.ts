@@ -17,7 +17,7 @@ export async function checkParticipantForAvaliacao(formacaoId: string, cpf: stri
         .single();
 
     if (inscricaoError || !inscricao) {
-        return { error: 'CPF não encontrado na lista de inscritos para esta formação.' };
+        return { success: false, error: 'CPF não encontrado na lista de inscritos para esta formação.' };
     }
 
     // 2. Check if already evaluated
@@ -29,10 +29,10 @@ export async function checkParticipantForAvaliacao(formacaoId: string, cpf: stri
         .single();
     
     if (avaliacaoError && avaliacaoError.code !== 'PGRST116') { // Ignore 'no rows found'
-        return { error: 'Erro ao verificar avaliações anteriores.' };
+        return { success: false, error: 'Erro ao verificar avaliações anteriores.' };
     }
     if (existingAvaliacao) {
-        return { error: 'Você já enviou uma avaliação para esta formação.' };
+        return { success: false, error: 'Você já enviou uma avaliação para esta formação.' };
     }
 
     // 3. Check for frequency
@@ -43,11 +43,9 @@ export async function checkParticipantForAvaliacao(formacaoId: string, cpf: stri
         .eq('inscricao_id', inscricao.id);
 
     if (frequenciaError) {
-        return { error: 'Erro ao verificar sua frequência.' };
+        return { success: false, error: 'Erro ao verificar sua frequência.' };
     }
-    if (frequencia.length === 0) {
-        return { error: 'Você precisa ter a frequência registrada para poder avaliar esta formação.' };
-    }
+    const hasFrequencia = frequencia.length > 0;
 
     // 4. Fetch formadores
     const { data: formadores, error: formadoresError } = await supabase
@@ -56,13 +54,27 @@ export async function checkParticipantForAvaliacao(formacaoId: string, cpf: stri
         .eq('formacao_id', formacaoId);
 
     if (formadoresError) {
-        return { error: 'Erro ao buscar a lista de formadores.' };
+        return { success: false, error: 'Erro ao buscar a lista de formadores.' };
     }
+    
+    // 5. Fetch formacao details to check if attendance is open
+    const { data: formacao, error: formacaoError } = await supabase
+        .from('formacoes')
+        .select('attendance_list_info')
+        .eq('id', formacaoId)
+        .single();
+
+    if (formacaoError) {
+        return { success: false, error: 'Erro ao carregar detalhes da formação.' };
+    }
+
 
     return { 
         success: true, 
         inscricao,
-        formadores: formadores || []
+        formadores: formadores || [],
+        hasFrequencia,
+        isFrequenciaOpen: formacao?.attendance_list_info?.open === true,
     };
 }
 

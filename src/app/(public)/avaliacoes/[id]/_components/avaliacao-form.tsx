@@ -10,10 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Loader2, Star } from 'lucide-react';
+import { Loader2, Star, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { submitAvaliacao } from '../../actions';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 const formadorFeedbackSchema = z.object({
@@ -116,7 +117,7 @@ const QuestionBlock = ({ field, onChange, label, options }: { field: any, onChan
     </div>
 );
 
-export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, onSuccess }: { formacao: Formacao; inscricao: Inscricao; formadoresToRate: Formador[]; onSuccess: () => void }) {
+export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, onSuccess, showFrequenciaWarning }: { formacao: Formacao; inscricao: Inscricao; formadoresToRate: Formador[]; onSuccess: () => void; showFrequenciaWarning?: boolean }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -164,6 +165,16 @@ export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, onSuccess
           </CardHeader>
           <CardContent>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-12">
+                   {showFrequenciaWarning && (
+                      <Alert variant="destructive" className="bg-orange-50 border-orange-200 text-orange-800">
+                          <AlertTriangle className="h-4 w-4 !text-orange-500" />
+                          <AlertTitle className="font-bold">Atenção!</AlertTitle>
+                          <AlertDescription>
+                            Você ainda não registrou sua frequência. Por favor, não se esqueça de registrar sua presença ao final desta avaliação.
+                          </AlertDescription>
+                      </Alert>
+                  )}
+                  
                   {/* Bloco 1 - Repete por formador */}
                   {fields.map((field, index) => (
                       <div key={field.id} className="space-y-8 p-6 border rounded-lg">
