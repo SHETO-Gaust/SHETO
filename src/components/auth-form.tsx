@@ -46,7 +46,7 @@ export function AuthForm() {
             alt="GForms Logo"
             width={200}
             height={50}
-            className="h-auto"
+            priority
           />
         </div>
         <CardTitle className="sr-only text-2xl font-bold font-headline">

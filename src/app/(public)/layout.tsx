@@ -14,7 +14,7 @@ export default function PublicLayout({
               alt="GForms Logo"
               width={200}
               height={50}
-              className="h-auto"
+              priority
             />
         </div>
       </header>

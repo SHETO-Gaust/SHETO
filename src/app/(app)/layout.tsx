@@ -52,7 +52,7 @@ export default async function AppLayout({
               alt="GForms Logo"
               width={150}
               height={40}
-              className="h-auto"
+              priority
             />
           </div>
         </SidebarHeader>
