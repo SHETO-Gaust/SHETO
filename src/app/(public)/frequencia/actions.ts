@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { toZonedTime } from 'date-fns-tz';
 import { set, isWithinInterval } from 'date-fns';
+import type { Coordinates } from '@/lib/types';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
 
@@ -30,9 +31,26 @@ const getCurrentPeriod = (attendanceConfig: any): 'MAT' | 'VESP' | null => {
     }
 
     return checkPeriod('morning', periods.morning) || checkPeriod('afternoon', periods.afternoon);
-}
+};
 
-export async function checkInscricao(formacaoId: string, cpf: string) {
+// Haversine formula to calculate distance between two points in meters
+const getDistance = (coords1: Coordinates, coords2: Coordinates): number => {
+    const R = 6371e3; // metres
+    const φ1 = coords1.latitude * Math.PI / 180;
+    const φ2 = coords2.latitude * Math.PI / 180;
+    const Δφ = (coords2.latitude - coords1.latitude) * Math.PI / 180;
+    const Δλ = (coords2.longitude - coords1.longitude) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+};
+
+
+export async function checkInscricao(formacaoId: string, cpf: string, userCoords?: Coordinates) {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
@@ -53,6 +71,22 @@ export async function checkInscricao(formacaoId: string, cpf: string) {
     if (!currentPeriod) {
         return { status: 'ERROR', error: 'Fora do horário de registro de frequência.' };
     }
+    
+    // Geolocation check
+    const geoConfig = formacao.attendance_list_info.geolocation;
+    if (geoConfig?.enabled && geoConfig.locations?.length > 0) {
+        if (!userCoords) {
+            return { status: 'ERROR', error: 'Sua localização é necessária para registrar a frequência.' };
+        }
+        const isWithinRadius = geoConfig.locations.some(loc => {
+            const distance = getDistance(userCoords, { latitude: loc.latitude, longitude: loc.longitude });
+            return distance <= loc.radius;
+        });
+        if (!isWithinRadius) {
+            return { status: 'ERROR', error: 'Você precisa estar dentro do local do evento para poder registrar a frequência.' };
+        }
+    }
+
 
     const { data: inscricao, error: inscricaoError } = await supabase
         .from('inscricoes')
@@ -119,7 +153,7 @@ const registrationSchema = z.union([
     })
 ]);
 
-export async function registerFrequency(formacaoId: string, formData: any): Promise<any> {
+export async function registerFrequency(formacaoId: string, formData: any, userCoords?: Coordinates): Promise<any> {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     
@@ -148,6 +182,21 @@ export async function registerFrequency(formacaoId: string, formData: any): Prom
         return { success: false, error: errorMsg };
     }
     
+    // Geolocation check
+    const geoConfig = formacao.attendance_list_info.geolocation;
+    if (geoConfig?.enabled && geoConfig.locations?.length > 0) {
+        if (!userCoords) {
+            return { success: false, error: 'Sua localização é necessária para registrar a frequência.' };
+        }
+        const isWithinRadius = geoConfig.locations.some(loc => {
+            const distance = getDistance(userCoords, { latitude: loc.latitude, longitude: loc.longitude });
+            return distance <= loc.radius;
+        });
+        if (!isWithinRadius) {
+            return { success: false, error: 'Você precisa estar dentro do local do evento para poder registrar a frequência.' };
+        }
+    }
+    
     let inscricaoId: string;
     let nomeCompleto: string;
     let finalCpf: string;
@@ -167,7 +216,7 @@ export async function registerFrequency(formacaoId: string, formData: any): Prom
                 details: insertError.details,
                 code: insertError.code,
             });
-            return { success: false, error: `Erro ao criar ou atualizar sua inscrição: ${insertError.message}` };
+            return { success: false, error: `Erro ao criar sua inscrição: ${insertError.message}` };
         }
         inscricaoId = newInscrito.id;
         nomeCompleto = newInscrito.nome_completo;

@@ -1,19 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import type { Formacao } from '@/lib/types';
+import type { Formacao, Coordinates } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { RealTimeClock } from './real-time-clock';
 import { FrequenciaInscricaoForm } from './frequencia-inscricao-form';
 import { checkInscricao, registerFrequency } from '../../actions';
 import { format } from 'date-fns';
 
-type PageState = 'idle' | 'registering' | 'success' | 'already_registered' | 'error';
+type PageState = 'idle' | 'getting_location' | 'registering' | 'success' | 'already_registered' | 'error';
 
 export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
   const { toast } = useToast();
@@ -25,6 +25,9 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
   const [errorMessage, setErrorMessage] = useState('');
   const [registrationPeriod, setRegistrationPeriod] = useState<'MAT' | 'VESP' | null>(null);
   const [registrationTime, setRegistrationTime] = useState<Date | null>(null);
+  const [userCoords, setUserCoords] = useState<Coordinates | null>(null);
+
+  const isGeolocationEnabled = formacao.attendance_list_info?.geolocation?.enabled === true;
 
   const formatCPF = (value: string) => {
     return value
@@ -34,27 +37,65 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
       .replace(/(\d{3})(\d{1,2})/, '$1-$2')
       .slice(0, 14);
   };
+  
+  const getUserLocation = (): Promise<Coordinates> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocalização não é suportada por este navegador."));
+        return;
+      }
+      setPageState('getting_location');
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+          setUserCoords(coords);
+          resolve(coords);
+        },
+        (error) => {
+          let message = "Ocorreu um erro ao obter sua localização.";
+          if (error.code === 1) message = "Você precisa permitir o acesso à localização para registrar a frequência.";
+          reject(new Error(message));
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  }
 
   const handleCpfCheck = async () => {
     if (cpf.length !== 14) {
       toast({ title: 'CPF inválido.', variant: 'destructive' });
       return;
     }
+    
+    let coords = userCoords;
+    if (isGeolocationEnabled && !coords) {
+      try {
+        coords = await getUserLocation();
+      } catch (error: any) {
+        setErrorMessage(error.message);
+        setPageState('error');
+        return;
+      }
+    }
+
     setLoading(true);
-    const result = await checkInscricao(formacao.id, cpf);
+    setPageState('idle');
+    const result = await checkInscricao(formacao.id, cpf, coords ?? undefined);
     setLoading(false);
     
     setFormacaoName(result.formacao_name || formacao.name);
 
     if (result.status === 'FOUND') {
       const { inscricao } = result;
-      // If found, immediately try to register frequency
       const registrationData = {
           inscricao_id: inscricao.id,
           nome_completo: inscricao.nome_completo,
           cpf: cpf,
       };
-      await handleFullRegistration(registrationData);
+      await handleFullRegistration(registrationData, coords ?? undefined);
 
     } else if (result.status === 'NOT_FOUND') {
       setPageState('registering');
@@ -68,9 +109,9 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
     }
   };
   
-  const handleFullRegistration = async (formData: any) => {
+  const handleFullRegistration = async (formData: any, coords?: Coordinates) => {
       setLoading(true);
-      const result = await registerFrequency(formacao.id, formData);
+      const result = await registerFrequency(formacao.id, formData, coords);
       if (result.success) {
           setUserName(result.nome_completo || '');
           setFormacaoName(formacao.name);
@@ -148,9 +189,21 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
            </ErrorCard>
       );
   }
+  
+  if (pageState === 'getting_location') {
+      return (
+           <Card className="w-full max-w-lg mx-auto">
+              <CardContent className="text-center p-8">
+                  <Loader2 className="h-10 w-10 text-primary animate-spin mx-auto mb-4" />
+                  <p className="font-semibold text-lg">Obtendo sua localização...</p>
+                  <p className="text-muted-foreground text-sm">Por favor, aguarde.</p>
+              </CardContent>
+           </Card>
+      );
+  }
 
   if (pageState === 'registering') {
-      return <FrequenciaInscricaoForm formacao={formacao} cpf={cpf} onSubmit={handleFullRegistration} loading={loading} />
+      return <FrequenciaInscricaoForm formacao={formacao} cpf={cpf} onSubmit={(data) => handleFullRegistration(data, userCoords ?? undefined)} loading={loading} />
   }
 
   return (
@@ -163,6 +216,12 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
       </CardHeader>
       <CardContent className="space-y-6">
         <RealTimeClock />
+        {isGeolocationEnabled && (
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground bg-secondary p-3 rounded-md">
+                <MapPin className="h-4 w-4"/>
+                <span>Este evento requer sua localização para o registro.</span>
+            </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="cpf">CPF</Label>
           <Input
