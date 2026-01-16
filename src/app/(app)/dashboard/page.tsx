@@ -1,17 +1,16 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Calendar, CheckCircle, Info, XCircle } from "lucide-react"
-import type { Profile, Formacao } from "@/lib/types"
-import { format, isFuture, isPast, differenceInDays, isToday } from 'date-fns';
+import { Calendar, CheckCircle, XCircle, Monitor, MapPin, Sun, Sunset } from "lucide-react"
+import type { Profile, Formacao, Formador } from "@/lib/types"
+import { format, isFuture, isPast, differenceInDays, isToday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import Link from "next/link";
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/client"
 import { useEffect, useState } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Separator } from "@/components/ui/separator";
 
 function getStatusAndNextDate(dates: any): { status: 'Próxima' | 'Em andamento' | 'Concluída' | 'Pendente'; nextDate: string, daysUntilNext: number | null } {
     if (!dates || !Array.isArray(dates) || dates.length === 0) {
@@ -56,6 +55,7 @@ export default function DashboardPage() {
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("Usuário");
   const [formacoes, setFormacoes] = useState<Formacao[]>([]);
+  const [formadores, setFormadores] = useState<{[formacaoId: string]: Formador[]}>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -75,16 +75,36 @@ export default function DashboardPage() {
         setDisplayName(profileData?.name || user.email || "Usuário");
       }
 
-      const { data: formacoesData, error } = await supabase
+      const { data: formacoesData, error: formacoesError } = await supabase
         .from('formacoes')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching formacoes:', error);
+      if (formacoesError) {
+        console.error('Error fetching formacoes:', formacoesError);
         setFormacoes([]);
       } else {
         setFormacoes(formacoesData);
+        if (formacoesData && formacoesData.length > 0) {
+          const formacaoIds = formacoesData.map(f => f.id);
+          const { data: formadoresData, error: formadoresError } = await supabase
+            .from('formadores')
+            .select('*')
+            .in('formacao_id', formacaoIds);
+          
+          if (formadoresError) {
+              console.error('Error fetching formadores:', formadoresError);
+          } else {
+              const formadoresByFormacao = formadoresData.reduce((acc, formador) => {
+                  if (!acc[formador.formacao_id]) {
+                      acc[formador.formacao_id] = [];
+                  }
+                  acc[formador.formacao_id].push(formador);
+                  return acc;
+              }, {} as {[formacaoId: string]: Formador[]});
+              setFormadores(formadoresByFormacao);
+          }
+        }
       }
       setLoading(false);
     }
@@ -99,28 +119,49 @@ export default function DashboardPage() {
     </div>
   )
 
-  const processFormacoes = (formacoes: Formacao[]) => {
+  const processFormacoes = (formacoes: Formacao[], allFormadores: {[formacaoId: string]: Formador[]}) => {
     return formacoes.map(f => {
         const { status, nextDate } = getStatusAndNextDate(f.dates);
+        
+        const getSubscriptionStatus = (): 'done' | 'pending' | 'configured' => {
+            if (!f.subscription_form_config) return 'pending';
+            if (f.subscription_form_config.open) return 'done';
+            return 'configured';
+        }
+
+        const getAttendanceStatus = (): 'done' | 'pending' | 'configured' => {
+            if (!f.attendance_list_info?.periods) return 'pending';
+            if (f.attendance_list_info.open) return 'done';
+            return 'configured';
+        }
+        
+        const isDone = (status: 'done' | 'pending' | 'configured') => status === 'done';
+
+        const formadoresForFormacao = allFormadores[f.id] || [];
+        
+        const sortedDates = f.dates 
+          ? [...f.dates].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          : [];
+        
         return {
             id: f.id,
             name: f.name,
             status,
             nextDate,
-            pendenciasGFCPE: [
-                { name: 'Formadores', done: !!f.gfcpe_info?.formadores },
+            modality: f.modality,
+            dates: sortedDates,
+            pendencias: [
+                { name: 'Formadores', done: formadoresForFormacao.length > 0 },
                 { name: 'Ensalamento', done: !!f.gfcpe_info?.ensalamento },
-            ],
-            pendenciasGADSG: [
-                { name: 'Inscrição', done: !!f.gadsg_info?.inscricao },
-                { name: 'Frequência', done: !!f.gadsg_info?.frequencia },
+                { name: 'Inscrição', done: isDone(getSubscriptionStatus()) },
+                { name: 'Frequência', done: isDone(getAttendanceStatus()) },
                 { name: 'Avaliação', done: !!f.gadsg_info?.avaliacao },
             ]
         }
     }).filter(f => f.status !== 'Concluída');
   }
 
-  const processedFormacoes = processFormacoes(formacoes);
+  const processedFormacoes = processFormacoes(formacoes, formadores);
 
 
   return (
@@ -134,52 +175,78 @@ export default function DashboardPage() {
           <h2 className="text-xl font-semibold">Formações e Status</h2>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
         {loading ? (
           <>
-            <Skeleton className="h-96 w-full rounded-xl" />
-            <Skeleton className="h-96 w-full rounded-xl" />
-            <Skeleton className="h-96 w-full rounded-xl" />
+            <Skeleton className="h-[28rem] w-full rounded-xl" />
+            <Skeleton className="h-[28rem] w-full rounded-xl" />
           </>
         ) : (
           processedFormacoes.map((formacao) => (
-            <Card key={formacao.id} className={cn('relative transition-all duration-300 ease-in-out shadow-lg rounded-xl flex flex-col', { 'border-2 border-blue-300 bg-blue-50/50': formacao.status === 'Em andamento' })}>
+            <Card key={formacao.id} className={cn('shadow-lg rounded-xl flex flex-col', { 'border-2 border-blue-300 bg-blue-50/50': formacao.status === 'Em andamento' })}>
               <CardHeader>
-                <CardTitle>{formacao.name}</CardTitle>
-                <CardDescription className="flex items-center gap-2 pt-2">
-                  <Calendar className="h-4 w-4" />
-                  {formacao.status === 'Próxima' || formacao.status === 'Em andamento' ? `Próxima data: ${formacao.nextDate}` : formacao.status}
-                </CardDescription>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>{formacao.name}</CardTitle>
+                    <CardDescription className="flex items-center gap-2 pt-2">
+                      <Calendar className="h-4 w-4" />
+                      {formacao.status === 'Próxima' || formacao.status === 'Em andamento' ? `Próxima data: ${formacao.nextDate}` : formacao.status}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                      {formacao.modality && (
+                        <Badge variant={formacao.modality === 'presencial' ? 'secondary' : 'default'} className="flex items-center gap-1">
+                          {formacao.modality === 'online' ? <Monitor className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
+                          {formacao.modality.charAt(0).toUpperCase() + formacao.modality.slice(1)}
+                        </Badge>
+                      )}
+                      {formacao.status === 'Em andamento' && (
+                         <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">EM ANDAMENTO</Badge>
+                      )}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4 flex-grow flex flex-col">
-                  <div className="flex-grow">
-                      <div>
-                          <h4 className="font-semibold text-sm mb-2">Pendências GFCPE</h4>
-                          <div className="space-y-1">
-                              {formacao.pendenciasGFCPE.map(p => <PendencyItem key={p.name} {...p}/>)}
-                          </div>
+                  
+                  <Separator />
+
+                  <div>
+                      <h4 className="font-semibold text-sm mb-3">Status das Pendências</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                          {formacao.pendencias.map(p => <PendencyItem key={p.name} {...p}/>)}
                       </div>
-                       <div className="mt-4">
-                          <h4 className="font-semibold text-sm mb-2">Pendências GADSG</h4>
-                          <div className="space-y-1">
-                              {formacao.pendenciasGADSG.map(p => <PendencyItem key={p.name} {...p}/>)}
+                  </div>
+                  
+                  <Separator />
+
+                  <div className="flex-grow">
+                      <h4 className="font-semibold text-sm mb-3">Datas e Locais</h4>
+                      <div className="space-y-3 text-sm">
+                        {formacao.dates.length > 0 ? formacao.dates.map((day: any, index: number) => (
+                          <div key={index}>
+                             <div className="flex items-center gap-2 font-medium">
+                                <Calendar className="h-4 w-4 text-primary" />
+                                <span>{format(parseISO(day.date), "dd/MM/yyyy, EEEE", { locale: ptBR })}</span>
+                              </div>
+                              <div className="pl-6 mt-1 space-y-1 text-xs">
+                                {day.location?.morning && (
+                                    <div className="flex items-start gap-2 text-muted-foreground">
+                                        <Sun className="h-3 w-3 mt-0.5 text-amber-500" />
+                                        <span>Manhã: {day.location.morning_location || 'A definir'}</span>
+                                    </div>
+                                )}
+                                 {day.location?.afternoon && (
+                                    <div className="flex items-start gap-2 text-muted-foreground">
+                                        <Sunset className="h-3 w-3 mt-0.5 text-orange-500" />
+                                         <span>Tarde: {day.location.afternoon_location || 'A definir'}</span>
+                                    </div>
+                                )}
+                              </div>
                           </div>
+                        )) : <p className="text-sm text-muted-foreground">Nenhuma data cadastrada.</p>}
                       </div>
                   </div>
 
-                  <div className="mt-auto pt-4 space-y-2">
-                      {formacao.status === 'Em andamento' && (
-                          <div className="flex justify-end">
-                              <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">EM ANDAMENTO</Badge>
-                          </div>
-                      )}
-                      <Link href={`/formacoes/${formacao.id}`} className="w-full">
-                        <Button variant="outline" className="w-full">
-                            <Info className="mr-2 h-4 w-4" />
-                            Detalhes
-                        </Button>
-                      </Link>
-                  </div>
               </CardContent>
             </Card>
           ))
