@@ -20,9 +20,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 const formadorFeedbackSchema = z.object({
   formador_id: z.string(),
   formador_name: z.string(),
-  dominio_tema: z.coerce.number().min(1).max(6),
+  dominio_tema: z.coerce.number().min(1).max(5),
   relevancia_profissional: z.coerce.number().min(1).max(5),
-  contribuicao_tema: z.coerce.number().min(1).max(6),
+  contribuicao_tema: z.coerce.number().min(1).max(5),
   metodologia_adequada: z.coerce.number().min(1).max(5),
   comentario: z.string().optional(),
 });
@@ -39,41 +39,41 @@ const questions = {
     dominio_tema: {
         label: (name: string) => `Você considera que o formador ${name} demonstrou domínio do tema da formação?`,
         options: [
-            { value: 1, text: 'Não, o formador não demonstrou domínio do tema da formação' },
-            { value: 2, text: 'Não, o formador demonstrou pouco domínio do tema da formação' },
-            { value: 3, text: 'Sim, o formador demonstrou bom domínio do tema da formação' },
-            { value: 4, text: 'Sim, o formador demonstrou muito bom domínio do tema da formação' },
-            { value: 5, text: 'Sim, o formador demonstrou excelente domínio do tema da formação' },
+            { text: 'Não, o formador não demonstrou domínio do tema da formação' },
+            { text: 'Não, o formador demonstrou pouco domínio do tema da formação' },
+            { text: 'Sim, o formador demonstrou bom domínio do tema da formação' },
+            { text: 'Sim, o formador demonstrou muito bom domínio do tema da formação' },
+            { text: 'Sim, o formador demonstrou excelente domínio do tema da formação' },
         ]
     },
     relevancia_profissional: {
         label: () => `Você avalia que a formação trouxe alguma relevância para seu avanço profissional?`,
         options: [
-            { value: 1, text: 'Contribuiu de forma pouco relevante para minha prática profissional.' },
-            { value: 2, text: 'Contribuiu de forma relevante para minha prática profissional.' },
-            { value: 3, text: 'Contribuiu de forma necessária relevante para minha prática profissional.' },
-            { value: 4, text: 'Contribuiu de forma muito relevante relevante para minha prática profissional.' },
-            { value: 5, text: 'Superou minhas expectativas e transformou minha prática profissional.' },
+            { text: 'Contribuiu de forma pouco relevante para minha prática profissional.' },
+            { text: 'Contribuiu de forma relevante para minha prática profissional.' },
+            { text: 'Contribuiu de forma necessária para minha prática profissional.' },
+            { text: 'Contribuiu de forma muito relevante para minha prática profissional.' },
+            { text: 'Superou minhas expectativas e transformou minha prática profissional.' },
         ]
     },
     contribuicao_tema: {
         label: () => `Você avalia que o tema da formação contribuiu para sua vida profissional?`,
         options: [
-            { value: 1, text: 'Não, o tema da formação em nada contribuiu para minha vida profissional.' },
-            { value: 2, text: 'Não, o tema da formação pouco contribuiu para minha vida profissional.' },
-            { value: 3, text: 'Sim, no entanto, o tema abordado não foi o suficiente para transformar minha atuação profissional.' },
-            { value: 4, text: 'Sim, o tema da formação trouxe grande contribuição, porém não o suficiente para transformar minha atuação profissional' },
-            { value: 5, text: 'Sim, o tema da formação contribuiu muito e transformou a minha vida profissional.' },
+            { text: 'Não, o tema da formação em nada contribuiu para minha vida profissional.' },
+            { text: 'Não, o tema da formação pouco contribuiu para minha vida profissional.' },
+            { text: 'Sim, no entanto, o tema abordado não foi o suficiente para transformar minha atuação profissional.' },
+            { text: 'Sim, o tema da formação trouxe grande contribuição, porém não o suficiente para transformar minha atuação profissional' },
+            { text: 'Sim, o tema da formação contribuiu muito e transformou a minha vida profissional.' },
         ]
     },
      metodologia_adequada: {
         label: (name: string) => `Você julga que a metodologia utilizada pelo formador ${name} foi adequada?`,
         options: [
-            { value: 1, text: 'Não, pois considerei a metodologia inadequada e tive dificuldade em visualizar sua aplicação na minha prática profissional.' },
-            { value: 2, text: 'Não, apesar da metodologia utilizada ser adequada, não percebi aplicabilidade na minha prática profissional.' },
-            { value: 3, text: 'Sim, a metodologia de ensino foi boa, porém o conteúdo tem pouca aplicação na minha prática.' },
-            { value: 4, text: 'Sim, a metodologia é adequada e aplicável a minha prática profissional' },
-            { value: 5, text: 'Sim, a metodologia é adequada e inovadora, e sua aplicação pode transformar minha prática profissional' },
+            { text: 'Não, pois considerei a metodologia inadequada e tive dificuldade em visualizar sua aplicação na minha prática profissional.' },
+            { text: 'Não, apesar da metodologia utilizada ser adequada, não percebi aplicabilidade na minha prática profissional.' },
+            { text: 'Sim, a metodologia de ensino foi boa, porém o conteúdo tem pouca aplicação na minha prática.' },
+            { text: 'Sim, a metodologia é adequada e aplicável a minha prática profissional' },
+            { text: 'Sim, a metodologia é adequada e inovadora, e sua aplicação pode transformar minha prática profissional' },
         ]
     }
 }
@@ -97,22 +97,25 @@ const StarRatingInput = ({ value, onChange, max = 5 }: { value: number, onChange
 );
 
 
-const QuestionBlock = ({ field, onChange, label, options }: { field: any, onChange: any, label: string, options: {value: number, text: string}[] }) => (
+const QuestionBlock = ({ field, onChange, label, options }: { field: any, onChange: any, label: string, options: {text: string}[] }) => (
     <div className="space-y-3">
         <Label>{label}</Label>
         <div className="space-y-2">
-        {options.map(option => (
-            <div key={option.value} onClick={() => onChange(option.value)} className={cn("flex items-start space-x-3 rounded-md border p-3 cursor-pointer", field.value === option.value && "bg-primary/10 border-primary")}>
-                <input
-                    type="radio"
-                    value={option.value}
-                    checked={field.value === option.value}
-                    onChange={() => onChange(option.value)}
-                    className="mt-1"
-                />
-                <Label className="font-normal">{option.text}</Label>
-            </div>
-        ))}
+        {options.map((option, index) => {
+            const ratingValue = index + 1;
+            return (
+                <div key={ratingValue} onClick={() => onChange(ratingValue)} className={cn("flex items-start space-x-3 rounded-md border p-3 cursor-pointer", field.value === ratingValue && "bg-primary/10 border-primary")}>
+                    <input
+                        type="radio"
+                        value={ratingValue}
+                        checked={field.value === ratingValue}
+                        onChange={() => onChange(ratingValue)}
+                        className="mt-1"
+                    />
+                    <Label className="font-normal">{option.text}</Label>
+                </div>
+            )
+        })}
         </div>
     </div>
 );
