@@ -33,9 +33,9 @@ const getCurrentPeriod = (attendanceConfig: any): 'MAT' | 'VESP' | null => {
     return checkPeriod('morning', periods.morning) || checkPeriod('afternoon', periods.afternoon);
 };
 
-// Haversine formula to calculate distance between two points in meters
+// Haversine formula to calculate distance between two points in kilometers
 const getDistance = (coords1: Coordinates, coords2: Coordinates): number => {
-    const R = 6371e3; // metres
+    const R = 6371; // kilometers
     const φ1 = coords1.latitude * Math.PI / 180;
     const φ2 = coords2.latitude * Math.PI / 180;
     const Δφ = (coords2.latitude - coords1.latitude) * Math.PI / 180;

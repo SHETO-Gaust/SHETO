@@ -91,7 +91,7 @@ export function FrequenciaConfigSheet({ isOpen, setIsOpen, formacao }: Frequenci
   const handleAddLocation = () => {
     const lat = parseFloat(newLocation.latitude);
     const lon = parseFloat(newLocation.longitude);
-    const rad = parseInt(newLocation.radius, 10);
+    const rad = parseFloat(newLocation.radius);
 
     if (isNaN(lat) || isNaN(lon) || isNaN(rad) || rad <= 0) {
       toast({ title: 'Valores de localização inválidos.', description: 'Latitude, longitude e raio devem ser números válidos.', variant: 'destructive'});
@@ -220,7 +220,7 @@ export function FrequenciaConfigSheet({ isOpen, setIsOpen, formacao }: Frequenci
                       <div key={loc.id} className='flex items-center gap-2 p-2 border rounded-md bg-background'>
                         <div className='flex-1 text-xs'>
                           <p>Lat: {loc.latitude}, Lon: {loc.longitude}</p>
-                          <p>Raio: {loc.radius}m</p>
+                          <p>Raio: {loc.radius}km</p>
                         </div>
                         <Button variant="ghost" size="icon" onClick={() => handleRemoveLocation(loc.id)}>
                           <Trash2 className='h-4 w-4 text-destructive' />
@@ -237,7 +237,7 @@ export function FrequenciaConfigSheet({ isOpen, setIsOpen, formacao }: Frequenci
                   <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
                     <Input placeholder='Latitude' value={newLocation.latitude} onChange={e => setNewLocation({...newLocation, latitude: e.target.value})} />
                     <Input placeholder='Longitude' value={newLocation.longitude} onChange={e => setNewLocation({...newLocation, longitude: e.target.value})} />
-                    <Input placeholder='Raio (metros)' type='number' value={newLocation.radius} onChange={e => setNewLocation({...newLocation, radius: e.target.value})} />
+                    <Input placeholder='Raio (km)' type='number' value={newLocation.radius} onChange={e => setNewLocation({...newLocation, radius: e.target.value})} />
                   </div>
                   <Button size='sm' onClick={handleAddLocation} className='w-full'>
                     <PlusCircle className='mr-2 h-4 w-4' /> Adicionar Local
