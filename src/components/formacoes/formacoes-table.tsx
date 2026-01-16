@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2, Copy } from 'lucide-react';
 import type { Formacao } from '@/lib/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,6 +24,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DeleteFormacaoDialog } from './delete-formacao-dialog';
+import { DuplicateFormacaoDialog } from './duplicate-formacao-dialog';
+import { EditFormacaoSheet } from './edit-formacao-sheet';
 
 type FormacoesTableProps = {
   data: Formacao[];
@@ -32,11 +34,24 @@ type FormacoesTableProps = {
 export function FormacoesTable({ data }: FormacoesTableProps) {
     const [selectedFormacao, setSelectedFormacao] = useState<Formacao | null>(null);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
+    const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
 
     const handleDeleteClick = (formacao: Formacao) => {
         setSelectedFormacao(formacao);
         setIsDeleteDialogOpen(true);
     };
+
+    const handleDuplicateClick = (formacao: Formacao) => {
+        setSelectedFormacao(formacao);
+        setIsDuplicateDialogOpen(true);
+    };
+
+    const handleEditClick = (formacao: Formacao) => {
+        setSelectedFormacao(formacao);
+        setIsEditSheetOpen(true);
+    };
+
 
     const formatDateRange = (dates: any) => {
         if (!dates || !Array.isArray(dates) || dates.length === 0) {
@@ -93,9 +108,13 @@ export function FormacoesTable({ data }: FormacoesTableProps) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleEditClick(formacao)}>
                         <Pencil className="mr-2 h-4 w-4" />
                         Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDuplicateClick(formacao)}>
+                        <Copy className="mr-2 h-4 w-4" />
+                        Duplicar
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => handleDeleteClick(formacao)} className="text-destructive focus:text-destructive">
@@ -116,6 +135,20 @@ export function FormacoesTable({ data }: FormacoesTableProps) {
             setIsOpen={setIsDeleteDialogOpen}
             formacao={selectedFormacao}
          />
+      )}
+       {selectedFormacao && (
+         <DuplicateFormacaoDialog 
+            isOpen={isDuplicateDialogOpen}
+            setIsOpen={setIsDuplicateDialogOpen}
+            formacao={selectedFormacao}
+         />
+      )}
+      {selectedFormacao && (
+          <EditFormacaoSheet
+            isOpen={isEditSheetOpen}
+            setIsOpen={setIsEditSheetOpen}
+            formacao={selectedFormacao}
+          />
       )}
     </>
   );
