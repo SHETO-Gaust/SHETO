@@ -20,10 +20,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 const formadorFeedbackSchema = z.object({
   formador_id: z.string(),
   formador_name: z.string(),
-  dominio_tema: z.coerce.number().min(1).max(5),
-  relevancia_profissional: z.coerce.number().min(1).max(5),
-  contribuicao_tema: z.coerce.number().min(1).max(5),
-  metodologia_adequada: z.coerce.number().min(1).max(5),
+  dominio_tema: z.coerce.number().min(1, { message: "A avaliação para esta pergunta é obrigatória." }).max(5),
+  relevancia_profissional: z.coerce.number().min(1, { message: "A avaliação para esta pergunta é obrigatória." }).max(5),
+  contribuicao_tema: z.coerce.number().min(1, { message: "A avaliação para esta pergunta é obrigatória." }).max(5),
+  metodologia_adequada: z.coerce.number().min(1, { message: "A avaliação para esta pergunta é obrigatória." }).max(5),
   comentario: z.string().optional(),
 });
 
@@ -97,14 +97,14 @@ const StarRatingInput = ({ value, onChange, max = 5 }: { value: number, onChange
 );
 
 
-const QuestionBlock = ({ field, onChange, label, options }: { field: any, onChange: any, label: string, options: {text: string}[] }) => (
+const QuestionBlock = ({ field, onChange, label, options, error }: { field: any, onChange: (value: number) => void, label: string, options: {text: string}[], error?: { message?: string } }) => (
     <div className="space-y-3">
-        <Label>{label}</Label>
+        <Label className={cn(error && "text-destructive")}>{label}</Label>
         <div className="space-y-2">
         {options.map((option, index) => {
             const ratingValue = index + 1;
             return (
-                <div key={ratingValue} onClick={() => onChange(ratingValue)} className={cn("flex items-start space-x-3 rounded-md border p-3 cursor-pointer", field.value === ratingValue && "bg-primary/10 border-primary")}>
+                <div key={ratingValue} onClick={() => onChange(ratingValue)} className={cn("flex items-start space-x-3 rounded-md border p-3 cursor-pointer", field.value === ratingValue ? "bg-primary/10 border-primary" : "bg-background", error && "border-destructive")}>
                     <input
                         type="radio"
                         value={ratingValue}
@@ -117,6 +117,7 @@ const QuestionBlock = ({ field, onChange, label, options }: { field: any, onChan
             )
         })}
         </div>
+        {error && <p className="text-sm font-medium text-destructive">{error.message}</p>}
     </div>
 );
 
@@ -142,6 +143,7 @@ export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, onSuccess
   });
 
   const { fields } = useFieldArray({ control: form.control, name: "feedback_formadores" });
+  const { formState: { errors } } = form;
 
   const onSubmit = async (data: AvaliacaoFormValues) => {
       setLoading(true);
@@ -186,22 +188,22 @@ export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, onSuccess
                           <Controller
                               control={form.control}
                               name={`feedback_formadores.${index}.dominio_tema`}
-                              render={({ field: controllerField }) => <QuestionBlock field={controllerField} onChange={controllerField.onChange} label={questions.dominio_tema.label(field.formador_name)} options={questions.dominio_tema.options} />}
+                              render={({ field: controllerField }) => <QuestionBlock field={controllerField} onChange={controllerField.onChange} label={questions.dominio_tema.label(field.formador_name)} options={questions.dominio_tema.options} error={errors.feedback_formadores?.[index]?.dominio_tema} />}
                           />
                            <Controller
                               control={form.control}
                               name={`feedback_formadores.${index}.relevancia_profissional`}
-                              render={({ field: controllerField }) => <QuestionBlock field={controllerField} onChange={controllerField.onChange} label={questions.relevancia_profissional.label()} options={questions.relevancia_profissional.options} />}
+                              render={({ field: controllerField }) => <QuestionBlock field={controllerField} onChange={controllerField.onChange} label={questions.relevancia_profissional.label()} options={questions.relevancia_profissional.options} error={errors.feedback_formadores?.[index]?.relevancia_profissional} />}
                           />
                           <Controller
                               control={form.control}
                               name={`feedback_formadores.${index}.contribuicao_tema`}
-                              render={({ field: controllerField }) => <QuestionBlock field={controllerField} onChange={controllerField.onChange} label={questions.contribuicao_tema.label()} options={questions.contribuicao_tema.options} />}
+                              render={({ field: controllerField }) => <QuestionBlock field={controllerField} onChange={controllerField.onChange} label={questions.contribuicao_tema.label()} options={questions.contribuicao_tema.options} error={errors.feedback_formadores?.[index]?.contribuicao_tema} />}
                           />
                           <Controller
                               control={form.control}
                               name={`feedback_formadores.${index}.metodologia_adequada`}
-                              render={({ field: controllerField }) => <QuestionBlock field={controllerField} onChange={controllerField.onChange} label={questions.metodologia_adequada.label(field.formador_name)} options={questions.metodologia_adequada.options} />}
+                              render={({ field: controllerField }) => <QuestionBlock field={controllerField} onChange={controllerField.onChange} label={questions.metodologia_adequada.label(field.formador_name)} options={questions.metodologia_adequada.options} error={errors.feedback_formadores?.[index]?.metodologia_adequada} />}
                           />
 
                           <div className="space-y-2">
