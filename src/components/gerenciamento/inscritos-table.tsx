@@ -32,11 +32,12 @@ import {
     AlertDialogHeader,
     AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { deleteInscricao } from '@/app/(app)/gerenciamento/actions';
+import { deleteInscricao, deleteInscricoes } from '@/app/(app)/gerenciamento/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { EditInscricaoSheet } from './edit-inscricao-sheet';
 import { DetailsInscricaoDialog } from './details-inscricao-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type InscritosTableProps = {
   data: Inscricao[];
@@ -51,6 +52,23 @@ export function InscritosTable({ data, formacao, onUpdate }: InscritosTableProps
     const [isDeleteLoading, setIsDeleteLoading] = useState(false);
     const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
     const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+    const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+    const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
+    const [isBulkDeleteLoading, setIsBulkDeleteLoading] = useState(false);
+
+    const handleSelectAll = (checked: boolean | 'indeterminate') => {
+        if (checked === true) {
+            setSelectedRowIds(data.map(item => item.id));
+        } else {
+            setSelectedRowIds([]);
+        }
+    };
+
+    const handleSelectRow = (id: string, checked: boolean) => {
+        setSelectedRowIds(prev =>
+            checked ? [...prev, id] : prev.filter(rowId => rowId !== id)
+        );
+    };
 
     const handleDeleteClick = (inscricao: Inscricao) => {
         setSelectedInscricao(inscricao);
@@ -91,16 +109,70 @@ export function InscritosTable({ data, formacao, onUpdate }: InscritosTableProps
         }
     }
 
+    const handleBulkDeleteClick = () => {
+        setIsBulkDeleteDialogOpen(true);
+    };
+
+    const handleConfirmBulkDelete = async () => {
+        if (selectedRowIds.length === 0) return;
+
+        setIsBulkDeleteLoading(true);
+        const result = await deleteInscricoes(selectedRowIds);
+        setIsBulkDeleteLoading(false);
+
+        if (result.error) {
+            toast({
+                title: 'Erro ao deletar',
+                description: result.error,
+                variant: 'destructive',
+            });
+        } else {
+            toast({
+                title: 'Inscrições Removidas',
+                description: `${selectedRowIds.length} inscrições foram removidas com sucesso.`,
+            });
+            onUpdate();
+            setIsBulkDeleteDialogOpen(false);
+            setSelectedRowIds([]);
+        }
+    };
+
     if (data.length === 0) {
         return <p className="text-center text-muted-foreground p-8">Nenhum participante inscrito ainda.</p>
     }
 
   return (
     <>
+      {selectedRowIds.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+            <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkDeleteClick}
+                disabled={isBulkDeleteLoading}
+            >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Deletar ({selectedRowIds.length}) selecionado(s)
+            </Button>
+        </div>
+      )}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[50px]">
+                <Checkbox
+                  checked={
+                    data.length > 0 && selectedRowIds.length === data.length
+                      ? true
+                      : selectedRowIds.length > 0
+                      ? 'indeterminate'
+                      : false
+                  }
+                  onCheckedChange={(checked) => handleSelectAll(checked)}
+                  aria-label="Selecionar todos"
+                />
+              </TableHead>
               <TableHead>Nome Completo</TableHead>
               <TableHead>CPF</TableHead>
               <TableHead>Regional</TableHead>
@@ -112,7 +184,14 @@ export function InscritosTable({ data, formacao, onUpdate }: InscritosTableProps
           </TableHeader>
           <TableBody>
             {data.map((inscricao) => (
-              <TableRow key={inscricao.id}>
+              <TableRow key={inscricao.id} data-state={selectedRowIds.includes(inscricao.id) && "selected"}>
+                <TableCell>
+                  <Checkbox
+                    checked={selectedRowIds.includes(inscricao.id)}
+                    onCheckedChange={(checked) => handleSelectRow(inscricao.id, !!checked)}
+                    aria-label={`Selecionar ${inscricao.nome_completo}`}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">{inscricao.nome_completo}</TableCell>
                 <TableCell>{inscricao.cpf}</TableCell>
                 <TableCell>{inscricao.dados?.regional || 'N/A'}</TableCell>
@@ -168,6 +247,28 @@ export function InscritosTable({ data, formacao, onUpdate }: InscritosTableProps
                     >
                         {isDeleteLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Sim, deletar inscrição
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Essa ação não pode ser desfeita. Isso irá deletar permanentemente {selectedRowIds.length} inscriç{selectedRowIds.length > 1 ? 'ões' : 'ão'}.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={handleConfirmBulkDelete}
+                        disabled={isBulkDeleteLoading}
+                        className="bg-destructive hover:bg-destructive/90"
+                    >
+                        {isBulkDeleteLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Sim, deletar
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

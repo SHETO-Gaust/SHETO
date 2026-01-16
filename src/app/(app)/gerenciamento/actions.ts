@@ -95,6 +95,28 @@ export async function deleteInscricao(id: string) {
     return { success: true };
 }
 
+export async function deleteInscricoes(ids: string[]) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    if (!ids || ids.length === 0) {
+        return { error: 'Nenhuma inscrição selecionada.' };
+    }
+
+    const { error } = await supabase
+        .from('inscricoes')
+        .delete()
+        .in('id', ids);
+
+    if (error) {
+        console.error('Error bulk deleting inscricoes:', error);
+        return { error: 'Ocorreu um erro ao deletar as inscrições em lote.' };
+    }
+
+    revalidatePath('/gerenciamento');
+    return { success: true };
+}
+
 
 const formSchema = z.object({
   id: z.string(),
