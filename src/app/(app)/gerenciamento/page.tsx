@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { Formacao, Inscricao } from '@/lib/types';
+import type { Formacao, Inscricao, Formador } from '@/lib/types';
 import { GerenciamentoCard } from '@/components/gerenciamento/gerenciamento-card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function GerenciamentoPage() {
   const [formacoes, setFormacoes] = useState<Formacao[]>([]);
   const [inscricoes, setInscricoes] = useState<{[formacaoId: string]: Inscricao[]}>({});
+  const [formadores, setFormadores] = useState<{[formacaoId: string]: Formador[]}>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,6 +54,24 @@ export default function GerenciamentoPage() {
                 }, {} as {[formacaoId: string]: Inscricao[]});
                 setInscricoes(inscricoesByFormacao);
             }
+
+            const { data: formadoresData, error: formadoresError } = await supabase
+              .from('formadores')
+              .select('*')
+              .in('formacao_id', formacaoIds);
+          
+            if (formadoresError) {
+                console.error('Error fetching formadores:', formadoresError);
+            } else {
+                const formadoresByFormacao = formadoresData.reduce((acc, formador) => {
+                    if (!acc[formador.formacao_id]) {
+                        acc[formador.formacao_id] = [];
+                    }
+                    acc[formador.formacao_id].push(formador);
+                    return acc;
+                }, {} as {[formacaoId: string]: Formador[]});
+                setFormadores(formadoresByFormacao);
+            }
         }
       }
       setLoading(false);
@@ -83,6 +102,7 @@ export default function GerenciamentoPage() {
                 key={formacao.id} 
                 formacao={formacao}
                 inscricoes={inscricoes[formacao.id] || []}
+                formadores={formadores[formacao.id] || []}
             />
           ))}
         </div>

@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import type { Formacao, Inscricao } from '@/lib/types';
+import type { Formacao, Inscricao, Formador } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, XCircle, Settings, AlertCircle, Users, FileUp, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, Settings, AlertCircle, Users, FileUp, Clock, UserPlus } from 'lucide-react';
 import { FormBuilderSheet } from './form-builder-sheet';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -14,10 +14,12 @@ import { Loader2 } from 'lucide-react';
 import { InscritosSheet } from './inscritos-sheet';
 import { UploadInscritosDialog } from './upload-inscritos-dialog';
 import { FrequenciaConfigSheet } from './frequencia-config-sheet';
+import { FormadoresSheet } from './formadores-sheet';
 
 type GerenciamentoCardProps = {
   formacao: Formacao;
   inscricoes: Inscricao[];
+  formadores: Formador[];
 };
 
 const PendencyItem = ({ 
@@ -81,7 +83,9 @@ const PendencyItem = ({
                 )}
                 {onManageClick && (
                     <Button variant="outline" size="sm" onClick={onManageClick}>
-                        {name === 'Frequência' ? <Clock className="mr-2 h-4 w-4" /> : <Settings className="mr-2 h-4 w-4" />}
+                        {name === 'Frequência' && <Clock className="mr-2 h-4 w-4" />}
+                        {name === 'Inscrição' && <Settings className="mr-2 h-4 w-4" />}
+                        {name === 'Formadores' && <UserPlus className="mr-2 h-4 w-4" />}
                         {manageLabel}
                     </Button>
                 )}
@@ -103,12 +107,13 @@ const PendencyItem = ({
 };
 
 
-export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardProps) {
+export function GerenciamentoCard({ formacao, inscricoes, formadores }: GerenciamentoCardProps) {
     const { toast } = useToast();
     const [isFormBuilderOpen, setIsFormBuilderOpen] = useState(false);
     const [isFrequenciaConfigOpen, setIsFrequenciaConfigOpen] = useState(false);
     const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
     const [isInscritosSheetOpen, setIsInscritosSheetOpen] = useState(false);
+    const [isFormadoresSheetOpen, setIsFormadoresSheetOpen] = useState(false);
     const [isSubToggleLoading, setIsSubToggleLoading] = useState(false);
     const [isAttToggleLoading, setIsAttToggleLoading] = useState(false);
 
@@ -176,7 +181,11 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
 
 
     const pendencias = [
-        { name: 'Formadores', status: formacao.gfcpe_info?.formadores ? 'done' : 'pending' },
+        { 
+            name: 'Formadores', 
+            status: formadores.length > 0 ? 'done' : 'pending',
+            onManageClick: () => setIsFormadoresSheetOpen(true)
+        },
         { name: 'Ensalamento', status: formacao.gfcpe_info?.ensalamento ? 'done' : 'pending' },
         { 
             name: 'Inscrição', 
@@ -261,6 +270,14 @@ export function GerenciamentoCard({ formacao, inscricoes }: GerenciamentoCardPro
                 setIsOpen={setIsInscritosSheetOpen}
                 formacao={formacao}
                 inscricoes={inscricoes}
+            />
+        )}
+        {isFormadoresSheetOpen && (
+            <FormadoresSheet
+                isOpen={isFormadoresSheetOpen}
+                setIsOpen={setIsFormadoresSheetOpen}
+                formacao={formacao}
+                formadores={formadores}
             />
         )}
     </>

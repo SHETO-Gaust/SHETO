@@ -209,3 +209,53 @@ export async function updateAttendanceConfig(formacaoId: string, config: any) {
   revalidatePath('/gerenciamento');
   return { data };
 }
+
+const formadorSchema = z.object({
+  formacao_id: z.string().uuid(),
+  formacao_date: z.string(),
+  name: z.string().min(3, 'O nome é obrigatório.'),
+  reference: z.string().optional(),
+});
+
+export async function addFormador(formData: z.infer<typeof formadorSchema>) {
+  const cookieStore = cookies();
+  const supabase = createClient(cookieStore);
+
+  const validatedFields = formadorSchema.safeParse(formData);
+
+  if (!validatedFields.success) {
+    return {
+      error: 'Dados inválidos.',
+      errors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('formadores')
+    .insert([validatedFields.data])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error adding formador:', error);
+    return { error: 'Ocorreu um erro ao adicionar o formador.' };
+  }
+  
+  revalidatePath('/gerenciamento');
+  return { data };
+}
+
+export async function deleteFormador(id: string) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const { error } = await supabase.from('formadores').delete().eq('id', id);
+
+    if (error) {
+        console.error('Error deleting formador:', error);
+        return { error: 'Ocorreu um erro ao deletar o formador.' };
+    }
+
+    revalidatePath('/gerenciamento');
+    return { success: true };
+}

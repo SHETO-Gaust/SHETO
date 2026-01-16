@@ -1,4 +1,5 @@
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -16,7 +17,7 @@ export type Geolocation = {
     id: string;
     latitude: number;
     longitude: number;
-    radius: number;
+    radius: number; // in km
 };
 
 export type GeolocationConfig = {
@@ -31,6 +32,15 @@ export type AttendanceListInfo = {
         afternoon?: Period;
     },
     geolocation?: GeolocationConfig;
+};
+
+export type Formador = {
+  id: string; // uuid
+  formacao_id: string; // uuid
+  formacao_date: string; // date
+  name: string;
+  reference?: string | null;
+  created_at: string;
 };
 
 export type Formacao = {
