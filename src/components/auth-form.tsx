@@ -95,7 +95,7 @@ export function AuthForm() {
               <Button variant="outline" className="w-full" asChild>
                 <Link href="/inscricoes">
                     <GraduationCap className="mr-2 h-4 w-4" />
-                    Inscrições Abertas
+                    Inscrições em Aberto 
                 </Link>
               </Button>
               <Button variant="outline" className="w-full" asChild>
