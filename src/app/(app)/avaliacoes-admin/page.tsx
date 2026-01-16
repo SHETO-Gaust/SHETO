@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function AvaliacoesPage() {
+export default function AvaliacoesAdminPage() {
     return (
         <Card>
             <CardHeader>

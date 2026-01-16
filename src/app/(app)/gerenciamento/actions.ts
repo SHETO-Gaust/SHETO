@@ -278,3 +278,29 @@ export async function syncFormadores(
   revalidatePath('/gerenciamento');
   return { success: true };
 }
+
+export async function toggleAvaliacao(formacaoId: string, currentState: any) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const newConfig = {
+        ...(currentState || {}),
+        open: !currentState?.open,
+    };
+
+    const { data, error } = await supabase
+        .from('formacoes')
+        // @ts-ignore
+        .update({ gadsg_info: { avaliacao: newConfig } })
+        .eq('id', formacaoId)
+        .select();
+
+    if (error) {
+        console.error('Error toggling avaliacao:', error);
+        return { error: 'Ocorreu um erro ao alterar o status da avaliação.' };
+    }
+
+    revalidatePath('/gerenciamento');
+    revalidatePath('/avaliacoes');
+    return { data };
+}

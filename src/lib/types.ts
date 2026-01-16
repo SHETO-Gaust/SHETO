@@ -52,7 +52,11 @@ export type Formacao = {
   created_at: string; // timestamp with time zone
   updated_at: string; // timestamp with time zone
   gfcpe_info?: any; // jsonb
-  gadsg_info?: any; // jsonb
+  gadsg_info?: {
+    avaliacao?: {
+        open?: boolean;
+    }
+  };
   subscription_list_info?: any; // jsonb
   attendance_list_info?: AttendanceListInfo;
   consolidation_info?: any; // jsonb
@@ -62,8 +66,7 @@ export type Formacao = {
 export type Avaliacao = {
   id: string; // uuid
   formacao_id: string; // uuid
-  participant_email: string;
-  attended_date: string; // date
+  inscricao_id: string; // uuid
   infra_rating?: number; // smallint
   general_suggestions?: string;
   feedback_formadores?: any; // jsonb

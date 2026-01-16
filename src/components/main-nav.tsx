@@ -23,7 +23,7 @@ const links = [
   { href: '/gerenciamento', label: 'Gerenciamento', icon: ListChecks },
   { href: '/ensalamentos', label: 'Ensalamentos', icon: School },
   { href: '/relatorios', label: 'Relatórios', icon: ClipboardList },
-  { href: '/avaliacoes', label: 'Avaliações', icon: Star },
+  { href: '/avaliacoes-admin', label: 'Avaliações', icon: Star },
 ];
 
 export function MainNav() {

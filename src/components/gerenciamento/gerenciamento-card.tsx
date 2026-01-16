@@ -4,11 +4,11 @@ import { useState } from 'react';
 import type { Formacao, Inscricao, Formador } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, XCircle, Settings, AlertCircle, Users, FileUp, Clock, UserPlus } from 'lucide-react';
+import { CheckCircle, XCircle, Settings, AlertCircle, Users, FileUp, Clock, UserPlus, Star } from 'lucide-react';
 import { FormBuilderSheet } from './form-builder-sheet';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { toggleSubscription, toggleAttendance } from '@/app/(app)/gerenciamento/actions';
+import { toggleSubscription, toggleAttendance, toggleAvaliacao } from '@/app/(app)/gerenciamento/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { InscritosSheet } from './inscritos-sheet';
@@ -32,6 +32,7 @@ const PendencyItem = ({
   isToggleVisible,
   isToggleOn,
   isToggleLoading,
+  isToggleDisabled,
   onViewClick,
   viewCount,
   manageLabel = 'Gerenciar'
@@ -44,6 +45,7 @@ const PendencyItem = ({
   isToggleVisible?: boolean;
   isToggleOn?: boolean;
   isToggleLoading?: boolean;
+  isToggleDisabled?: boolean;
   onViewClick?: () => void;
   viewCount?: number;
   manageLabel?: string;
@@ -77,9 +79,10 @@ const PendencyItem = ({
                                 id={`toggle-${name.toLowerCase()}`}
                                 checked={isToggleOn}
                                 onCheckedChange={onToggle}
+                                disabled={isToggleDisabled}
                            />
                         )}
-                        <Label htmlFor={`toggle-${name.toLowerCase()}`}>{isToggleOn ? 'Ligada' : 'Desligada'}</Label>
+                        <Label htmlFor={`toggle-${name.toLowerCase()}`} className={isToggleDisabled ? 'text-muted-foreground' : ''}>{isToggleOn ? 'Ligada' : 'Desligada'}</Label>
                     </div>
                 )}
                 {onManageClick && (
@@ -117,10 +120,13 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores, onUpdate }
     const [isFormadoresSheetOpen, setIsFormadoresSheetOpen] = useState(false);
     const [isSubToggleLoading, setIsSubToggleLoading] = useState(false);
     const [isAttToggleLoading, setIsAttToggleLoading] = useState(false);
+    const [isAvalToggleLoading, setIsAvalToggleLoading] = useState(false);
 
     const isSubscriptionOpen = formacao.subscription_form_config?.open || false;
     const isAttendanceOpen = formacao.attendance_list_info?.open || false;
+    const isAvaliacaoOpen = formacao.gadsg_info?.avaliacao?.open || false;
     const inscritosCount = inscricoes.length;
+    const hasFormadores = formadores.length > 0;
 
     const handleSubscriptionToggle = async () => {
         setIsSubToggleLoading(true);
@@ -162,34 +168,46 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores, onUpdate }
         }
     };
 
+    const handleAvaliacaoToggle = async () => {
+        setIsAvalToggleLoading(true);
+        const result = await toggleAvaliacao(formacao.id, formacao.gadsg_info?.avaliacao);
+        setIsAvalToggleLoading(false);
+
+        if (result.error) {
+            toast({ title: 'Erro', description: result.error, variant: 'destructive' });
+        } else {
+            toast({
+                title: 'Status da avaliação alterado!',
+                description: `A avaliação para "${formacao.name}" foi ${!isAvaliacaoOpen ? 'aberta' : 'fechada'}.`,
+            });
+            onUpdate();
+        }
+    };
+
     const getSubscriptionStatus = (): 'done' | 'pending' | 'configured' => {
-        if (!formacao.subscription_form_config) {
-            return 'pending';
-        }
-        if (isSubscriptionOpen) {
-            return 'done';
-        }
+        if (!formacao.subscription_form_config) return 'pending';
+        if (isSubscriptionOpen) return 'done';
         return 'configured';
     }
 
     const getAttendanceStatus = (): 'done' | 'pending' | 'configured' => {
-        if (!formacao.attendance_list_info?.periods) {
-            return 'pending';
-        }
-        if (isAttendanceOpen) {
-            return 'done';
-        }
+        if (!formacao.attendance_list_info?.periods) return 'pending';
+        if (isAttendanceOpen) return 'done';
         return 'configured';
     }
 
+    const getAvaliacaoStatus = (): 'done' | 'pending' | 'configured' => {
+        if (!hasFormadores) return 'pending';
+        if (isAvaliacaoOpen) return 'done';
+        return 'configured';
+    }
 
     const pendencias = [
         { 
             name: 'Formadores', 
-            status: formadores.length > 0 ? 'done' : 'pending',
+            status: hasFormadores ? 'done' : 'pending',
             onManageClick: () => setIsFormadoresSheetOpen(true)
         },
-        { name: 'Ensalamento', status: formacao.gfcpe_info?.ensalamento ? 'done' : 'pending' },
         { 
             name: 'Inscrição', 
             status: getSubscriptionStatus(), 
@@ -210,9 +228,17 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores, onUpdate }
             isToggleVisible: !!formacao.attendance_list_info?.periods,
             isToggleOn: isAttendanceOpen,
             isToggleLoading: isAttToggleLoading,
-            manageLabel: 'Configurar Horários',
+            manageLabel: 'Configurar',
         },
-        { name: 'Avaliação', status: formacao.gadsg_info?.avaliacao ? 'done' : 'pending' },
+        { 
+            name: 'Avaliação', 
+            status: getAvaliacaoStatus(),
+            onToggle: handleAvaliacaoToggle,
+            isToggleVisible: true,
+            isToggleOn: isAvaliacaoOpen,
+            isToggleLoading: isAvalToggleLoading,
+            isToggleDisabled: !hasFormadores,
+        },
     ];
 
 
@@ -238,6 +264,7 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores, onUpdate }
                         isToggleVisible={p.isToggleVisible}
                         isToggleOn={p.isToggleOn}
                         isToggleLoading={p.isToggleLoading}
+                        isToggleDisabled={p.isToggleDisabled}
                         onViewClick={p.onViewClick}
                         viewCount={p.viewCount}
                         manageLabel={p.manageLabel}
