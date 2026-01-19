@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Formacao, Coordinates } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle, AlertTriangle, MapPin } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle, MapPin, Star } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { RealTimeClock } from './real-time-clock';
 import { FrequenciaInscricaoForm } from './frequencia-inscricao-form';
@@ -26,6 +27,7 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
   const [registrationPeriod, setRegistrationPeriod] = useState<'MAT' | 'VESP' | null>(null);
   const [registrationTime, setRegistrationTime] = useState<Date | null>(null);
   const [userCoords, setUserCoords] = useState<Coordinates | null>(null);
+  const [showAvaliacaoPrompt, setShowAvaliacaoPrompt] = useState(false);
 
   const isGeolocationEnabled = formacao.attendance_list_info?.geolocation?.enabled === true;
 
@@ -117,6 +119,7 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
           setFormacaoName(formacao.name);
           setRegistrationPeriod(result.periodo || null);
           setRegistrationTime(new Date());
+          setShowAvaliacaoPrompt(result.showAvaliacaoPrompt || false);
           setPageState('success');
       } else {
           setErrorMessage(result.error || 'Não foi possível registrar sua frequência.');
@@ -167,6 +170,20 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
                         </p>
                     )}
                 </div>
+                {showAvaliacaoPrompt && (
+                    <div className="pt-4 mt-4 border-t">
+                         <div className="pt-4 space-y-2 text-center">
+                             <p className="font-semibold text-blue-600">Que tal avaliar esta formação?</p>
+                             <p className="text-muted-foreground text-sm">Sua opinião é muito importante para nós. Contribua respondendo à avaliação.</p>
+                             <Link href={`/avaliacoes/${formacao.id}`} passHref>
+                                <Button variant="outline">
+                                    <Star className="mr-2 h-4 w-4" />
+                                    Ir para a Avaliação
+                                </Button>
+                            </Link>
+                        </div>
+                    </div>
+                )}
            </SuccessCard>
       );
   }

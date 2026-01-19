@@ -166,7 +166,7 @@ export async function registerFrequency(formacaoId: string, formData: any, userC
 
     const { data: formacao, error: formacaoError } = await supabase
         .from('formacoes')
-        .select('id, attendance_list_info')
+        .select('id, attendance_list_info, gadsg_info')
         .eq('id', formacaoId)
         .single();
 
@@ -263,5 +263,21 @@ export async function registerFrequency(formacaoId: string, formData: any, userC
         return { success: false, error: `Erro ao registrar frequência: ${insertError.message}` };
     }
     
-    return { success: true, nome_completo: nomeCompleto, periodo: currentPeriod };
+    // Check for evaluation
+    const { data: avaliacao, error: avaliacaoError } = await supabase
+        .from('avaliacoes')
+        .select('id')
+        .eq('formacao_id', formacaoId)
+        .eq('inscricao_id', inscricaoId)
+        .single();
+    
+    if (avaliacaoError && avaliacaoError.code !== 'PGRST116') {
+        console.error('[SERVER_ACTION_ERROR] registerFrequency/avaliacaoCheckError:', avaliacaoError);
+    }
+    
+    const isAvaliacaoOpen = formacao.gadsg_info?.avaliacao?.open === true;
+    const hasAvaliado = !!avaliacao;
+    const showAvaliacaoPrompt = isAvaliacaoOpen && !hasAvaliado;
+    
+    return { success: true, nome_completo: nomeCompleto, periodo: currentPeriod, showAvaliacaoPrompt };
 }
