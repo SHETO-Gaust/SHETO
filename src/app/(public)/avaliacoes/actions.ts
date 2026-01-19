@@ -124,11 +124,17 @@ export async function checkParticipantForAvaliacao(formacaoId: string, cpf: stri
 }
 
 
+const infraestruturaSchema = z.object({
+    espaco_fisico: z.number().min(1).max(5),
+    equipe_apoio: z.number().min(1).max(5),
+    internet: z.number().min(1).max(5),
+});
+
 const avaliacaoSchema = z.object({
   formacao_id: z.string().uuid(),
   inscricao_id: z.string().uuid(),
   periodo: z.enum(['MAT', 'VESP']),
-  infra_rating: z.coerce.number().min(1).max(5).optional(),
+  infraestrutura: infraestruturaSchema,
   general_suggestions: z.string().optional(),
   feedback_formadores: z.array(z.any()),
 });

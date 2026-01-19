@@ -27,9 +27,15 @@ const formadorFeedbackSchema = z.object({
   comentario: z.string().optional(),
 });
 
+const infraestruturaSchema = z.object({
+    espaco_fisico: z.coerce.number().min(1, "A avaliação é obrigatória.").max(5),
+    equipe_apoio: z.coerce.number().min(1, "A avaliação é obrigatória.").max(5),
+    internet: z.coerce.number().min(1, "A avaliação é obrigatória.").max(5),
+});
+
 const avaliacaoFormSchema = z.object({
   feedback_formadores: z.array(formadorFeedbackSchema),
-  infra_rating: z.coerce.number().min(1).max(5).optional(),
+  infraestrutura: infraestruturaSchema,
   general_suggestions: z.string().optional(),
 });
 
@@ -137,7 +143,11 @@ export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, periodo, 
               metodologia_adequada: 0,
               comentario: ''
           })),
-          infra_rating: 0,
+          infraestrutura: {
+              espaco_fisico: 0,
+              equipe_apoio: 0,
+              internet: 0,
+          },
           general_suggestions: ''
       }
   });
@@ -217,19 +227,51 @@ export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, periodo, 
                   <Separator />
 
                   {/* Bloco 2 - Infraestrutura */}
-                  <div className="space-y-4">
-                      <h3 className="text-xl font-semibold">Avaliação da Organização e Infraestrutura (Opcional)</h3>
-                      <div className="space-y-2">
-                           <Label>Como você avalia a ORGANIZAÇÃO E INFRAESTRUTURA?</Label>
-                           <Controller 
-                            control={form.control}
-                            name="infra_rating"
-                            render={({ field }) => (
-                                <StarRatingInput value={field.value || 0} onChange={field.onChange} max={5} />
-                            )}
-                           />
-                      </div>
+                  <div className="space-y-6 p-6 border rounded-lg">
+                      <h3 className="text-xl font-semibold">Avaliação da Organização e Infraestrutura</h3>
+                       <div className="space-y-6">
+                            <div className="space-y-2">
+                                <Label className={cn(errors.infraestrutura?.espaco_fisico && "text-destructive")}>
+                                    Espaço Físico (banheiros, bebedouros, limpeza etc.)
+                                </Label>
+                                <Controller
+                                control={form.control}
+                                name="infraestrutura.espaco_fisico"
+                                render={({ field }) => (
+                                    <StarRatingInput value={field.value || 0} onChange={field.onChange} max={5} />
+                                )}
+                                />
+                                {errors.infraestrutura?.espaco_fisico && <p className="text-sm font-medium text-destructive">{errors.infraestrutura.espaco_fisico.message}</p>}
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={cn(errors.infraestrutura?.equipe_apoio && "text-destructive")}>
+                                    Equipe de Apoio
+                                </Label>
+                                <Controller
+                                control={form.control}
+                                name="infraestrutura.equipe_apoio"
+                                render={({ field }) => (
+                                    <StarRatingInput value={field.value || 0} onChange={field.onChange} max={5} />
+                                )}
+                                />
+                                {errors.infraestrutura?.equipe_apoio && <p className="text-sm font-medium text-destructive">{errors.infraestrutura.equipe_apoio.message}</p>}
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={cn(errors.infraestrutura?.internet && "text-destructive")}>
+                                    Internet
+                                </Label>
+                                <Controller
+                                control={form.control}
+                                name="infraestrutura.internet"
+                                render={({ field }) => (
+                                    <StarRatingInput value={field.value || 0} onChange={field.onChange} max={5} />
+                                )}
+                                />
+                                {errors.infraestrutura?.internet && <p className="text-sm font-medium text-destructive">{errors.infraestrutura.internet.message}</p>}
+                            </div>
+                        </div>
                   </div>
+
 
                   <Separator />
 

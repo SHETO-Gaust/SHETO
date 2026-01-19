@@ -11,6 +11,12 @@ const questionsMap = {
     metodologia_adequada: 'Metodologia Adequada'
 };
 
+const infraQuestionsMap = {
+    espaco_fisico: 'Espaço Físico',
+    equipe_apoio: 'Equipe de Apoio',
+    internet: 'Internet',
+};
+
 const AverageDisplay = ({ label, value, max = 5 }: { label: string, value: number, max?: number }) => (
     <div className="flex justify-between items-center text-sm">
         <p className="text-muted-foreground">{label}</p>
@@ -61,7 +67,9 @@ export default async function AvaliacoesAdminPage() {
                                          <div>
                                             <h4 className="font-semibold mb-2">Média da Organização e Infraestrutura</h4>
                                             <div className="space-y-1 rounded-md border p-3">
-                                                <AverageDisplay label="Organização e Infraestrutura" value={summary.infraestruturaAvg} max={5} />
+                                                 {Object.entries(summary.infraestruturaAvg).map(([key, value]) => (
+                                                    <AverageDisplay key={key} label={infraQuestionsMap[key as keyof typeof infraQuestionsMap]} value={value} max={5} />
+                                                ))}
                                             </div>
                                         </div>
                                     </>

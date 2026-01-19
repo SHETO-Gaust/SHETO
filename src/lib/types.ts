@@ -3,6 +3,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -67,11 +68,17 @@ export type Formacao = {
   subscription_form_config?: any; // jsonb
 };
 
+export type InfraestruturaAvaliacao = {
+    espaco_fisico: number;
+    equipe_apoio: number;
+    internet: number;
+};
+
 export type Avaliacao = {
   id: string; // uuid
   formacao_id: string; // uuid
   inscricao_id: string; // uuid
-  infra_rating?: number; // smallint
+  infraestrutura?: InfraestruturaAvaliacao; // jsonb
   general_suggestions?: string;
   feedback_formadores?: any; // jsonb
   periodo?: string;
@@ -126,6 +133,6 @@ export type AvaliacaoQuestionAvg = {
 export type AvaliacaoSummary = {
   formacao: Formacao;
   totalAvaliacoes: number;
-  infraestruturaAvg: number;
+  infraestruturaAvg: InfraestruturaAvaliacao;
   formadoresAvg: AvaliacaoQuestionAvg;
 };

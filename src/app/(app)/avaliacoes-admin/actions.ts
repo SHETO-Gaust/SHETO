@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import type { Formacao, Avaliacao, AvaliacaoSummary, AvaliacaoQuestionAvg } from '@/lib/types';
+import type { Formacao, Avaliacao, AvaliacaoSummary, AvaliacaoQuestionAvg, InfraestruturaAvaliacao } from '@/lib/types';
 
 export async function getAvaliationsSummary(): Promise<AvaliacaoSummary[]> {
     const cookieStore = cookies();
@@ -38,12 +38,13 @@ export async function getAvaliationsSummary(): Promise<AvaliacaoSummary[]> {
     const summary: AvaliacaoSummary[] = formacoes.map(formacao => {
         const avaliacoes = avaliacoesPorFormacao[formacao.id] || [];
         const totalAvaliacoes = avaliacoes.length;
+        const defaultInfraAvg = { espaco_fisico: 0, equipe_apoio: 0, internet: 0 };
 
         if (totalAvaliacoes === 0) {
             return {
                 formacao,
                 totalAvaliacoes: 0,
-                infraestruturaAvg: 0,
+                infraestruturaAvg: defaultInfraAvg,
                 formadoresAvg: {
                     dominio_tema: 0,
                     relevancia_profissional: 0,
@@ -54,9 +55,32 @@ export async function getAvaliationsSummary(): Promise<AvaliacaoSummary[]> {
         }
 
         // Calculate infraestrutura average
-        const infraSum = avaliacoes.reduce((sum, aval) => sum + (aval.infra_rating || 0), 0);
-        const infraCount = avaliacoes.filter(aval => aval.infra_rating).length;
-        const infraestruturaAvg = infraCount > 0 ? infraSum / infraCount : 0;
+        const infraSums = { espaco_fisico: 0, equipe_apoio: 0, internet: 0 };
+        const infraCounts = { espaco_fisico: 0, equipe_apoio: 0, internet: 0 };
+
+        avaliacoes.forEach(aval => {
+            if (aval.infraestrutura) {
+                const infra = aval.infraestrutura as InfraestruturaAvaliacao;
+                 if (infra.espaco_fisico) {
+                    infraSums.espaco_fisico += infra.espaco_fisico;
+                    infraCounts.espaco_fisico++;
+                }
+                if (infra.equipe_apoio) {
+                    infraSums.equipe_apoio += infra.equipe_apoio;
+                    infraCounts.equipe_apoio++;
+                }
+                if (infra.internet) {
+                    infraSums.internet += infra.internet;
+                    infraCounts.internet++;
+                }
+            }
+        });
+
+        const infraestruturaAvg: InfraestruturaAvaliacao = {
+            espaco_fisico: infraCounts.espaco_fisico > 0 ? infraSums.espaco_fisico / infraCounts.espaco_fisico : 0,
+            equipe_apoio: infraCounts.equipe_apoio > 0 ? infraSums.equipe_apoio / infraCounts.equipe_apoio : 0,
+            internet: infraCounts.internet > 0 ? infraSums.internet / infraCounts.internet : 0,
+        };
 
         // Calculate formadores averages
         const formadorSums = { dominio_tema: 0, relevancia_profissional: 0, contribuicao_tema: 0, metodologia_adequada: 0 };
