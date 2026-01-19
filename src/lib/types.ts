@@ -1,6 +1,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -91,6 +92,7 @@ export type Inscricao = {
   email: string;
   dados?: any; // jsonb
   created_at?: string; // timestamp with time zone
+  fonte?: string;
 };
 
 export type ProfileRole = 'admin' | 'user';

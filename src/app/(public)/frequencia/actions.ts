@@ -206,7 +206,7 @@ export async function registerFrequency(formacaoId: string, formData: any, userC
         const { nome_completo, cpf, email, dados } = validatedFields.data;
         const { data: newInscrito, error: insertError } = await supabase
             .from('inscricoes')
-            .insert({ formacao_id: formacaoId, cpf, nome_completo, email, dados })
+            .insert({ formacao_id: formacaoId, cpf, nome_completo, email, dados, fonte: 'AVULSO' })
             .select('id, nome_completo')
             .single();
 
