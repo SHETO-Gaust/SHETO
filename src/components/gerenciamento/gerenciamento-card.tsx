@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { Formacao, Inscricao, Formador } from '@/lib/types';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, XCircle, Settings, AlertCircle, Users, FileUp, Clock, UserPlus, Star } from 'lucide-react';
 import { FormBuilderSheet } from './form-builder-sheet';
@@ -244,35 +244,27 @@ export function GerenciamentoCard({ formacao, inscricoes, formadores, onUpdate }
 
   return (
     <>
-        <Card>
-            <CardHeader>
-                <CardTitle>{formacao.name}</CardTitle>
-                <CardDescription>
-                    Gerencie as pendências e configurações desta formação.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-3">
-                {pendencias.map((p, index) => (
-                    <PendencyItem 
-                        key={index} 
-                        name={p.name} 
-                        status={p.status as any} 
-                        onManageClick={p.onManageClick}
-                        onUploadClick={p.onUploadClick}
-                        onToggle={p.onToggle}
-                        isToggleVisible={p.isToggleVisible}
-                        isToggleOn={p.isToggleOn}
-                        isToggleLoading={p.isToggleLoading}
-                        isToggleDisabled={p.isToggleDisabled}
-                        onViewClick={p.onViewClick}
-                        viewCount={p.viewCount}
-                        manageLabel={p.manageLabel}
-                    />
-                ))}
-                </div>
-            </CardContent>
-        </Card>
+        <CardContent>
+            <div className="space-y-3">
+            {pendencias.map((p, index) => (
+                <PendencyItem 
+                    key={index} 
+                    name={p.name} 
+                    status={p.status as any} 
+                    onManageClick={p.onManageClick}
+                    onUploadClick={p.onUploadClick}
+                    onToggle={p.onToggle}
+                    isToggleVisible={p.isToggleVisible}
+                    isToggleOn={p.isToggleOn}
+                    isToggleLoading={p.isToggleLoading}
+                    isToggleDisabled={p.isToggleDisabled}
+                    onViewClick={p.onViewClick}
+                    viewCount={p.viewCount}
+                    manageLabel={p.manageLabel}
+                />
+            ))}
+            </div>
+        </CardContent>
         {isFormBuilderOpen && (
             <FormBuilderSheet
                 isOpen={isFormBuilderOpen}

@@ -3,16 +3,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { Formacao, Inscricao, Formador } from '@/lib/types';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { GerenciamentoCard } from '@/components/gerenciamento/gerenciamento-card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function GerenciamentoPage() {
   const [formacoes, setFormacoes] = useState<Formacao[]>([]);
-  const [inscricoes, setInscricoes] = useState<{[formacaoId: string]: Inscricao[]}>({});
-  const [formadores, setFormadores] = useState<{[formacaoId: string]: Formador[]}>({});
   const [loading, setLoading] = useState(true);
+  const [dataCache, setDataCache] = useState<{[formacaoId: string]: {inscricoes: Inscricao[], formadores: Formador[]}}>({});
+  const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
 
-  const fetchGerenciamentoData = useCallback(async () => {
+  const fetchFormacoes = useCallback(async () => {
     setLoading(true);
     const supabase = createClient();
     const { data: formacoesData, error: formacoesError } = await supabase
@@ -23,62 +25,53 @@ export default function GerenciamentoPage() {
     if (formacoesError) {
       console.error('Error fetching formacoes:', formacoesError);
       setFormacoes([]);
-      setLoading(false);
-      return;
-    }
-    
-    setFormacoes(formacoesData);
-
-    if (formacoesData.length > 0) {
-        const formacaoIds = formacoesData.map(f => f.id);
-        
-        const { data: inscricoesData, error: inscricoesError } = await supabase
-            .from('inscricoes')
-            .select('*')
-            .in('formacao_id', formacaoIds)
-            .limit(10000); // Aumenta o limite para garantir que todos os inscritos sejam carregados
-        
-        if (inscricoesError) {
-            console.error('Error fetching inscricoes:', inscricoesError);
-        } else {
-            const inscricoesByFormacao = inscricoesData.reduce((acc, inscricao) => {
-                if (!acc[inscricao.formacao_id]) {
-                    acc[inscricao.formacao_id] = [];
-                }
-                acc[inscricao.formacao_id].push(inscricao);
-                return acc;
-            }, {} as {[formacaoId: string]: Inscricao[]});
-            setInscricoes(inscricoesByFormacao);
-        }
-
-        const { data: formadoresData, error: formadoresError } = await supabase
-          .from('formadores')
-          .select('*')
-          .in('formacao_id', formacaoIds);
-      
-        if (formadoresError) {
-            console.error('Error fetching formadores:', formadoresError);
-        } else {
-            const formadoresByFormacao = formadoresData.reduce((acc, formador) => {
-                if (!acc[formador.formacao_id]) {
-                    acc[formador.formacao_id] = [];
-                }
-                acc[formador.formacao_id].push(formador);
-                return acc;
-            }, {} as {[formacaoId: string]: Formador[]});
-            setFormadores(formadoresByFormacao);
-        }
     } else {
-        setInscricoes({});
-        setFormadores({});
+      setFormacoes(formacoesData || []);
     }
-    
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchGerenciamentoData();
-  }, [fetchGerenciamentoData]);
+    fetchFormacoes();
+  }, [fetchFormacoes]);
+
+  const handleAccordionChange = async (value: string[]) => {
+    const openedId = value.find(id => !dataCache[id] && !loadingItems.has(id));
+    if (!openedId) return;
+
+    setLoadingItems(prev => new Set(prev).add(openedId));
+
+    const supabase = createClient();
+    const inscricoesPromise = supabase.from('inscricoes').select('*').eq('formacao_id', openedId).limit(10000);
+    const formadoresPromise = supabase.from('formadores').select('*').eq('formacao_id', openedId);
+
+    const [inscricoesResult, formadoresResult] = await Promise.all([inscricoesPromise, formadoresPromise]);
+    
+    setDataCache(prev => ({
+        ...prev,
+        [openedId]: {
+            inscricoes: inscricoesResult.data || [],
+            formadores: formadoresResult.data || [],
+        }
+    }));
+
+    setLoadingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(openedId);
+        return newSet;
+    });
+  };
+  
+  const onCardUpdate = (formacaoId: string) => {
+      // Invalidate cache for this formacao to refetch on next open
+      setDataCache(prev => {
+          const newCache = {...prev};
+          delete newCache[formacaoId];
+          return newCache;
+      });
+      // Also refetch formacoes list, as toggles update the formacao object
+      fetchFormacoes();
+  };
 
   return (
     <div className="space-y-6">
@@ -91,22 +84,44 @@ export default function GerenciamentoPage() {
 
       {loading ? (
         <div className="space-y-4">
-            <Skeleton className="h-48 w-full" />
-            <Skeleton className="h-48 w-full" />
-            <Skeleton className="h-48 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
         </div>
       ) : formacoes.length > 0 ? (
-        <div className="space-y-4">
+        <Accordion type="multiple" className="w-full space-y-4" onValueChange={handleAccordionChange}>
           {formacoes.map((formacao) => (
-            <GerenciamentoCard 
-                key={formacao.id} 
-                formacao={formacao}
-                inscricoes={inscricoes[formacao.id] || []}
-                formadores={formadores[formacao.id] || []}
-                onUpdate={fetchGerenciamentoData}
-            />
+            <AccordionItem value={formacao.id} key={formacao.id} className="border-b-0">
+                <Card>
+                    <AccordionTrigger className="p-0 hover:no-underline">
+                      <CardHeader className="flex-1 text-left">
+                        <CardTitle>{formacao.name}</CardTitle>
+                        <CardDescription>
+                            Clique para gerenciar as pendências e configurações
+                        </CardDescription>
+                      </CardHeader>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                       {loadingItems.has(formacao.id) && (
+                            <div className="p-6 pt-0 space-y-3">
+                                <Skeleton className="h-16 w-full" />
+                                <Skeleton className="h-16 w-full" />
+                                <Skeleton className="h-16 w-full" />
+                            </div>
+                        )}
+                        {dataCache[formacao.id] && (
+                            <GerenciamentoCard 
+                                formacao={formacao}
+                                inscricoes={dataCache[formacao.id].inscricoes}
+                                formadores={dataCache[formacao.id].formadores}
+                                onUpdate={() => onCardUpdate(formacao.id)}
+                            />
+                        )}
+                    </AccordionContent>
+                </Card>
+            </AccordionItem>
           ))}
-        </div>
+        </Accordion>
       ) : (
         <p className="text-center text-muted-foreground">
           Nenhuma formação cadastrada.
