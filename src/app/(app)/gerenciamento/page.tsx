@@ -27,18 +27,10 @@ export default function GerenciamentoPage() {
       return;
     }
     
-    const activeFormacoes = formacoesData.filter(f => {
-        if (!f.dates || !Array.isArray(f.dates) || f.dates.length === 0) {
-            return true; 
-        }
-        const dateObjects = f.dates.map((d: any) => new Date(d.date));
-        const lastDate = new Date(Math.max.apply(null, dateObjects.map(d => d.getTime())));
-        return lastDate >= new Date();
-    });
-    setFormacoes(activeFormacoes);
+    setFormacoes(formacoesData);
 
-    if (activeFormacoes.length > 0) {
-        const formacaoIds = activeFormacoes.map(f => f.id);
+    if (formacoesData.length > 0) {
+        const formacaoIds = formacoesData.map(f => f.id);
         
         const { data: inscricoesData, error: inscricoesError } = await supabase
             .from('inscricoes')
@@ -92,7 +84,7 @@ export default function GerenciamentoPage() {
       <div>
         <h1 className="text-2xl font-bold">Gerenciamento de Pendências</h1>
         <p className="text-muted-foreground">
-          Acompanhe e gerencie as pendências das formações ativas.
+          Acompanhe e gerencie as pendências de todas as formações.
         </p>
       </div>
 
@@ -116,7 +108,7 @@ export default function GerenciamentoPage() {
         </div>
       ) : (
         <p className="text-center text-muted-foreground">
-          Nenhuma formação ativa encontrada.
+          Nenhuma formação cadastrada.
         </p>
       )}
     </div>
