@@ -35,7 +35,8 @@ export default function GerenciamentoPage() {
         const { data: inscricoesData, error: inscricoesError } = await supabase
             .from('inscricoes')
             .select('*')
-            .in('formacao_id', formacaoIds);
+            .in('formacao_id', formacaoIds)
+            .limit(10000); // Aumenta o limite para garantir que todos os inscritos sejam carregados
         
         if (inscricoesError) {
             console.error('Error fetching inscricoes:', inscricoesError);
