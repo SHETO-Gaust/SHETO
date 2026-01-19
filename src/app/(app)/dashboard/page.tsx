@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Calendar, CheckCircle, XCircle, Monitor, MapPin, Sun, Sunset } from "lucide-react"
+import { Calendar, CheckCircle, XCircle, Monitor, MapPin, Sun, Sunset, Users } from "lucide-react"
 import type { Profile, Formacao, Formador } from "@/lib/types"
 import { format, isFuture, isPast, differenceInDays, isToday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -56,6 +56,7 @@ export default function DashboardPage() {
   const [displayName, setDisplayName] = useState("Usuário");
   const [formacoes, setFormacoes] = useState<Formacao[]>([]);
   const [formadores, setFormadores] = useState<{[formacaoId: string]: Formador[]}>({});
+  const [inscricoesCounts, setInscricoesCounts] = useState<{[formacaoId: string]: number}>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -104,6 +105,21 @@ export default function DashboardPage() {
               }, {} as {[formacaoId: string]: Formador[]});
               setFormadores(formadoresByFormacao);
           }
+          
+          const { data: inscricoesData, error: inscricoesError } = await supabase
+            .from('inscricoes')
+            .select('formacao_id')
+            .limit(100000); 
+
+          if (inscricoesError) {
+            console.error('Error fetching inscricoes for count:', inscricoesError);
+          } else {
+            const counts = inscricoesData.reduce((acc: {[key: string]: number}, item) => {
+              acc[item.formacao_id] = (acc[item.formacao_id] || 0) + 1;
+              return acc;
+            }, {});
+            setInscricoesCounts(counts);
+          }
         }
       }
       setLoading(false);
@@ -119,7 +135,7 @@ export default function DashboardPage() {
     </div>
   )
 
-  const processFormacoes = (formacoes: Formacao[], allFormadores: {[formacaoId: string]: Formador[]}) => {
+  const processFormacoes = (formacoes: Formacao[], allFormadores: {[formacaoId: string]: Formador[]}, allInscricoesCounts: {[formacaoId: string]: number}) => {
     return formacoes.map(f => {
         const { status, nextDate } = getStatusAndNextDate(f.dates);
         
@@ -150,6 +166,7 @@ export default function DashboardPage() {
             nextDate,
             modality: f.modality,
             dates: sortedDates,
+            inscritosCount: allInscricoesCounts[f.id] || 0,
             pendencias: [
                 { name: 'Formadores', done: formadoresForFormacao.length > 0 },
                 { name: 'Ensalamento', done: !!f.gfcpe_info?.ensalamento },
@@ -161,7 +178,7 @@ export default function DashboardPage() {
     }).filter(f => f.status !== 'Concluída');
   }
 
-  const processedFormacoes = processFormacoes(formacoes, formadores);
+  const processedFormacoes = processFormacoes(formacoes, formadores, inscricoesCounts);
 
 
   return (
@@ -193,16 +210,22 @@ export default function DashboardPage() {
                       {formacao.status === 'Próxima' || formacao.status === 'Em andamento' ? `Próxima data: ${formacao.nextDate}` : formacao.status}
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
-                      {formacao.modality && (
-                        <Badge variant={formacao.modality === 'presencial' ? 'secondary' : 'default'} className="flex items-center gap-1">
-                          {formacao.modality === 'online' ? <Monitor className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
-                          {formacao.modality.charAt(0).toUpperCase() + formacao.modality.slice(1)}
-                        </Badge>
-                      )}
-                      {formacao.status === 'Em andamento' && (
-                         <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">EM ANDAMENTO</Badge>
-                      )}
+                  <div className="flex flex-col items-end gap-2">
+                      <div className="flex items-center gap-2">
+                        {formacao.modality && (
+                            <Badge variant={formacao.modality === 'presencial' ? 'secondary' : 'default'} className="flex items-center gap-1">
+                            {formacao.modality === 'online' ? <Monitor className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
+                            {formacao.modality.charAt(0).toUpperCase() + formacao.modality.slice(1)}
+                            </Badge>
+                        )}
+                        {formacao.status === 'Em andamento' && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">EM ANDAMENTO</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Users className="h-4 w-4" />
+                          <span>{formacao.inscritosCount} {formacao.inscritosCount === 1 ? 'inscrito' : 'inscritos'}</span>
+                      </div>
                   </div>
                 </div>
               </CardHeader>
