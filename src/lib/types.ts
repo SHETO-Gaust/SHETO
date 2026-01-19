@@ -2,6 +2,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -42,6 +43,7 @@ export type Formador = {
   formacao_date: string; // date
   name: string;
   reference?: string | null;
+  periodo?: 'matutino' | 'vespertino' | 'integral' | null;
   created_at: string;
 };
 
@@ -72,6 +74,7 @@ export type Avaliacao = {
   infra_rating?: number; // smallint
   general_suggestions?: string;
   feedback_formadores?: any; // jsonb
+  periodo?: string;
   submitted_at: string; // timestamp with time zone
 };
 

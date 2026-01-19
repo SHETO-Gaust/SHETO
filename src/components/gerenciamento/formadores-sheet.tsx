@@ -24,6 +24,8 @@ import { syncFormadores } from '@/app/(app)/gerenciamento/actions';
 import type { Formacao, Formador } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 
 type FormadoresSheetProps = {
   isOpen: boolean;
@@ -36,7 +38,7 @@ type FormadoresSheetProps = {
 export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores: initialFormadores, onUpdate }: FormadoresSheetProps) {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
-  const [newFormadoresInput, setNewFormadoresInput] = useState<{ [date: string]: { name: string; reference: string } }>({});
+  const [newFormadoresInput, setNewFormadoresInput] = useState<{ [date: string]: { name: string; reference: string; periodo: 'matutino' | 'vespertino' | 'integral' } }>({});
   
   const [stagedFormadores, setStagedFormadores] = useState<Formador[]>([]);
   const [deletedFormadorIds, setDeletedFormadorIds] = useState<Set<string>>(new Set());
@@ -66,12 +68,12 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores: initi
       : [];
   }, [formacao.dates]);
 
-  const handleInputChange = (date: string, field: 'name' | 'reference', value: string) => {
+  const handleInputChange = (date: string, field: 'name' | 'reference' | 'periodo', value: string) => {
     setNewFormadoresInput(prev => ({
       ...prev,
       [date]: {
-        ...(prev[date] || { name: '', reference: '' }),
-        [field]: value,
+        ...(prev[date] || { name: '', reference: '', periodo: 'integral' }),
+        [field]: value as any,
       },
     }));
   };
@@ -88,11 +90,14 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores: initi
         formacao_date: dateKey,
         name: formadorData.name,
         reference: formadorData.reference,
+        periodo: formadorData.periodo || 'integral',
         created_at: new Date().toISOString(),
     };
     setStagedFormadores(prev => [...prev, newFormador]);
-    handleInputChange(dateKey, 'name', '');
-    handleInputChange(dateKey, 'reference', '');
+    setNewFormadoresInput(prev => ({
+        ...prev,
+        [dateKey]: { name: '', reference: '', periodo: 'integral' }
+    }));
   }
 
   const handleDeleteFormador = (idToDelete: string) => {
@@ -107,9 +112,8 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores: initi
     setIsSaving(true);
     
     const toAdd = stagedFormadores
-      // @ts-ignore
-      .filter((f: Formador & { _status?: string }) => f.id.startsWith('new_'))
-      .map(({ name, reference, formacao_date }) => ({ name, reference: reference || '', formacao_date }));
+      .filter((f) => f.id.startsWith('new_'))
+      .map(({ name, reference, formacao_date, periodo }) => ({ name, reference: reference || '', formacao_date, periodo: periodo || 'integral' }));
 
     const toDelete = Array.from(deletedFormadorIds);
 
@@ -155,24 +159,34 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores: initi
                     <div className="space-y-4">
                       {formadoresDoDia.length > 0 && (
                         <div className="space-y-2">
-                          {formadoresDoDia.map(formador => (
-                            <div key={formador.id} className="flex items-center justify-between p-2 border rounded-md bg-background">
-                              <div className="flex items-center gap-2">
-                                <User className="h-4 w-4 text-muted-foreground" />
-                                <div>
-                                  <p className="font-medium">{formador.name}</p>
-                                  <p className="text-xs text-muted-foreground">{formador.reference}</p>
+                          {formadoresDoDia.map(formador => {
+                             const periodoMap = {
+                                matutino: 'Manhã',
+                                vespertino: 'Tarde',
+                                integral: 'Integral',
+                             };
+                             // @ts-ignore
+                             const periodoLabel = formador.periodo ? periodoMap[formador.periodo] : 'Integral';
+
+                            return (
+                                <div key={formador.id} className="flex items-center justify-between p-2 border rounded-md bg-background">
+                                <div className="flex items-center gap-2">
+                                    <User className="h-4 w-4 text-muted-foreground" />
+                                    <div>
+                                    <p className="font-medium">{formador.name}</p>
+                                    <p className="text-xs text-muted-foreground">{formador.reference} - {periodoLabel}</p>
+                                    </div>
                                 </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteFormador(formador.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-                          ))}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteFormador(formador.id)}
+                                >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                                </div>
+                            )
+                          })}
                         </div>
                       )}
 
@@ -195,6 +209,22 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores: initi
                             value={newFormadoresInput[dateKey]?.reference || ''}
                             onChange={(e) => handleInputChange(dateKey, 'reference', e.target.value)}
                           />
+                        </div>
+                         <div className="space-y-2">
+                            <Label>Período</Label>
+                            <Select
+                                value={newFormadoresInput[dateKey]?.periodo || 'integral'}
+                                onValueChange={(value: 'matutino' | 'vespertino' | 'integral') => handleInputChange(dateKey, 'periodo', value)}
+                            >
+                                <SelectTrigger>
+                                <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                <SelectItem value="integral">Integral (Manhã e Tarde)</SelectItem>
+                                <SelectItem value="matutino">Manhã</SelectItem>
+                                <SelectItem value="vespertino">Tarde</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         <Button
                           className="w-full"

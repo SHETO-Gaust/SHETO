@@ -35,6 +35,7 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
   const [selectedFormadores, setSelectedFormadores] = useState<Formador[]>([]);
   const [hasFrequencia, setHasFrequencia] = useState(false);
   const [isFrequenciaOpen, setIsFrequenciaOpen] = useState(false);
+  const [periodo, setPeriodo] = useState<'MAT' | 'VESP' | null>(null);
 
   const handleCpfCheck = async () => {
     if (cpf.length !== 14) {
@@ -51,6 +52,7 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
         setAllFormadores(result.formadores!);
         setHasFrequencia(result.hasFrequencia);
         setIsFrequenciaOpen(result.isFrequenciaOpen);
+        setPeriodo(result.periodo!);
         setStep('select_formadores');
     } else {
         setErrorMessage(result.error || 'Ocorreu um erro desconhecido.');
@@ -119,6 +121,7 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
                 formacao={formacao} 
                 inscricao={inscricao!} 
                 formadoresToRate={selectedFormadores} 
+                periodo={periodo!}
                 onSuccess={() => setStep('success')}
                 showFrequenciaWarning={!hasFrequencia && isFrequenciaOpen}
              />
@@ -172,7 +175,7 @@ function FormadorSelector({ formadores, onConfirm }: { formadores: Formador[], o
             <Card className="w-full max-w-lg mx-auto">
                 <CardHeader>
                     <CardTitle>Nenhum Formador Encontrado</CardTitle>
-                    <CardDescription>Não há formadores cadastrados para esta formação, então não é possível continuar a avaliação.</CardDescription>
+                    <CardDescription>Não há formadores cadastrados para este período da formação. Não é possível continuar a avaliação.</CardDescription>
                 </CardHeader>
             </Card>
         );
@@ -182,7 +185,7 @@ function FormadorSelector({ formadores, onConfirm }: { formadores: Formador[], o
          <Card className="w-full max-w-lg mx-auto">
             <CardHeader>
                 <CardTitle>Selecione os Formadores</CardTitle>
-                <CardDescription>Escolha um ou mais formadores que você deseja avaliar.</CardDescription>
+                <CardDescription>Escolha um ou mais formadores que você deseja avaliar neste período.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="max-h-60 overflow-y-auto space-y-2 p-1">

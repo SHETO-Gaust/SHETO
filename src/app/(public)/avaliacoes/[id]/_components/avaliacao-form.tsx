@@ -121,7 +121,7 @@ const QuestionBlock = ({ field, onChange, label, options, error }: { field: any,
     </div>
 );
 
-export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, onSuccess, showFrequenciaWarning }: { formacao: Formacao; inscricao: Inscricao; formadoresToRate: Formador[]; onSuccess: () => void; showFrequenciaWarning?: boolean }) {
+export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, periodo, onSuccess, showFrequenciaWarning }: { formacao: Formacao; inscricao: Inscricao; formadoresToRate: Formador[]; periodo: 'MAT' | 'VESP'; onSuccess: () => void; showFrequenciaWarning?: boolean }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -151,6 +151,7 @@ export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, onSuccess
           ...data,
           formacao_id: formacao.id,
           inscricao_id: inscricao.id,
+          periodo: periodo,
       };
       const result = await submitAvaliacao(payload);
       setLoading(false);
@@ -165,7 +166,7 @@ export function AvaliacaoForm({ formacao, inscricao, formadoresToRate, onSuccess
   return (
       <Card className="w-full max-w-4xl mx-auto">
           <CardHeader>
-              <CardTitle className="text-2xl">Formulário de Avaliação</CardTitle>
+              <CardTitle className="text-2xl">Formulário de Avaliação ({periodo === 'MAT' ? 'Manhã' : 'Tarde'})</CardTitle>
               <CardDescription>Sua opinião sobre a formação <span className="font-semibold">{formacao.name}</span> é muito importante.</CardDescription>
           </CardHeader>
           <CardContent>

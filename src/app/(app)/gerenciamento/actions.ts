@@ -236,6 +236,7 @@ const syncFormadoresToAddSchema = z.object({
   formacao_date: z.string(),
   name: z.string(),
   reference: z.string().optional(),
+  periodo: z.enum(['matutino', 'vespertino', 'integral']).optional(),
 });
 
 export async function syncFormadores(
@@ -264,6 +265,7 @@ export async function syncFormadores(
       formacao_date: f.formacao_date,
       name: f.name,
       reference: f.reference,
+      periodo: f.periodo,
     }));
     const { error: addError } = await supabase
       .from('formadores')
