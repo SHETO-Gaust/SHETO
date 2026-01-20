@@ -33,7 +33,7 @@ const RankingChart = ({ data, dataKey, unit, title }: { data: any[], dataKey: st
                     <ResponsiveContainer>
                         <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
                             <XAxis type="number" dataKey={dataKey} unit={unit} tick={{ fontSize: 12 }} />
-                            <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} interval={0} />
+                            <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} interval={0} />
                             <Tooltip
                                 cursor={{ fill: 'hsl(var(--secondary))' }}
                                 content={<ChartTooltipContent />}
