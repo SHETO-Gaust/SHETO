@@ -42,11 +42,6 @@ const nextConfig: NextConfig = {
         destination: '/ensalamentos',
         permanent: true,
       },
-       {
-        source: '/profile',
-        destination: '/relatorios',
-        permanent: true,
-      },
     ]
   },
 };
