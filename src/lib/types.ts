@@ -5,6 +5,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -84,6 +85,7 @@ export type Avaliacao = {
   feedback_formadores?: any; // jsonb
   periodo?: string;
   submitted_at: string; // timestamp with time zone
+  nome_participante?: string;
 };
 
 export type Frequencia = {

@@ -111,3 +111,52 @@ export async function getAvaliationsSummary(): Promise<AvaliacaoSummary[]> {
 
     return summary;
 }
+
+
+export async function getAvaliacaoDetails(formacaoId: string) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const formacaoPromise = supabase.from('formacoes').select('*').eq('id', formacaoId).single();
+    const avaliacoesPromise = supabase.from('avaliacoes').select('*').eq('formacao_id', formacaoId);
+    const inscricoesPromise = supabase.from('inscricoes').select('id, nome_completo, dados').eq('formacao_id', formacaoId);
+    const formadoresPromise = supabase.from('formadores').select('id, name').eq('formacao_id', formacaoId);
+    
+    const [formacaoResult, avaliacoesResult, inscricoesResult, formadoresResult] = await Promise.all([
+        formacaoPromise,
+        avaliacoesPromise,
+        inscricoesPromise,
+        formadoresPromise,
+    ]);
+
+    if (formacaoResult.error) {
+        console.error('Error fetching formacao details:', formacaoResult.error);
+        return null;
+    }
+     if (avaliacoesResult.error) {
+        console.error('Error fetching avaliacoes details:', avaliacoesResult.error);
+        return null;
+    }
+     if (inscricoesResult.error) {
+        console.error('Error fetching inscricoes details:', inscricoesResult.error);
+        return null;
+    }
+     if (formadoresResult.error) {
+        console.error('Error fetching formadores details:', formadoresResult.error);
+        return null;
+    }
+
+    // Map inscricao names to avaliacoes
+    const inscricoesMap = new Map(inscricoesResult.data.map(i => [i.id, i.nome_completo]));
+    const avaliacoesWithNames = (avaliacoesResult.data as Avaliacao[]).map(aval => ({
+        ...aval,
+        nome_participante: inscricoesMap.get(aval.inscricao_id) || 'Participante anônimo'
+    }));
+
+    return {
+        formacao: formacaoResult.data,
+        avaliacoes: avaliacoesWithNames,
+        inscricoes: inscricoesResult.data,
+        formadores: formadoresResult.data,
+    };
+}
