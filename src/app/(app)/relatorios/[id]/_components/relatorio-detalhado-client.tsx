@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,6 +10,7 @@ import { format, parseISO } from 'date-fns';
 import type { Formacao } from '@/lib/types';
 import type { DetailedParticipant } from '../../actions';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 type RelatorioDetalhadoClientProps = {
     formacao: Formacao;
@@ -20,6 +21,9 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     const [searchTerm, setSearchTerm] = useState('');
     const [presenceFilter, setPresenceFilter] = useState('todos'); // todos, manha, tarde, ambos, nenhum
     const [sourceFilter, setSourceFilter] = useState('todos'); // todos, inscrito, avulso
+    const [currentPage, setCurrentPage] = useState(1);
+
+    const ITEMS_PER_PAGE = 25;
 
     const filteredParticipants = useMemo(() => {
         return participants.filter(p => {
@@ -42,6 +46,19 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             return matchesSearch && matchesPresence && matchesSource;
         });
     }, [participants, searchTerm, presenceFilter, sourceFilter]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, presenceFilter, sourceFilter]);
+    
+    const { paginatedParticipants, totalPages } = useMemo(() => {
+        const totalPages = Math.ceil(filteredParticipants.length / ITEMS_PER_PAGE);
+        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+        const endIndex = startIndex + ITEMS_PER_PAGE;
+        const paginatedParticipants = filteredParticipants.slice(startIndex, endIndex);
+        return { paginatedParticipants, totalPages };
+    }, [filteredParticipants, currentPage]);
+
 
     const PresenceStatus = ({ timestamp }: { timestamp: string | null }) => {
         if (timestamp) {
@@ -112,8 +129,8 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredParticipants.length > 0 ? (
-                                    filteredParticipants.map(p => (
+                                {paginatedParticipants.length > 0 ? (
+                                    paginatedParticipants.map(p => (
                                         <TableRow key={p.id}>
                                             <TableCell className="font-medium">{p.nome_completo}</TableCell>
                                             <TableCell>{p.cpf}</TableCell>
@@ -134,9 +151,34 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                             </TableBody>
                         </Table>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-4">
-                        Exibindo {filteredParticipants.length} de {participants.length} participantes.
-                    </p>
+                     <div className="flex items-center justify-between mt-4">
+                        <p className="text-sm text-muted-foreground">
+                            Mostrando {paginatedParticipants.length} de {filteredParticipants.length} participantes.
+                        </p>
+                       {totalPages > 1 && (
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    Anterior
+                                </Button>
+                                <span className="text-sm text-muted-foreground">
+                                    Página {currentPage} de {totalPages}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    Próxima
+                                </Button>
+                            </div>
+                       )}
+                    </div>
                 </CardContent>
             </Card>
         </div>
