@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
 import type { DetailedParticipant } from '../../actions';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     const [searchTerm, setSearchTerm] = useState('');
     const [presenceFilter, setPresenceFilter] = useState('todos'); // todos, manha, tarde, ambos, nenhum
     const [sourceFilter, setSourceFilter] = useState('todos'); // todos, inscrito, avulso
+    const [dateFilter, setDateFilter] = useState('todos');
     const [currentPage, setCurrentPage] = useState(1);
 
     const ITEMS_PER_PAGE = 25;
@@ -44,8 +46,30 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         setSearchTerm(formattedCpf);
     };
 
-    const filteredParticipants = useMemo(() => {
-        return participants.filter(p => {
+    const { filteredParticipants, dateOptions } = useMemo(() => {
+        const preparedParticipants = participants.map(p => {
+            let presenca_matutina: string | null = null;
+            let presenca_vespertina: string | null = null;
+
+            if (dateFilter === 'todos') {
+                // Consolidate: find first presence for each period across all days
+                presenca_matutina = p.presencas.find(pr => pr.matutino)?.matutino || null;
+                presenca_vespertina = p.presencas.find(pr => pr.vespertino)?.vespertino || null;
+            } else {
+                const dailyData = p.presencas.find(pr => pr.date === dateFilter);
+                presenca_matutina = dailyData?.matutino || null;
+                presenca_vespertina = dailyData?.vespertino || null;
+            }
+
+            return {
+                ...p,
+                regional: p.dados?.regional || 'N/A',
+                presenca_matutina,
+                presenca_vespertina,
+            };
+        });
+
+        const filtered = preparedParticipants.filter(p => {
             // Search filter
             const search = searchTerm.toLowerCase();
             const matchesSearch = p.nome_completo.toLowerCase().includes(search) || p.cpf.includes(searchTerm);
@@ -64,11 +88,27 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             
             return matchesSearch && matchesPresence && matchesSource;
         });
-    }, [participants, searchTerm, presenceFilter, sourceFilter]);
+
+        const dateOpts = [
+            { value: 'todos', label: 'Todos os Dias' },
+            ...(formacao.dates || [])
+                .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .map((d: any) => {
+                    const date = parseISO(d.date);
+                    return {
+                        value: format(date, 'yyyy-MM-dd'),
+                        label: format(date, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+                    };
+                })
+        ];
+
+        return { filteredParticipants: filtered, dateOptions: dateOpts };
+
+    }, [participants, searchTerm, presenceFilter, sourceFilter, dateFilter, formacao.dates]);
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, presenceFilter, sourceFilter]);
+    }, [searchTerm, presenceFilter, sourceFilter, dateFilter]);
     
     const { paginatedParticipants, totalPages } = useMemo(() => {
         const totalPages = Math.ceil(filteredParticipants.length / ITEMS_PER_PAGE);
@@ -110,6 +150,16 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                             className="max-w-sm"
                         />
                         <div className="flex flex-col sm:flex-row gap-4">
+                            <Select value={dateFilter} onValueChange={setDateFilter}>
+                                <SelectTrigger className="w-full sm:w-[220px]">
+                                    <SelectValue placeholder="Filtrar por data" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {dateOptions.map(opt => (
+                                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                              <Select value={presenceFilter} onValueChange={setPresenceFilter}>
                                 <SelectTrigger className="w-full sm:w-[180px]">
                                     <SelectValue placeholder="Filtrar por presença" />
@@ -142,6 +192,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                                 <TableRow>
                                     <TableHead>Nome</TableHead>
                                     <TableHead>CPF</TableHead>
+                                    <TableHead>Regional</TableHead>
                                     <TableHead className="text-center">Origem</TableHead>
                                     <TableHead className="text-center">Presença Manhã</TableHead>
                                     <TableHead className="text-center">Presença Tarde</TableHead>
@@ -153,6 +204,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                                         <TableRow key={p.id}>
                                             <TableCell className="font-medium">{p.nome_completo}</TableCell>
                                             <TableCell>{p.cpf}</TableCell>
+                                            <TableCell>{p.regional}</TableCell>
                                             <TableCell className="text-center">
                                                 <Badge variant={p.fonte === 'AVULSO' ? 'secondary' : 'outline'}>
                                                     {p.fonte === 'AVULSO' ? 'Avulso' : 'Inscrito'}
@@ -164,7 +216,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">Nenhum participante encontrado com os filtros aplicados.</TableCell>
+                                        <TableCell colSpan={6} className="h-24 text-center">Nenhum participante encontrado com os filtros aplicados.</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>

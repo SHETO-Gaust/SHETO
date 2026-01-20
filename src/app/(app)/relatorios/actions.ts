@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
+import { format, parseISO } from 'date-fns';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
     let inscritosPresentes = 0;
@@ -88,8 +89,11 @@ export type DetailedParticipant = {
     email: string;
     fonte: string | null;
     dados: any;
-    presenca_matutina: string | null; // Store the timestamp
-    presenca_vespertina: string | null; // Store the timestamp
+    presencas: {
+        date: string; // YYYY-MM-DD
+        matutino: string | null; // timestamp
+        vespertino: string | null; // timestamp
+    }[];
 };
 
 
@@ -126,20 +130,32 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const inscricoes = inscricoesResult.data as Inscricao[];
     const frequencias = frequenciasResult.data as Frequencia[];
     
-    const frequenciaMap = new Map<string, { matutina: string | null, vespertina: string | null }>();
+    const frequenciaMap = new Map<string, { [date: string]: { matutino: string | null, vespertina: string | null } }>();
 
     frequencias.forEach(freq => {
-        const entry = frequenciaMap.get(freq.inscricao_id) || { matutina: null, vespertina: null };
+        const dateKey = format(parseISO(freq.registered_at), 'yyyy-MM-dd');
+        const entry = frequenciaMap.get(freq.inscricao_id) || {};
+        
+        if (!entry[dateKey]) {
+            entry[dateKey] = { matutina: null, vespertina: null };
+        }
+
         if (freq.periodo === 'MAT') {
-            entry.matutina = freq.registered_at;
+            entry[dateKey].matutina = freq.registered_at;
         } else if (freq.periodo === 'VESP') {
-            entry.vespertina = freq.registered_at;
+            entry[dateKey].vespertina = freq.registered_at;
         }
         frequenciaMap.set(freq.inscricao_id, entry);
     });
     
     const participants: DetailedParticipant[] = inscricoes.map(inscricao => {
-        const frequencia = frequenciaMap.get(inscricao.id) || { matutina: null, vespertina: null };
+        const presencasPorData = frequenciaMap.get(inscricao.id) || {};
+        const presencasArray = Object.entries(presencasPorData).map(([date, presence]) => ({
+            date: date,
+            matutino: presence.matutina,
+            vespertino: presence.vespertina,
+        }));
+
         return {
             id: inscricao.id,
             nome_completo: inscricao.nome_completo,
@@ -147,8 +163,7 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
             email: inscricao.email,
             fonte: inscricao.fonte || 'Inscrito',
             dados: inscricao.dados,
-            presenca_matutina: frequencia.matutina,
-            presenca_vespertina: frequencia.vespertina,
+            presencas: presencasArray,
         };
     });
 
