@@ -4,6 +4,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -130,9 +131,17 @@ export type AvaliacaoQuestionAvg = {
     metodologia_adequada: number;
 };
 
+export type PeriodSummary = {
+    totalAvaliacoes: number;
+    infraestruturaAvg: InfraestruturaAvaliacao;
+    formadoresAvg: AvaliacaoQuestionAvg;
+};
+
 export type AvaliacaoSummary = {
   formacao: Formacao;
-  totalAvaliacoes: number;
-  infraestruturaAvg: InfraestruturaAvaliacao;
-  formadoresAvg: AvaliacaoQuestionAvg;
+  summaries: {
+    geral: PeriodSummary;
+    matutino: PeriodSummary;
+    vespertino: PeriodSummary;
+  };
 };

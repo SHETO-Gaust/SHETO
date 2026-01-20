@@ -2,7 +2,66 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import type { Formacao, Avaliacao, AvaliacaoSummary, AvaliacaoQuestionAvg, InfraestruturaAvaliacao } from '@/lib/types';
+import type { Formacao, Avaliacao, AvaliacaoSummary, PeriodSummary, AvaliacaoQuestionAvg, InfraestruturaAvaliacao } from '@/lib/types';
+
+const calculateAverages = (avaliacoes: Avaliacao[]): PeriodSummary => {
+    const totalAvaliacoes = avaliacoes.length;
+    const defaultInfraAvg = { espaco_fisico: 0, equipe_apoio: 0, internet: 0 };
+    const defaultFormadoresAvg = {
+        dominio_tema: 0,
+        relevancia_profissional: 0,
+        contribuicao_tema: 0,
+        metodologia_adequada: 0,
+    };
+
+    if (totalAvaliacoes === 0) {
+        return {
+            totalAvaliacoes: 0,
+            infraestruturaAvg: defaultInfraAvg,
+            formadoresAvg: defaultFormadoresAvg,
+        };
+    }
+
+    const infraEvaluations = avaliacoes.filter(a => a.infraestrutura);
+    const infraTotal = infraEvaluations.length;
+    const infraSums = infraEvaluations.reduce((acc, aval) => {
+        const infra = aval.infraestrutura as InfraestruturaAvaliacao;
+        acc.espaco_fisico += infra.espaco_fisico || 0;
+        acc.equipe_apoio += infra.equipe_apoio || 0;
+        acc.internet += infra.internet || 0;
+        return acc;
+    }, { espaco_fisico: 0, equipe_apoio: 0, internet: 0 });
+
+    const infraestruturaAvg: InfraestruturaAvaliacao = infraTotal > 0 ? {
+        espaco_fisico: infraSums.espaco_fisico / infraTotal,
+        equipe_apoio: infraSums.equipe_apoio / infraTotal,
+        internet: infraSums.internet / infraTotal,
+    } : defaultInfraAvg;
+
+    const allFeedbacks = avaliacoes.flatMap(a => a.feedback_formadores || []);
+    const totalFeedbacks = allFeedbacks.length;
+    const formadorSums = allFeedbacks.reduce((acc, feedback) => {
+        acc.dominio_tema += feedback.dominio_tema || 0;
+        acc.relevancia_profissional += feedback.relevancia_profissional || 0;
+        acc.contribuicao_tema += feedback.contribuicao_tema || 0;
+        acc.metodologia_adequada += feedback.metodologia_adequada || 0;
+        return acc;
+    }, { dominio_tema: 0, relevancia_profissional: 0, contribuicao_tema: 0, metodologia_adequada: 0 });
+
+    const formadoresAvg: AvaliacaoQuestionAvg = totalFeedbacks > 0 ? {
+        dominio_tema: formadorSums.dominio_tema / totalFeedbacks,
+        relevancia_profissional: formadorSums.relevancia_profissional / totalFeedbacks,
+        contribuicao_tema: formadorSums.contribuicao_tema / totalFeedbacks,
+        metodologia_adequada: formadorSums.metodologia_adequada / totalFeedbacks,
+    } : defaultFormadoresAvg;
+
+    return {
+        totalAvaliacoes,
+        infraestruturaAvg,
+        formadoresAvg,
+    };
+};
+
 
 export async function getAvaliationsSummary(): Promise<AvaliacaoSummary[]> {
     const cookieStore = cookies();
@@ -36,81 +95,17 @@ export async function getAvaliationsSummary(): Promise<AvaliacaoSummary[]> {
     }, {} as { [key: string]: Avaliacao[] });
 
     const summary: AvaliacaoSummary[] = formacoes.map(formacao => {
-        const avaliacoes = avaliacoesPorFormacao[formacao.id] || [];
-        const totalAvaliacoes = avaliacoes.length;
-        const defaultInfraAvg = { espaco_fisico: 0, equipe_apoio: 0, internet: 0 };
-
-        if (totalAvaliacoes === 0) {
-            return {
-                formacao,
-                totalAvaliacoes: 0,
-                infraestruturaAvg: defaultInfraAvg,
-                formadoresAvg: {
-                    dominio_tema: 0,
-                    relevancia_profissional: 0,
-                    contribuicao_tema: 0,
-                    metodologia_adequada: 0,
-                }
-            };
-        }
-
-        // Calculate infraestrutura average
-        const infraSums = { espaco_fisico: 0, equipe_apoio: 0, internet: 0 };
-        const infraCounts = { espaco_fisico: 0, equipe_apoio: 0, internet: 0 };
-
-        avaliacoes.forEach(aval => {
-            if (aval.infraestrutura) {
-                const infra = aval.infraestrutura as InfraestruturaAvaliacao;
-                 if (infra.espaco_fisico) {
-                    infraSums.espaco_fisico += infra.espaco_fisico;
-                    infraCounts.espaco_fisico++;
-                }
-                if (infra.equipe_apoio) {
-                    infraSums.equipe_apoio += infra.equipe_apoio;
-                    infraCounts.equipe_apoio++;
-                }
-                if (infra.internet) {
-                    infraSums.internet += infra.internet;
-                    infraCounts.internet++;
-                }
-            }
-        });
-
-        const infraestruturaAvg: InfraestruturaAvaliacao = {
-            espaco_fisico: infraCounts.espaco_fisico > 0 ? infraSums.espaco_fisico / infraCounts.espaco_fisico : 0,
-            equipe_apoio: infraCounts.equipe_apoio > 0 ? infraSums.equipe_apoio / infraCounts.equipe_apoio : 0,
-            internet: infraCounts.internet > 0 ? infraSums.internet / infraCounts.internet : 0,
-        };
-
-        // Calculate formadores averages
-        const formadorSums = { dominio_tema: 0, relevancia_profissional: 0, contribuicao_tema: 0, metodologia_adequada: 0 };
-        const formadorCounts = { dominio_tema: 0, relevancia_profissional: 0, contribuicao_tema: 0, metodologia_adequada: 0 };
-        
-        avaliacoes.forEach(aval => {
-            if (Array.isArray(aval.feedback_formadores)) {
-                aval.feedback_formadores.forEach(feedback => {
-                    Object.keys(formadorSums).forEach(key => {
-                        if (feedback[key]) {
-                            formadorSums[key as keyof typeof formadorSums] += feedback[key];
-                            formadorCounts[key as keyof typeof formadorCounts]++;
-                        }
-                    });
-                });
-            }
-        });
-        
-        const formadoresAvg: AvaliacaoQuestionAvg = {
-            dominio_tema: formadorCounts.dominio_tema > 0 ? formadorSums.dominio_tema / formadorCounts.dominio_tema : 0,
-            relevancia_profissional: formadorCounts.relevancia_profissional > 0 ? formadorSums.relevancia_profissional / formadorCounts.relevancia_profissional : 0,
-            contribuicao_tema: formadorCounts.contribuicao_tema > 0 ? formadorSums.contribuicao_tema / formadorCounts.contribuicao_tema : 0,
-            metodologia_adequada: formadorCounts.metodologia_adequada > 0 ? formadorSums.metodologia_adequada / formadorCounts.metodologia_adequada : 0,
-        };
+        const allAvals = avaliacoesPorFormacao[formacao.id] || [];
+        const matutinoAvals = allAvals.filter(a => a.periodo === 'MAT');
+        const vespertinoAvals = allAvals.filter(a => a.periodo === 'VESP');
 
         return {
             formacao,
-            totalAvaliacoes,
-            infraestruturaAvg,
-            formadoresAvg
+            summaries: {
+                geral: calculateAverages(allAvals),
+                matutino: calculateAverages(matutinoAvals),
+                vespertino: calculateAverages(vespertinoAvals),
+            }
         };
     });
 
