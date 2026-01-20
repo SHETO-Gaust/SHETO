@@ -1,11 +1,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getParticipacaoSummary } from './actions';
+import { getFormacoesForRelatorios } from './actions';
 import { RelatorioCard } from '@/components/relatorios/relatorio-card';
-import type { ParticipacaoSummary } from '@/lib/types';
+import type { Formacao } from '@/lib/types';
 import { FileText } from "lucide-react";
 
 export default async function RelatoriosPage() {
-    const summaryData: ParticipacaoSummary[] = await getParticipacaoSummary();
+    const formacoes: Formacao[] = await getFormacoesForRelatorios();
 
     return (
         <div className="space-y-6">
@@ -18,10 +18,10 @@ export default async function RelatoriosPage() {
                 </CardHeader>
             </Card>
             
-            {summaryData.length > 0 ? (
+            {formacoes.length > 0 ? (
                 <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-                    {summaryData.map((summary) => (
-                        <RelatorioCard key={summary.formacao.id} summary={summary} />
+                    {formacoes.map((formacao) => (
+                        <RelatorioCard key={formacao.id} formacao={formacao} />
                     ))}
                 </div>
             ) : (

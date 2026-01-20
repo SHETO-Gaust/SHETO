@@ -27,8 +27,7 @@ const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): 
     };
 };
 
-
-export async function getParticipacaoSummary(): Promise<ParticipacaoSummary[]> {
+export async function getFormacoesForRelatorios(): Promise<Formacao[]> {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
@@ -41,51 +40,42 @@ export async function getParticipacaoSummary(): Promise<ParticipacaoSummary[]> {
         console.error('Error fetching formacoes for participation summary:', formacoesError);
         return [];
     }
+    return formacoes;
+}
 
-    const formacaoIds = formacoes.map(f => f.id);
-
-    if (formacaoIds.length === 0) return [];
+export async function getSingleParticipacaoSummary(formacaoId: string): Promise<Omit<ParticipacaoSummary, 'formacao'>> {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
 
     const [inscricoesResult, frequenciasResult] = await Promise.all([
-        supabase.from('inscricoes').select('*').in('formacao_id', formacaoIds),
-        supabase.from('frequencia').select('*').in('formacao_id', formacaoIds)
+        supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId),
+        supabase.from('frequencia').select('*').eq('formacao_id', formacaoId)
     ]);
     
     if (inscricoesResult.error || frequenciasResult.error) {
-        console.error('Error fetching details for summary:', inscricoesResult.error || frequenciasResult.error);
-        return [];
-    }
-
-    const inscricoesPorFormacao = (inscricoesResult.data as Inscricao[]).reduce((acc, inscricao) => {
-        if (!acc[inscricao.formacao_id]) acc[inscricao.formacao_id] = [];
-        acc[inscricao.formacao_id].push(inscricao);
-        return acc;
-    }, {} as { [key: string]: Inscricao[] });
-
-    const frequenciasPorFormacao = (frequenciasResult.data as Frequencia[]).reduce((acc, freq) => {
-        if (!acc[freq.formacao_id]) acc[freq.formacao_id] = [];
-        acc[freq.formacao_id].push(freq);
-        return acc;
-    }, {} as { [key: string]: Frequencia[] });
-
-
-    const summary: ParticipacaoSummary[] = formacoes.map(formacao => {
-        const inscricoes = inscricoesPorFormacao[formacao.id] || [];
-        const todasFrequencias = frequenciasPorFormacao[formacao.id] || [];
-        
-        const freqMatutino = todasFrequencias.filter(f => f.periodo === 'MAT');
-        const freqVespertino = todasFrequencias.filter(f => f.periodo === 'VESP');
-
+        console.error('Error fetching details for single summary:', inscricoesResult.error || frequenciasResult.error);
         return {
-            formacao,
-            totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,
+            totalInscritos: 0,
             frequencia: {
-                geral: processFrequencia(todasFrequencias, inscricoes),
-                matutino: processFrequencia(freqMatutino, inscricoes),
-                vespertino: processFrequencia(freqVespertino, inscricoes),
+                geral: { total: 0, inscritos: 0, avulsos: 0 },
+                matutino: { total: 0, inscritos: 0, avulsos: 0 },
+                vespertino: { total: 0, inscritos: 0, avulsos: 0 },
             }
         };
-    });
+    }
 
-    return summary;
+    const inscricoes = (inscricoesResult.data as Inscricao[]) || [];
+    const todasFrequencias = (frequenciasResult.data as Frequencia[]) || [];
+    
+    const freqMatutino = todasFrequencias.filter(f => f.periodo === 'MAT');
+    const freqVespertino = todasFrequencias.filter(f => f.periodo === 'VESP');
+
+    return {
+        totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,
+        frequencia: {
+            geral: processFrequencia(todasFrequencias, inscricoes),
+            matutino: processFrequencia(freqMatutino, inscricoes),
+            vespertino: processFrequencia(freqVespertino, inscricoes),
+        }
+    };
 }
