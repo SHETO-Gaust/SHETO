@@ -95,9 +95,14 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                 presenca_vespertina = dailyData?.vespertino || null;
             }
 
+            let regional = p.dados?.regional || 'N/A';
+            if (regional === 'PARAÍSO DO TOCANTINS') {
+                regional = 'PARAÍSO';
+            }
+
             return {
                 ...p,
-                regional: p.dados?.regional || 'N/A',
+                regional,
                 presenca_matutina,
                 presenca_vespertina,
             };
