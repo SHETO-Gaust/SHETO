@@ -1,17 +1,13 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { notFound } from 'next/navigation';
+import { getDetailedParticipationReport } from '../actions';
+import { RelatorioDetalhadoClient } from './_components/relatorio-detalhado-client';
 
-export default function RelatorioDetalhesPage({ params }: { params: { id: string } }) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Relatório Detalhado</CardTitle>
-                <CardDescription>
-                    Análise detalhada da participação para a formação ID: {params.id}.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <p>Página em construção.</p>
-            </CardContent>
-        </Card>
-    );
+export default async function RelatorioDetalhesPage({ params }: { params: { id: string } }) {
+    const reportData = await getDetailedParticipationReport(params.id);
+
+    if (!reportData) {
+        notFound();
+    }
+    
+    return <RelatorioDetalhadoClient formacao={reportData.formacao} participants={reportData.participants} />;
 }
