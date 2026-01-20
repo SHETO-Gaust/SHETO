@@ -25,11 +25,30 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
 
     const ITEMS_PER_PAGE = 25;
 
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        // If value contains letters, it's a name search, do nothing special
+        if (/[a-zA-Z]/.test(value)) {
+            setSearchTerm(value);
+            return;
+        }
+
+        // Otherwise, assume it's a CPF and format it
+        const numbers = value.replace(/\D/g, '');
+        const formattedCpf = numbers
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d)/, '$1.$2')
+            .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+            .slice(0, 14);
+        
+        setSearchTerm(formattedCpf);
+    };
+
     const filteredParticipants = useMemo(() => {
         return participants.filter(p => {
             // Search filter
             const search = searchTerm.toLowerCase();
-            const matchesSearch = p.nome_completo.toLowerCase().includes(search) || p.cpf.includes(search);
+            const matchesSearch = p.nome_completo.toLowerCase().includes(search) || p.cpf.includes(searchTerm);
 
             // Presence filter
             let matchesPresence = true;
@@ -87,7 +106,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                         <Input
                             placeholder="Buscar por nome ou CPF..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={handleSearchChange}
                             className="max-w-sm"
                         />
                         <div className="flex flex-col sm:flex-row gap-4">
