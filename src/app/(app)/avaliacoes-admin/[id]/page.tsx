@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation';
-import { getAvaliacaoDetails } from '../actions';
+import * as actions from '../actions';
 import { AvaliacaoDashboard } from './avaliacao-dashboard';
 
 export default async function AvaliacaoDetalhesPage({ params }: { params: { id: string } }) {
-    const details = await getAvaliacaoDetails(params.id);
+    const details = await actions.getAvaliacaoDetails(params.id);
 
     if (!details) {
         notFound();
