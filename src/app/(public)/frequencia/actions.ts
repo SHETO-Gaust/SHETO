@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { toZonedTime } from 'date-fns-tz';
-import { set, isWithinInterval } from 'date-fns';
+import { set, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import type { Coordinates } from '@/lib/types';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
@@ -71,6 +71,10 @@ export async function checkInscricao(formacaoId: string, cpf: string, userCoords
     if (!currentPeriod) {
         return { status: 'ERROR', error: 'Fora do horário de registro de frequência.' };
     }
+
+    const nowInSaoPaulo = toZonedTime(new Date(), saoPauloTimeZone);
+    const startOfToday = startOfDay(nowInSaoPaulo);
+    const endOfToday = endOfDay(nowInSaoPaulo);
     
     // Geolocation check
     const geoConfig = formacao.attendance_list_info.geolocation;
@@ -111,6 +115,8 @@ export async function checkInscricao(formacaoId: string, cpf: string, userCoords
             .eq('formacao_id', formacaoId)
             .eq('inscricao_id', inscricao.id)
             .eq('periodo', currentPeriod)
+            .gte('registered_at', startOfToday.toISOString())
+            .lte('registered_at', endOfToday.toISOString())
             .limit(1);
 
         if (frequenciaError) {
@@ -124,7 +130,7 @@ export async function checkInscricao(formacaoId: string, cpf: string, userCoords
         if (existingFrequencia.length > 0) {
             return { 
                 status: 'ALREADY_REGISTERED', 
-                error: `Frequência já registrada para o período da ${currentPeriod === 'MAT' ? 'manhã' : 'tarde'}.`,
+                error: `Frequência já registrada para o período da ${currentPeriod === 'MAT' ? 'manhã' : 'tarde'} de hoje.`,
                 nome_completo: inscricao.nome_completo,
                 formacao_name: formacao.name
             };
@@ -182,6 +188,10 @@ export async function registerFrequency(formacaoId: string, formData: any, userC
         return { success: false, error: errorMsg };
     }
     
+    const nowInSaoPaulo = toZonedTime(new Date(), saoPauloTimeZone);
+    const startOfToday = startOfDay(nowInSaoPaulo);
+    const endOfToday = endOfDay(nowInSaoPaulo);
+
     // Geolocation check
     const geoConfig = formacao.attendance_list_info.geolocation;
     if (geoConfig?.enabled && geoConfig.locations?.length > 0) {
@@ -233,6 +243,8 @@ export async function registerFrequency(formacaoId: string, formData: any, userC
         .eq('formacao_id', formacaoId)
         .eq('inscricao_id', inscricaoId)
         .eq('periodo', currentPeriod)
+        .gte('registered_at', startOfToday.toISOString())
+        .lte('registered_at', endOfToday.toISOString())
         .limit(1);
 
     if (frequenciaError) {
@@ -244,7 +256,7 @@ export async function registerFrequency(formacaoId: string, formData: any, userC
         return { success: false, error: `Erro ao verificar frequência: ${frequenciaError.message}` };
     }
     if (existingFrequencia && existingFrequencia.length > 0) {
-        return { success: false, error: 'Frequência já registrada para este período.' };
+        return { success: false, error: `Frequência já registrada para o período da ${currentPeriod === 'MAT' ? 'manhã' : 'tarde'} de hoje.` };
     }
     
     const { error: insertError } = await supabase.from('frequencia').insert({
