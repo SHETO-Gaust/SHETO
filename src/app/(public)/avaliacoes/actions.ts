@@ -138,7 +138,7 @@ export async function submitAvaliacao(formData: any) {
 
   const { error } = await supabase
     .from('avaliacoes')
-    .upsert(validatedFields.data, { onConflict: 'formacao_id,inscricao_id,periodo' });
+    .insert(validatedFields.data);
 
   if (error) {
       console.error('Supabase Error:', error);
