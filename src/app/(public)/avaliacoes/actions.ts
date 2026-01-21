@@ -136,13 +136,12 @@ export async function submitAvaliacao(formData: any) {
       return { error: 'Dados da avaliação inválidos.' };
   }
 
-  const { error } = await supabase.from('avaliacoes').insert(validatedFields.data);
+  const { error } = await supabase
+    .from('avaliacoes')
+    .upsert(validatedFields.data, { onConflict: 'formacao_id,inscricao_id,periodo' });
 
   if (error) {
       console.error('Supabase Error:', error);
-      if (error.code === '23505') { // unique_violation
-          return { error: `Você já enviou uma avaliação para este período da formação.` };
-      }
       return { error: 'Ocorreu um erro ao enviar sua avaliação.' };
   }
 
