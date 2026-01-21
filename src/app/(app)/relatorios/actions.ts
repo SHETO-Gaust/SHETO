@@ -6,25 +6,27 @@ import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPe
 import { format, parseISO } from 'date-fns';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
-    let inscritosPresentes = 0;
-    let avulsosPresentes = 0;
-
     const inscricaoFonteMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
+    const uniqueInscritosPresentes = new Set<string>();
+    const uniqueAvulsosPresentes = new Set<string>();
 
     frequencias.forEach(freq => {
         const fonte = inscricaoFonteMap.get(freq.inscricao_id);
         if (fonte === 'AVULSO') {
-            avulsosPresentes++;
+            uniqueAvulsosPresentes.add(freq.inscricao_id);
         } else {
             // Considera presente como 'inscrito' se não for 'AVULSO' ou se não houver fonte (legado)
-            inscritosPresentes++;
+            uniqueInscritosPresentes.add(freq.inscricao_id);
         }
     });
+    
+    const inscritosCount = uniqueInscritosPresentes.size;
+    const avulsosCount = uniqueAvulsosPresentes.size;
 
     return {
-        total: frequencias.length,
-        inscritos: inscritosPresentes,
-        avulsos: avulsosPresentes,
+        total: inscritosCount + avulsosCount,
+        inscritos: inscritosCount,
+        avulsos: avulsosCount,
     };
 };
 

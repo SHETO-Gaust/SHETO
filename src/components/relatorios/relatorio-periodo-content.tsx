@@ -10,7 +10,7 @@ type RelatorioPeriodoContentProps = {
 
 export function RelatorioPeriodoContent({ periodoSummary, totalInscritos }: RelatorioPeriodoContentProps) {
     const { total, inscritos, avulsos } = periodoSummary;
-    const progressValue = totalInscritos > 0 ? (total / totalInscritos) * 100 : 0;
+    const progressValue = totalInscritos > 0 ? (inscritos / totalInscritos) * 100 : 0;
     
     if (totalInscritos === 0 && total === 0) {
         return (
@@ -24,11 +24,11 @@ export function RelatorioPeriodoContent({ periodoSummary, totalInscritos }: Rela
         <div className="space-y-4">
             <div>
                 <div className="flex justify-between items-baseline mb-1">
-                    <p className="text-sm font-medium text-muted-foreground">Progresso da Frequência</p>
-                    <p className="text-lg font-bold">{total} <span className="text-sm font-normal text-muted-foreground">de {totalInscritos}</span></p>
+                    <p className="text-sm font-medium text-muted-foreground">Comparecimento dos Inscritos</p>
+                    <p className="text-lg font-bold">{inscritos} <span className="text-sm font-normal text-muted-foreground">de {totalInscritos}</span></p>
                 </div>
-                <Progress value={progressValue} aria-label={`${progressValue.toFixed(0)}% de participação`} />
-                 <p className="text-xs text-muted-foreground text-right mt-1">{progressValue.toFixed(1)}% de participação</p>
+                <Progress value={progressValue} aria-label={`${progressValue.toFixed(0)}% de participação dos inscritos`} />
+                 <p className="text-xs text-muted-foreground text-right mt-1">{progressValue.toFixed(1)}% de participação dos inscritos</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4 pt-2">
