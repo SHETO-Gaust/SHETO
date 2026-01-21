@@ -64,21 +64,7 @@ export async function checkParticipantForAvaliacao(formacaoId: string, cpf: stri
         return { success: false, error: 'CPF não encontrado na lista de inscritos para esta formação.' };
     }
 
-    // 3. Check if already evaluated for this period
-    const { data: existingAvaliacao, error: avaliacaoError } = await supabase
-        .from('avaliacoes')
-        .select('id')
-        .eq('formacao_id', formacaoId)
-        .eq('inscricao_id', inscricao.id)
-        .eq('periodo', currentPeriod)
-        .single();
-    
-    if (avaliacaoError && avaliacaoError.code !== 'PGRST116') { // Ignore 'no rows found'
-        return { success: false, error: 'Erro ao verificar avaliações anteriores.' };
-    }
-    if (existingAvaliacao) {
-        return { success: false, error: `Você já enviou uma avaliação para o período da ${currentPeriod === 'MAT' ? 'manhã' : 'tarde'}.` };
-    }
+    // 3. Check if already evaluated for this period - REMOVED TO ALLOW MULTIPLE EVALUATIONS
 
     // 4. Check for frequency
     const { data: frequencia, error: frequenciaError } = await supabase
