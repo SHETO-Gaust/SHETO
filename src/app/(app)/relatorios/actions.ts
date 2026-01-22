@@ -71,15 +71,36 @@ export async function getSingleParticipacaoSummary(formacaoId: string): Promise<
     const inscricoes = (inscricoesResult.data as Inscricao[]) || [];
     const todasFrequencias = (frequenciasResult.data as Frequencia[]) || [];
     
+    // Processamento para contar pessoas únicas
+    const processUnique = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
+        const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
+        const uniqueInscritos = new Set<string>();
+        const uniqueAvulsos = new Set<string>();
+
+        frequencias.forEach(freq => {
+            if (inscricaoMap.get(freq.inscricao_id) === 'AVULSO') {
+                uniqueAvulsos.add(freq.inscricao_id);
+            } else {
+                uniqueInscritos.add(freq.inscricao_id);
+            }
+        });
+
+        return {
+            total: uniqueInscritos.size + uniqueAvulsos.size,
+            inscritos: uniqueInscritos.size,
+            avulsos: uniqueAvulsos.size,
+        };
+    };
+
     const freqMatutino = todasFrequencias.filter(f => f.periodo === 'MAT');
     const freqVespertino = todasFrequencias.filter(f => f.periodo === 'VESP');
 
     return {
         totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,
         frequencia: {
-            geral: processFrequencia(todasFrequencias, inscricoes),
-            matutino: processFrequencia(freqMatutino, inscricoes),
-            vespertino: processFrequencia(freqVespertino, inscricoes),
+            geral: processUnique(todasFrequencias, inscricoes),
+            matutino: processUnique(freqMatutino, inscricoes),
+            vespertino: processUnique(freqVespertino, inscricoes),
         }
     };
 }
@@ -91,22 +112,22 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const startOfDay = new Date(`${date}T00:00:00.000Z`);
     const endOfDay = new Date(`${date}T23:59:59.999Z`);
     
-    const { data: existing, error: fetchError } = await supabase
+    const { data: existingRecords, error: fetchError } = await supabase
         .from('frequencia')
         .select('id, source')
         .eq('inscricao_id', inscricaoId)
         .eq('formacao_id', formacaoId)
         .eq('periodo', periodo)
         .gte('registered_at', startOfDay.toISOString())
-        .lte('registered_at', endOfDay.toISOString())
-        .single();
+        .lte('registered_at', endOfDay.toISOString());
 
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is no rows found
+    if (fetchError) {
         console.error('Error fetching presence:', fetchError);
         return { error: 'Erro ao verificar presença existente.' };
     }
 
-    if (existing) {
+    if (existingRecords && existingRecords.length > 0) {
+        const existing = existingRecords[0];
         if (existing.source === 'MANUAL') {
             const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
             if (deleteError) {
@@ -133,6 +154,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
         });
 
         if (insertError) {
+            console.error('Error inserting manual presence:', insertError);
             return { error: 'Erro ao adicionar presença manual.' };
         }
         revalidatePath(`/relatorios/${formacaoId}`);
