@@ -225,8 +225,8 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         const isLoading = togglingPresence === loadingKey;
 
         const handleToggle = async () => {
-            if (!isEditable || (presence && presence.source === 'AUTOMATIC')) {
-                if (presence && presence.source === 'AUTOMATIC') {
+            if (!isEditable || (presence && presence.source?.trim().toUpperCase() === 'AUTOMATIC')) {
+                if (presence && presence.source?.trim().toUpperCase() === 'AUTOMATIC') {
                     toast({ title: 'Ação não permitida', description: 'Não é possível remover uma presença registrada automaticamente pelo participante.', variant: 'default' });
                 }
                 return;
@@ -251,7 +251,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         
         if (presence) {
             const timestamp = format(parseISO(presence.registered_at), 'HH:mm');
-            if (presence.source === 'MANUAL') {
+            if (presence.source?.trim().toUpperCase() === 'MANUAL') {
                 return (
                     <button onClick={handleToggle} disabled={!isEditable} className="flex items-center justify-center gap-2 text-orange-500 disabled:cursor-not-allowed">
                         <CheckCircle className="h-5 w-5" />
