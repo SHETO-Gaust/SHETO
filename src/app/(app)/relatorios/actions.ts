@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
+import { revalidatePath } from 'next/cache';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
     const inscricaoFonteMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
@@ -83,6 +84,62 @@ export async function getSingleParticipacaoSummary(formacaoId: string): Promise<
     };
 }
 
+export async function setManualPresence(inscricaoId: string, formacaoId: string, date: string, periodo: 'MAT' | 'VESP') {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+    
+    const startOfDay = new Date(`${date}T00:00:00.000Z`);
+    const endOfDay = new Date(`${date}T23:59:59.999Z`);
+    
+    const { data: existing, error: fetchError } = await supabase
+        .from('frequencia')
+        .select('id, source')
+        .eq('inscricao_id', inscricaoId)
+        .eq('formacao_id', formacaoId)
+        .eq('periodo', periodo)
+        .gte('registered_at', startOfDay.toISOString())
+        .lte('registered_at', endOfDay.toISOString())
+        .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is no rows found
+        console.error('Error fetching presence:', fetchError);
+        return { error: 'Erro ao verificar presença existente.' };
+    }
+
+    if (existing) {
+        if (existing.source === 'MANUAL') {
+            const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
+            if (deleteError) {
+                return { error: 'Erro ao remover presença manual.' };
+            }
+            revalidatePath(`/relatorios/${formacaoId}`);
+            return { success: true, status: 'REMOVED' };
+        } else {
+            return { error: 'Não é possível remover uma presença registrada automaticamente.' };
+        }
+    } else {
+        const { data: inscricao } = await supabase.from('inscricoes').select('cpf').eq('id', inscricaoId).single();
+        if (!inscricao) {
+            return { error: 'Inscrição não encontrada.' };
+        }
+
+        const { error: insertError } = await supabase.from('frequencia').insert({
+            formacao_id: formacaoId,
+            inscricao_id: inscricaoId,
+            cpf: inscricao.cpf,
+            periodo: periodo,
+            registered_at: new Date(`${date}T12:00:00Z`).toISOString(),
+            source: 'MANUAL',
+        });
+
+        if (insertError) {
+            return { error: 'Erro ao adicionar presença manual.' };
+        }
+        revalidatePath(`/relatorios/${formacaoId}`);
+        return { success: true, status: 'ADDED' };
+    }
+}
+
 
 export type DetailedParticipant = {
     id: string;
@@ -93,8 +150,8 @@ export type DetailedParticipant = {
     dados: any;
     presencas: {
         date: string; // YYYY-MM-DD
-        matutino: string | null; // timestamp
-        vespertino: string | null; // timestamp
+        matutino: { registered_at: string; source: string; } | null;
+        vespertino: { registered_at: string; source: string; } | null;
     }[];
 };
 
@@ -132,20 +189,23 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const inscricoes = inscricoesResult.data as Inscricao[];
     const frequencias = frequenciasResult.data as Frequencia[];
     
-    const frequenciaMap = new Map<string, { [date: string]: { matutino: string | null, vespertina: string | null } }>();
+    type PresenceInfo = { registered_at: string; source: string; } | null;
+    const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     frequencias.forEach(freq => {
         const dateKey = format(parseISO(freq.registered_at), 'yyyy-MM-dd');
         const entry = frequenciaMap.get(freq.inscricao_id) || {};
         
         if (!entry[dateKey]) {
-            entry[dateKey] = { matutina: null, vespertina: null };
+            entry[dateKey] = { matutino: null, vespertino: null };
         }
 
+        const presenceInfo = { registered_at: freq.registered_at, source: freq.source || 'AUTOMATIC' };
+
         if (freq.periodo === 'MAT') {
-            entry[dateKey].matutina = freq.registered_at;
+            entry[dateKey].matutino = presenceInfo as { registered_at: string; source: string; };
         } else if (freq.periodo === 'VESP') {
-            entry[dateKey].vespertina = freq.registered_at;
+            entry[dateKey].vespertino = presenceInfo as { registered_at: string; source: string; };
         }
         frequenciaMap.set(freq.inscricao_id, entry);
     });
@@ -154,8 +214,8 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
         const presencasPorData = frequenciaMap.get(inscricao.id) || {};
         const presencasArray = Object.entries(presencasPorData).map(([date, presence]) => ({
             date: date,
-            matutino: presence.matutina,
-            vespertino: presence.vespertina,
+            matutino: presence.matutino,
+            vespertino: presence.vespertino,
         }));
 
         return {

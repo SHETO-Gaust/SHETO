@@ -1,15 +1,18 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
 import type { DetailedParticipant } from '../../actions';
+import { setManualPresence } from '../../actions';
+import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts";
@@ -22,16 +25,17 @@ type RelatorioDetalhadoClientProps = {
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"];
 
-const RankingChart = ({ data, dataKey, unit, title }: { data: any[], dataKey: string, unit: string, title: string }) => (
+const RankingChart = ({ data, dataKey, unit, title, description }: { data: any[], dataKey: string, unit: string, title: string, description: string }) => (
     <Card>
         <CardHeader>
             <CardTitle className="truncate">{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardContent>
             {data.length > 0 ? (
                 <ChartContainer config={{}} className="h-80 w-full">
                     <ResponsiveContainer>
-                        <BarChart data={data} layout="vertical" margin={{ left: 20, right: 30 }}>
+                        <BarChart data={data} layout="vertical" margin={{ left: 120, right: 30 }}>
                             <XAxis type="number" dataKey={dataKey} unit={unit} tick={{ fontSize: 12 }} />
                             <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} interval={0} />
                             <Tooltip
@@ -62,7 +66,10 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     const [sourceFilter, setSourceFilter] = useState('todos'); // todos, inscrito, avulso
     const [dateFilter, setDateFilter] = useState('todos');
     const [currentPage, setCurrentPage] = useState(1);
-
+    const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
+    
+    const router = useRouter();
+    const { toast } = useToast();
     const ITEMS_PER_PAGE = 25;
 
     const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,41 +89,18 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     };
 
     const { filteredParticipants, dateOptions } = useMemo(() => {
-        const preparedParticipants = participants.map(p => {
-            let presenca_matutina: string | null = null;
-            let presenca_vespertina: string | null = null;
-
-            if (dateFilter === 'todos') {
-                presenca_matutina = p.presencas.find(pr => pr.matutino)?.matutino || null;
-                presenca_vespertina = p.presencas.find(pr => pr.vespertino)?.vespertino || null;
-            } else {
-                const dailyData = p.presencas.find(pr => pr.date === dateFilter);
-                presenca_matutina = dailyData?.matutino || null;
-                presenca_vespertina = dailyData?.vespertino || null;
-            }
-
-            let regional = p.dados?.regional || 'N/A';
-            if (regional === 'PARAÍSO DO TOCANTINS') {
-                regional = 'PARAÍSO';
-            }
-
-            return {
-                ...p,
-                regional,
-                presenca_matutina,
-                presenca_vespertina,
-            };
-        });
-
-        const filtered = preparedParticipants.filter(p => {
+        const filtered = participants.filter(p => {
             const search = searchTerm.toLowerCase();
             const matchesSearch = p.nome_completo.toLowerCase().includes(search) || p.cpf.includes(searchTerm);
 
+            const hasMorningPresence = dateFilter === 'todos' ? p.presencas.some(pr => pr.matutino) : !!p.presencas.find(pr => pr.date === dateFilter)?.matutino;
+            const hasAfternoonPresence = dateFilter === 'todos' ? p.presencas.some(pr => pr.vespertino) : !!p.presencas.find(pr => pr.date === dateFilter)?.vespertino;
+            
             let matchesPresence = true;
-            if (presenceFilter === 'manha') matchesPresence = !!p.presenca_matutina;
-            else if (presenceFilter === 'tarde') matchesPresence = !!p.presenca_vespertina;
-            else if (presenceFilter === 'ambos') matchesPresence = !!p.presenca_matutina && !!p.presenca_vespertina;
-            else if (presenceFilter === 'nenhum') matchesPresence = !p.presenca_matutina && !p.presenca_vespertina;
+            if (presenceFilter === 'manha') matchesPresence = hasMorningPresence;
+            else if (presenceFilter === 'tarde') matchesPresence = hasAfternoonPresence;
+            else if (presenceFilter === 'ambos') matchesPresence = hasMorningPresence && hasAfternoonPresence;
+            else if (presenceFilter === 'nenhum') matchesPresence = !hasMorningPresence && !hasAfternoonPresence;
 
             let matchesSource = true;
             if (sourceFilter === 'inscrito') matchesSource = p.fonte !== 'AVULSO';
@@ -150,9 +134,25 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         const totalPages = Math.ceil(filteredParticipants.length / ITEMS_PER_PAGE);
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         const endIndex = startIndex + ITEMS_PER_PAGE;
-        const paginatedParticipants = filteredParticipants.slice(startIndex, endIndex);
-        return { paginatedParticipants, totalPages };
-    }, [filteredParticipants, currentPage]);
+        const paginated = filteredParticipants.slice(startIndex, endIndex);
+
+        const participantsForView = paginated.map(p => {
+             const dailyPresence = (dateFilter !== 'todos' && p.presencas.find(pr => pr.date === dateFilter)) || null;
+            let regional = p.dados?.regional || 'N/A';
+            if (regional === 'PARAÍSO DO TOCANTINS') {
+                regional = 'PARAÍSO';
+            }
+            return {
+                ...p,
+                regional,
+                presenca_matutina: dailyPresence?.matutino,
+                presenca_vespertina: dailyPresence?.vespertino,
+            };
+        });
+
+
+        return { paginatedParticipants: participantsForView, totalPages };
+    }, [filteredParticipants, currentPage, dateFilter]);
 
     const regionalStats = useMemo(() => {
         const statsByRegional = new Map<string, {
@@ -160,8 +160,16 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             inscritosPresentes: number;
             avulsosPresentes: number;
         }>();
+
+        const participantsToProcess = participants.map(p => {
+            let regional = p.dados?.regional || 'N/A';
+            if (regional === 'PARAÍSO DO TOCANTINS') {
+                regional = 'PARAÍSO';
+            }
+            return {...p, regional};
+        })
     
-        filteredParticipants.forEach(p => {
+        participantsToProcess.forEach(p => {
             const regional = p.regional || 'N/A';
             if (!statsByRegional.has(regional)) {
                 statsByRegional.set(regional, {
@@ -171,16 +179,19 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                 });
             }
             const regionalData = statsByRegional.get(regional)!;
-    
-            const isPresent = !!p.presenca_matutina || !!p.presenca_vespertina;
+            
+            const isPresentOnFilteredDay = dateFilter === 'todos' 
+                ? p.presencas.some(pr => pr.matutino || pr.vespertino)
+                : p.presencas.some(pr => pr.date === dateFilter && (pr.matutino || pr.vespertino));
+
     
             if (p.fonte !== 'AVULSO') {
                 regionalData.inscritosPrevistos++;
-                if (isPresent) {
+                if (isPresentOnFilteredDay) {
                     regionalData.inscritosPresentes++;
                 }
             } else { // 'AVULSO'
-                if (isPresent) {
+                if (isPresentOnFilteredDay) {
                     regionalData.avulsosPresentes++;
                 }
             }
@@ -202,19 +213,68 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             .sort((a, b) => b.avulsos - a.avulsos);
         
         return { commitmentData, avulsosData };
-    }, [filteredParticipants]);
+    }, [participants, dateFilter]);
 
 
-    const PresenceStatus = ({ timestamp }: { timestamp: string | null }) => {
-        if (timestamp) {
+    const PresenceStatus = ({ 
+        participantId, 
+        periodo, 
+        presence 
+    }: { 
+        participantId: string, 
+        periodo: 'MAT' | 'VESP', 
+        presence: { registered_at: string; source: string; } | null 
+    }) => {
+        const isEditable = dateFilter !== 'todos';
+        const loadingKey = `${participantId}-${periodo}-${dateFilter}`;
+        const isLoading = togglingPresence === loadingKey;
+
+        const handleToggle = async () => {
+            if (!isEditable || (presence && presence.source === 'AUTOMATIC')) {
+                if (presence && presence.source === 'AUTOMATIC') {
+                    toast({ title: 'Ação não permitida', description: 'Não é possível remover uma presença registrada automaticamente pelo participante.', variant: 'default' });
+                }
+                return;
+            }
+            setTogglingPresence(loadingKey);
+            const result = await setManualPresence(participantId, formacao.id, dateFilter, periodo);
+            
+            if (result.error) {
+                toast({ title: "Erro", description: result.error, variant: 'destructive' });
+            } else {
+                 toast({ title: "Sucesso!", description: `Presença ${presence ? 'removida' : 'adicionada'} com sucesso.` });
+                 router.refresh();
+            }
+
+            setTogglingPresence(null);
+        };
+
+        if (isLoading) {
+            return <Loader2 className="h-5 w-5 animate-spin" />;
+        }
+        
+        if (presence) {
+            const timestamp = format(parseISO(presence.registered_at), 'HH:mm');
+            if (presence.source === 'MANUAL') {
+                return (
+                    <button onClick={handleToggle} disabled={!isEditable} className="flex items-center justify-center gap-2 text-orange-500 disabled:cursor-not-allowed">
+                        <CheckCircle className="h-5 w-5" />
+                        <span className="text-xs">{timestamp}</span>
+                    </button>
+                );
+            }
             return (
                 <div className="flex items-center justify-center gap-2 text-green-600">
-                    <CheckCircle className="h-4 w-4" />
-                    <span className="text-xs text-muted-foreground">{format(parseISO(timestamp), 'HH:mm')}</span>
+                    <CheckCircle className="h-5 w-5" />
+                    <span className="text-xs">{timestamp}</span>
                 </div>
             );
         }
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return (
+            <button onClick={handleToggle} disabled={!isEditable} className="disabled:cursor-not-allowed">
+                <XCircle className="h-5 w-5 text-red-500" />
+            </button>
+        );
     };
 
     return (
@@ -296,8 +356,8 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                                                     {p.fonte === 'AVULSO' ? 'Avulso' : 'Inscrito'}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="flex justify-center"><PresenceStatus timestamp={p.presenca_matutina} /></TableCell>
-                                            <TableCell className="text-center"><PresenceStatus timestamp={p.presenca_vespertina} /></TableCell>
+                                            <TableCell className="text-center"><PresenceStatus participantId={p.id} periodo="MAT" presence={p.presenca_matutina} /></TableCell>
+                                            <TableCell className="text-center"><PresenceStatus participantId={p.id} periodo="VESP" presence={p.presenca_vespertina} /></TableCell>
                                         </TableRow>
                                     ))
                                 ) : (
@@ -342,9 +402,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
              <Card className="mt-6">
                 <CardHeader>
                     <CardTitle>Ranking de Comprometimento por Regional</CardTitle>
-                    <CardDescription>
-                        Análise da participação e engajamento por regional, com base nos filtros aplicados.
-                    </CardDescription>
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-1 lg:grid-cols-2 gap-6">
                     <RankingChart
@@ -352,12 +409,14 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                         dataKey="taxaComprometimento"
                         unit="%"
                         title="Taxa de Comprometimento (Inscritos)"
+                        description="Este gráfico mede a eficiência de cada regional em mobilizar seus próprios servidores. Ele calcula a porcentagem de participantes que se inscreveram previamente na formação e que efetivamente registraram presença."
                     />
                     <RankingChart
                         data={regionalStats.avulsosData}
                         dataKey="avulsos"
                         unit=""
                         title="Participantes Avulsos"
+                        description="Este gráfico mostra o número total de participantes que compareceram à formação sem terem feito uma inscrição prévia. Este dado é útil para medir o interesse espontâneo e o alcance que a formação gerou em cada localidade."
                     />
                 </CardContent>
             </Card>

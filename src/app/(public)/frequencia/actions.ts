@@ -264,6 +264,7 @@ export async function registerFrequency(formacaoId: string, formData: any, userC
         inscricao_id: inscricaoId,
         cpf: finalCpf,
         periodo: currentPeriod,
+        source: 'AUTOMATIC',
     });
 
     if (insertError) {
