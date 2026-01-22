@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
-import { format, parseISO, startOfDay, endOfDay, set } from 'date-fns';
+import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { revalidatePath } from 'next/cache';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
@@ -124,6 +124,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .lte('registered_at', endOfQueryDay.toISOString());
 
         if (fetchError) {
+            console.error(`[SERVER_ERROR] setManualPresence/fetchError:`, fetchError);
             return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
         }
 
@@ -144,15 +145,13 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             if (!inscricao) {
                 return { error: 'Inscrição não encontrada.' };
             }
-            
-            const registrationTime = set(day, { hours: 12, minutes: 0, seconds: 0 });
 
             const { error: insertError } = await supabase.from('frequencia').insert({
                 formacao_id: formacaoId,
                 inscricao_id: inscricaoId,
                 cpf: inscricao.cpf,
                 periodo: periodo,
-                registered_at: registrationTime.toISOString(),
+                registered_at: day.toISOString(),
                 source: 'MANUAL',
             });
 
@@ -163,6 +162,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
+        console.error(`[SERVER_ERROR] setManualPresence/catch:`, e);
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
 }
@@ -189,7 +189,7 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
 
     const formacaoPromise = supabase.from('formacoes').select('*').eq('id', formacaoId).single();
     const inscricoesPromise = supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId);
-    const frequenciasPromise = supabase.from('frequencia').select('*').eq('formacao_id', formacaoId);
+    const frequenciasPromise = supabase.from('frequencia').select('inscricao_id, registered_at, periodo, source').eq('formacao_id', formacaoId);
 
     const [formacaoResult, inscricoesResult, frequenciasResult] = await Promise.all([
         formacaoPromise,
