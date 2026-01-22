@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfDay, endOfDay, set } from 'date-fns';
 import { revalidatePath } from 'next/cache';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
@@ -109,56 +109,64 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     
-    const startOfDay = new Date(`${date}T00:00:00.000Z`);
-    const endOfDay = new Date(`${date}T23:59:59.999Z`);
-    
-    const { data: existingRecords, error: fetchError } = await supabase
-        .from('frequencia')
-        .select('id, source')
-        .eq('inscricao_id', inscricaoId)
-        .eq('formacao_id', formacaoId)
-        .eq('periodo', periodo)
-        .gte('registered_at', startOfDay.toISOString())
-        .lte('registered_at', endOfDay.toISOString());
+    try {
+        const day = parseISO(date);
+        const startOfQueryDay = startOfDay(day);
+        const endOfQueryDay = endOfDay(day);
+        
+        const { data: existingRecords, error: fetchError } = await supabase
+            .from('frequencia')
+            .select('id, source')
+            .eq('inscricao_id', inscricaoId)
+            .eq('formacao_id', formacaoId)
+            .eq('periodo', periodo)
+            .gte('registered_at', startOfQueryDay.toISOString())
+            .lte('registered_at', endOfQueryDay.toISOString());
 
-    if (fetchError) {
-        console.error('Error fetching presence:', fetchError);
-        return { error: 'Erro ao verificar presença existente.' };
-    }
+        if (fetchError) {
+            console.error('Error fetching presence:', fetchError);
+            return { error: 'Erro ao verificar presença existente.' };
+        }
 
-    if (existingRecords && existingRecords.length > 0) {
-        const existing = existingRecords[0];
-        if (existing.source === 'MANUAL') {
-            const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
-            if (deleteError) {
-                return { error: 'Erro ao remover presença manual.' };
+        if (existingRecords && existingRecords.length > 0) {
+            const existing = existingRecords[0];
+            if (existing.source === 'MANUAL') {
+                const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
+                if (deleteError) {
+                    return { error: 'Erro ao remover presença manual.' };
+                }
+                revalidatePath(`/relatorios/${formacaoId}`);
+                return { success: true, status: 'REMOVED' };
+            } else {
+                return { error: 'Não é possível remover uma presença registrada automaticamente.' };
+            }
+        } else {
+            const { data: inscricao } = await supabase.from('inscricoes').select('cpf').eq('id', inscricaoId).single();
+            if (!inscricao) {
+                return { error: 'Inscrição não encontrada.' };
+            }
+            
+            const registrationTime = set(day, { hours: 12, minutes: 0, seconds: 0 });
+
+            const { error: insertError } = await supabase.from('frequencia').insert({
+                formacao_id: formacaoId,
+                inscricao_id: inscricaoId,
+                cpf: inscricao.cpf,
+                periodo: periodo,
+                registered_at: registrationTime.toISOString(),
+                source: 'MANUAL',
+            });
+
+            if (insertError) {
+                console.error('Error inserting manual presence:', insertError);
+                return { error: 'Erro ao adicionar presença manual.' };
             }
             revalidatePath(`/relatorios/${formacaoId}`);
-            return { success: true, status: 'REMOVED' };
-        } else {
-            return { error: 'Não é possível remover uma presença registrada automaticamente.' };
+            return { success: true, status: 'ADDED' };
         }
-    } else {
-        const { data: inscricao } = await supabase.from('inscricoes').select('cpf').eq('id', inscricaoId).single();
-        if (!inscricao) {
-            return { error: 'Inscrição não encontrada.' };
-        }
-
-        const { error: insertError } = await supabase.from('frequencia').insert({
-            formacao_id: formacaoId,
-            inscricao_id: inscricaoId,
-            cpf: inscricao.cpf,
-            periodo: periodo,
-            registered_at: new Date(`${date}T12:00:00Z`).toISOString(),
-            source: 'MANUAL',
-        });
-
-        if (insertError) {
-            console.error('Error inserting manual presence:', insertError);
-            return { error: 'Erro ao adicionar presença manual.' };
-        }
-        revalidatePath(`/relatorios/${formacaoId}`);
-        return { success: true, status: 'ADDED' };
+    } catch(e) {
+        console.error('An unexpected error occurred in setManualPresence:', e);
+        return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
 }
 
