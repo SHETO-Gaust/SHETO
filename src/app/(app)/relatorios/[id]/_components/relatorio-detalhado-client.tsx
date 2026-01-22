@@ -232,8 +232,18 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
                 return;
             }
             setTogglingPresence(loadingKey);
+            
+            console.log('[CLIENT] Chamando setManualPresence com:', {
+                participantId,
+                formacaoId: formacao.id,
+                dateFilter,
+                periodo
+            });
+
             const result = await setManualPresence(participantId, formacao.id, dateFilter, periodo);
             
+            console.log('[CLIENT] Resultado de setManualPresence:', result);
+
             if (result.error) {
                 toast({ title: "Erro", description: result.error, variant: 'destructive' });
             } else {
