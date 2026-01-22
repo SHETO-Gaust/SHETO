@@ -124,7 +124,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .lte('registered_at', endOfQueryDay.toISOString());
 
         if (fetchError) {
-            console.error('[SERVER ACTION ERROR] Falha ao buscar presença:', fetchError);
             return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
         }
 
@@ -133,7 +132,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             if (existing.source === 'MANUAL') {
                 const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
                 if (deleteError) {
-                    console.error('[SERVER ACTION ERROR] Falha ao remover presença:', deleteError);
                     return { error: 'Erro ao remover presença manual.' };
                 }
                 revalidatePath(`/relatorios/${formacaoId}`);
@@ -144,7 +142,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
         } else {
             const { data: inscricao } = await supabase.from('inscricoes').select('cpf').eq('id', inscricaoId).single();
             if (!inscricao) {
-                console.error('[SERVER ACTION ERROR] Inscrição não encontrada para ID:', inscricaoId);
                 return { error: 'Inscrição não encontrada.' };
             }
             
@@ -160,14 +157,12 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             });
 
             if (insertError) {
-                console.error('[SERVER ACTION ERROR] Falha ao inserir presença:', insertError);
                 return { error: 'Erro ao adicionar presença manual.' };
             }
             revalidatePath(`/relatorios/${formacaoId}`);
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
-        console.error('[SERVER ACTION ERROR] Erro inesperado em setManualPresence:', e.message);
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
 }
