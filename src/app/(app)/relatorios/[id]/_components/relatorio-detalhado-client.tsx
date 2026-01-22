@@ -61,10 +61,22 @@ const RankingChart = ({ data, dataKey, unit, title, description }: { data: any[]
 
 
 export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDetalhadoClientProps) {
+    const dateOptions = useMemo(() =>
+        (formacao.dates || [])
+            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            .map((d: any) => {
+                const date = parseISO(d.date);
+                return {
+                    value: format(date, 'yyyy-MM-dd'),
+                    label: format(date, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+                };
+            })
+    , [formacao.dates]);
+
     const [searchTerm, setSearchTerm] = useState('');
     const [presenceFilter, setPresenceFilter] = useState('todos'); // todos, manha, tarde, ambos, nenhum
     const [sourceFilter, setSourceFilter] = useState('todos'); // todos, inscrito, avulso
-    const [dateFilter, setDateFilter] = useState('todos');
+    const [dateFilter, setDateFilter] = useState(dateOptions[0]?.value || '');
     const [currentPage, setCurrentPage] = useState(1);
     const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
     
@@ -88,13 +100,13 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         setSearchTerm(formattedCpf);
     };
 
-    const { filteredParticipants, dateOptions } = useMemo(() => {
-        const filtered = participants.filter(p => {
+    const filteredParticipants = useMemo(() => {
+        return participants.filter(p => {
             const search = searchTerm.toLowerCase();
             const matchesSearch = p.nome_completo.toLowerCase().includes(search) || p.cpf.includes(searchTerm);
 
-            const hasMorningPresence = dateFilter === 'todos' ? p.presencas.some(pr => pr.matutino) : !!p.presencas.find(pr => pr.date === dateFilter)?.matutino;
-            const hasAfternoonPresence = dateFilter === 'todos' ? p.presencas.some(pr => pr.vespertino) : !!p.presencas.find(pr => pr.date === dateFilter)?.vespertino;
+            const hasMorningPresence = !!p.presencas.find(pr => pr.date === dateFilter)?.matutino;
+            const hasAfternoonPresence = !!p.presencas.find(pr => pr.date === dateFilter)?.vespertino;
             
             let matchesPresence = true;
             if (presenceFilter === 'manha') matchesPresence = hasMorningPresence;
@@ -109,22 +121,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             return matchesSearch && matchesPresence && matchesSource;
         });
 
-        const dateOpts = [
-            { value: 'todos', label: 'Todos os Dias' },
-            ...(formacao.dates || [])
-                .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                .map((d: any) => {
-                    const date = parseISO(d.date);
-                    return {
-                        value: format(date, 'yyyy-MM-dd'),
-                        label: format(date, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
-                    };
-                })
-        ];
-
-        return { filteredParticipants: filtered, dateOptions: dateOpts };
-
-    }, [participants, searchTerm, presenceFilter, sourceFilter, dateFilter, formacao.dates]);
+    }, [participants, searchTerm, presenceFilter, sourceFilter, dateFilter]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -137,7 +134,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         const paginated = filteredParticipants.slice(startIndex, endIndex);
 
         const participantsForView = paginated.map(p => {
-             const dailyPresence = (dateFilter !== 'todos' && p.presencas.find(pr => pr.date === dateFilter)) || null;
+             const dailyPresence = (dateFilter && p.presencas.find(pr => pr.date === dateFilter)) || null;
             let regional = p.dados?.regional || 'N/A';
             if (regional === 'PARAÍSO DO TOCANTINS') {
                 regional = 'PARAÍSO';
@@ -180,9 +177,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             }
             const regionalData = statsByRegional.get(regional)!;
             
-            const isPresentOnFilteredDay = dateFilter === 'todos' 
-                ? p.presencas.some(pr => pr.matutino || pr.vespertino)
-                : p.presencas.some(pr => pr.date === dateFilter && (pr.matutino || pr.vespertino));
+            const isPresentOnFilteredDay = p.presencas.some(pr => pr.date === dateFilter && (pr.matutino || pr.vespertino));
 
     
             if (p.fonte !== 'AVULSO') {
@@ -225,7 +220,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         periodo: 'MAT' | 'VESP', 
         presence: { registered_at: string; source: string; } | null 
     }) => {
-        const isEditable = dateFilter !== 'todos';
+        const isEditable = !!dateFilter;
         const loadingKey = `${participantId}-${periodo}-${dateFilter}`;
         const isLoading = togglingPresence === loadingKey;
 
