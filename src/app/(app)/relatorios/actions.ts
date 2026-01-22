@@ -125,7 +125,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
 
         if (fetchError) {
             console.error('[SERVER ACTION ERROR] Falha ao buscar presença:', fetchError);
-            return { error: 'Erro ao verificar presença existente.' };
+            return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
         }
 
         if (existingRecords && existingRecords.length > 0) {
