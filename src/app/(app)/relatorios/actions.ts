@@ -108,15 +108,11 @@ export async function getSingleParticipacaoSummary(formacaoId: string): Promise<
 export async function setManualPresence(inscricaoId: string, formacaoId: string, date: string, periodo: 'MAT' | 'VESP') {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
-
-    console.log('[SERVER ACTION] setManualPresence - Início', { inscricaoId, formacaoId, date, periodo });
     
     try {
-        const day = parseISO(date);
+        const day = parseISO(`${date}T12:00:00.000Z`); // Explicitly parse as UTC noon to avoid timezone edge cases.
         const startOfQueryDay = startOfDay(day);
         const endOfQueryDay = endOfDay(day);
-
-        console.log('[SERVER ACTION] Querying presence between:', startOfQueryDay.toISOString(), 'and', endOfQueryDay.toISOString());
         
         const { data: existingRecords, error: fetchError } = await supabase
             .from('frequencia')
@@ -132,26 +128,20 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             return { error: 'Erro ao verificar presença existente.' };
         }
 
-        console.log('[SERVER ACTION] Registros de presença encontrados:', existingRecords);
-
         if (existingRecords && existingRecords.length > 0) {
             const existing = existingRecords[0];
             if (existing.source === 'MANUAL') {
-                console.log('[SERVER ACTION] Removendo presença manual, ID:', existing.id);
                 const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
                 if (deleteError) {
                     console.error('[SERVER ACTION ERROR] Falha ao remover presença:', deleteError);
                     return { error: 'Erro ao remover presença manual.' };
                 }
                 revalidatePath(`/relatorios/${formacaoId}`);
-                console.log('[SERVER ACTION] Presença manual removida com sucesso.');
                 return { success: true, status: 'REMOVED' };
             } else {
-                console.log('[SERVER ACTION] Tentativa de remover presença automática bloqueada.');
                 return { error: 'Não é possível remover uma presença registrada automaticamente.' };
             }
         } else {
-            console.log('[SERVER ACTION] Nenhum registro encontrado. Inserindo presença manual.');
             const { data: inscricao } = await supabase.from('inscricoes').select('cpf').eq('id', inscricaoId).single();
             if (!inscricao) {
                 console.error('[SERVER ACTION ERROR] Inscrição não encontrada para ID:', inscricaoId);
@@ -159,8 +149,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             }
             
             const registrationTime = set(day, { hours: 12, minutes: 0, seconds: 0 });
-
-            console.log('[SERVER ACTION] Inserindo registro com os dados:', { formacao_id: formacaoId, inscricao_id: inscricaoId, cpf: inscricao.cpf, periodo: periodo, source: 'MANUAL', registered_at: registrationTime.toISOString() });
 
             const { error: insertError } = await supabase.from('frequencia').insert({
                 formacao_id: formacaoId,
@@ -176,7 +164,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 return { error: 'Erro ao adicionar presença manual.' };
             }
             revalidatePath(`/relatorios/${formacaoId}`);
-            console.log('[SERVER ACTION] Presença manual inserida com sucesso.');
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
