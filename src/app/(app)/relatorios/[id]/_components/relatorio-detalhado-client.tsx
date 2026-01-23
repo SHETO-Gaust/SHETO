@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -26,13 +25,13 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, RefreshCw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
 import type { DetailedParticipant } from '../../actions';
-import { setManualPresence } from '../../actions';
+import { setManualPresence, getPresenceForParticipants } from '../../actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,7 +49,7 @@ import { Label } from '@/components/ui/label';
 
 type PresenceData = {
   registered_at: string;
-  source: boolean; // true for AUTOMATIC, false for MANUAL
+  source: boolean;
 };
 
 type RelatorioDetalhadoClientProps = {
@@ -60,20 +59,10 @@ type RelatorioDetalhadoClientProps = {
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"];
 const saoPauloTimeZone = 'America/Sao_Paulo';
+const ITEMS_PER_PAGE = 25;
 
-const RankingChart = ({
-  data,
-  dataKey,
-  unit,
-  title,
-  description
-}: {
-  data: any[];
-  dataKey: string;
-  unit: string;
-  title: string;
-  description: string;
-}) => (
+
+const RankingChart = ({ data, dataKey, unit, title, description }: { data: any[]; dataKey: string; unit: string; title: string; description: string; }) => (
   <Card>
     <CardHeader>
       <CardTitle className="truncate">{title}</CardTitle>
@@ -86,10 +75,7 @@ const RankingChart = ({
             <BarChart data={data} layout="vertical" margin={{ left: 120, right: 30 }}>
               <XAxis type="number" dataKey={dataKey} unit={unit} tick={{ fontSize: 12 }} />
               <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} interval={0} />
-              <Tooltip
-                cursor={{ fill: 'hsl(var(--secondary))' }}
-                content={<ChartTooltipContent />}
-              />
+              <Tooltip cursor={{ fill: 'hsl(var(--secondary))' }} content={<ChartTooltipContent />} />
               <Bar dataKey={dataKey} radius={[0, 4, 4, 0]}>
                 {data.map((_, index) => (
                   <Cell key={index} fill={COLORS[index % COLORS.length]} />
@@ -107,11 +93,13 @@ const RankingChart = ({
   </Card>
 );
 
-export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDetalhadoClientProps) {
-  const router = useRouter();
+export function RelatorioDetalhadoClient({ formacao, participants: initialParticipants }: RelatorioDetalhadoClientProps) {
   const { toast } = useToast();
-
-  console.log('[CLIENT-LOG-START] Raw data received by component:', { formacao, participants });
+  
+  const [allParticipants] = useState(initialParticipants);
+  const [presenceCache, setPresenceCache] = useState<Record<string, DetailedParticipant['presencas']>>({});
+  const [loadingPresence, setLoadingPresence] = useState(false);
+  const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
 
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
@@ -125,25 +113,30 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       }),
     [formacao.dates]
   );
-
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [presenceFilter, setPresenceFilter] = useState('todos');
   const [sourceFilter, setSourceFilter] = useState('todos');
   const [dateFilter, setDateFilter] = useState(dateOptions[0]?.value || '');
   const [currentPage, setCurrentPage] = useState(1);
-  const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
   
-  const ITEMS_PER_PAGE = 25;
-
   const filteredParticipants = useMemo(() => {
-    return participants.filter(p => {
+    return allParticipants.filter(p => {
       const search = searchTerm.toLowerCase();
       const matchesSearch =
         p.nome_completo.toLowerCase().includes(search) ||
         p.cpf.includes(searchTerm);
 
-      const daily = p.presencas.find(pr => pr.date === dateFilter);
-
+      let matchesSource = true;
+      if (sourceFilter === 'inscrito') matchesSource = p.fonte !== 'AVULSO';
+      else if (sourceFilter === 'avulso') matchesSource = p.fonte === 'AVULSO';
+      
+      const presences = presenceCache[p.id];
+      if (presenceFilter !== 'todos' && !presences) {
+        return matchesSearch && matchesSource;
+      }
+      
+      const daily = presences?.find(pr => pr.date === dateFilter);
       const hasMorning = !!daily?.matutino;
       const hasAfternoon = !!daily?.vespertino;
 
@@ -153,53 +146,61 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       else if (presenceFilter === 'ambos') matchesPresence = hasMorning && hasAfternoon;
       else if (presenceFilter === 'nenhum') matchesPresence = !hasMorning && !hasAfternoon;
 
-      let matchesSource = true;
-      if (sourceFilter === 'inscrito') matchesSource = p.fonte !== 'AVULSO';
-      else if (sourceFilter === 'avulso') matchesSource = p.fonte === 'AVULSO';
-
-      return matchesSearch && matchesPresence && matchesSource;
+      return matchesSearch && matchesSource && matchesPresence;
     });
-  }, [participants, searchTerm, presenceFilter, sourceFilter, dateFilter]);
+  }, [allParticipants, searchTerm, sourceFilter, presenceFilter, presenceCache, dateFilter]);
+
+  useEffect(() => {
+    const fetchPageData = async () => {
+      const start = (currentPage - 1) * ITEMS_PER_PAGE;
+      const end = start + ITEMS_PER_PAGE;
+      const participantsOnPage = filteredParticipants.slice(start, end);
+
+      const idsToFetch = participantsOnPage
+        .map(p => p.id)
+        .filter(id => !presenceCache[id]);
+
+      if (idsToFetch.length > 0) {
+        setLoadingPresence(true);
+        try {
+          const newPresenceData = await getPresenceForParticipants(formacao.id, idsToFetch);
+          setPresenceCache(prevCache => ({ ...prevCache, ...newPresenceData }));
+        } catch (error) {
+          toast({ title: "Erro ao carregar presenças.", variant: "destructive" });
+        } finally {
+          setLoadingPresence(false);
+        }
+      }
+    };
+    fetchPageData();
+  }, [currentPage, filteredParticipants, formacao.id, presenceCache, toast]);
 
   useEffect(() => {
     setCurrentPage(1);
-     console.log('[CLIENT-LOG-FILTERS] Filters updated:', { dateFilter, presenceFilter, sourceFilter, searchTerm, currentPage });
   }, [searchTerm, presenceFilter, sourceFilter, dateFilter]);
 
   const { paginatedParticipants, totalPages } = useMemo(() => {
     const totalPages = Math.ceil(filteredParticipants.length / ITEMS_PER_PAGE);
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    const paginated = filteredParticipants.slice(start, start + ITEMS_PER_PAGE);
+    const paginatedBase = filteredParticipants.slice(start, start + ITEMS_PER_PAGE);
 
-    const participantsForView = paginated.map(p => {
-        console.log(`[CLIENT-LOG-PROCESSING] Processing participant: ${p.nome_completo} (CPF: ${p.cpf}) for date: ${dateFilter}`);
-        console.log(`[CLIENT-LOG-PROCESSING] Full presences array for participant:`, p.presencas);
-        
-        const daily = p.presencas.find(pr => pr.date === dateFilter);
-        
-        console.log(`[CLIENT-LOG-PROCESSING] Found daily presence object for date ${dateFilter}:`, daily);
-
+    const participantsForView = paginatedBase.map(p => {
+        const presences = presenceCache[p.id];
+        const daily = presences?.find(pr => pr.date === dateFilter);
         let regional = p.dados?.regional || 'N/A';
         if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
 
-        const finalParticipantObject = {
-            ...p,
-            regional,
-            presenca_matutina: daily?.matutino ?? null,
-            presenca_vespertina: daily?.vespertino ?? null,
-        };
-
-        console.log('[CLIENT-LOG-PROCESSING] Final object for rendering:', finalParticipantObject);
-        return finalParticipantObject;
+        return { ...p, regional, presenca_matutina: daily?.matutino ?? null, presenca_vespertina: daily?.vespertino ?? null };
     });
     
     return { paginatedParticipants: participantsForView, totalPages };
-  }, [filteredParticipants, currentPage, dateFilter]);
+  }, [filteredParticipants, currentPage, dateFilter, presenceCache]);
 
   const regionalStats = useMemo(() => {
     const stats: { [key: string]: { inscritos: number; presentes: number; avulsos: number } } = {};
+    const participantsWithPresence = filteredParticipants.filter(p => presenceCache[p.id]);
 
-    filteredParticipants.forEach(p => {
+    participantsWithPresence.forEach(p => {
       let regional = p.dados?.regional || 'N/A';
       if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
       
@@ -207,129 +208,68 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         stats[regional] = { inscritos: 0, presentes: 0, avulsos: 0 };
       }
 
-      const daily = p.presencas.find(pr => pr.date === dateFilter);
+      const daily = presenceCache[p.id]?.find(pr => pr.date === dateFilter);
       const isPresente = !!daily?.matutino || !!daily?.vespertino;
 
       if (p.fonte === 'AVULSO') {
-        if (isPresente) {
-          stats[regional].avulsos++;
-        }
-      } else { // 'Inscrito' or other
+        if (isPresente) stats[regional].avulsos++;
+      } else {
         stats[regional].inscritos++;
-        if (isPresente) {
-          stats[regional].presentes++;
-        }
+        if (isPresente) stats[regional].presentes++;
       }
     });
 
-    const commitmentData = Object.entries(stats)
-      .map(([name, data]) => ({
-        name,
-        taxaComprometimento: data.inscritos > 0 ? (data.presentes / data.inscritos) * 100 : 0,
-      }))
-      .sort((a, b) => b.taxaComprometimento - a.taxaComprometimento)
-      .slice(0, 10);
-
-    const avulsosData = Object.entries(stats)
-      .map(([name, data]) => ({
-        name,
-        avulsos: data.avulsos,
-      }))
-      .filter(item => item.avulsos > 0)
-      .sort((a, b) => b.avulsos - a.avulsos)
-      .slice(0, 10);
+    const commitmentData = Object.entries(stats).map(([name, data]) => ({ name, taxaComprometimento: data.inscritos > 0 ? (data.presentes / data.inscritos) * 100 : 0 })).sort((a, b) => b.taxaComprometimento - a.taxaComprometimento).slice(0, 10);
+    const avulsosData = Object.entries(stats).map(([name, data]) => ({ name, avulsos: data.avulsos })).filter(item => item.avulsos > 0).sort((a, b) => b.avulsos - a.avulsos).slice(0, 10);
       
     return { commitmentData, avulsosData };
-  }, [filteredParticipants, dateFilter]);
+  }, [filteredParticipants, dateFilter, presenceCache]);
 
 
-  const PresenceStatus = ({
-    participantId,
-    periodo,
-    presence
-  }: {
-    participantId: string;
-    periodo: 'MAT' | 'VESP';
-    presence: PresenceData | null;
-  }) => {
+  const PresenceStatus = ({ participantId, periodo, presence }: { participantId: string; periodo: 'MAT' | 'VESP'; presence: PresenceData | null; }) => {
     const loadingKey = `${participantId}-${periodo}-${dateFilter}`;
     const isLoading = togglingPresence === loadingKey;
-  
-    // source: false is MANUAL
-    // source: true is AUTOMATIC
     const isManual = presence?.source === false;
   
-      const timestamp = useMemo(() => {
-        if (!presence?.registered_at) return null;
-      
-        return toZonedTime(new Date(presence.registered_at), saoPauloTimeZone).toLocaleTimeString('pt-BR');
-      }, [presence?.registered_at]);      
+    const timestamp = useMemo(() => {
+      if (!presence?.registered_at) return null;
+      return toZonedTime(new Date(presence.registered_at), saoPauloTimeZone).toLocaleTimeString('pt-BR');
+    }, [presence?.registered_at]);      
   
     const handleToggle = async () => {
-      // Don't allow removing automatic presence
       if (presence && !isManual) {
-        toast({
-          title: 'Ação não permitida',
-          description: 'Presenças automáticas não podem ser removidas.',
-        });
+        toast({ title: 'Ação não permitida', description: 'Presenças automáticas não podem ser removidas.' });
         return;
       }
   
       setTogglingPresence(loadingKey);
-      
-      const result = await setManualPresence(
-        participantId,
-        formacao.id,
-        dateFilter,
-        periodo
-      );
+      const result = await setManualPresence(participantId, formacao.id, dateFilter, periodo);
   
       if (result?.error) {
-        toast({
-          title: 'Erro',
-          description: result.error,
-          variant: 'destructive'
-        });
+        toast({ title: 'Erro', description: result.error, variant: 'destructive' });
       } else {
-        toast({
-          title: 'Sucesso',
-          description: presence
-            ? 'Presença removida.'
-            : 'Presença adicionada.',
+        toast({ title: 'Sucesso', description: presence ? 'Presença removida.' : 'Presença adicionada.' });
+        setPresenceCache(prevCache => {
+          const newCache = { ...prevCache };
+          delete newCache[participantId];
+          return newCache;
         });
-        router.refresh();
       }
-  
       setTogglingPresence(null);
     };
   
-    if (isLoading) {
-      return <Loader2 className="h-5 w-5 animate-spin" />;
-    }
+    if (isLoading) return <Loader2 className="h-5 w-5 animate-spin" />;
+    if (!presence) return <button onClick={handleToggle}><XCircle className="h-5 w-5 text-red-500" /></button>;
   
-    // ❌ Sem presença
-    if (!presence) {
-      return (
-        <button onClick={handleToggle}>
-          <XCircle className="h-5 w-5 text-red-500" />
-        </button>
-      );
-    }
-  
-    // ✔ Presença MANUAL (clicável)
     if (isManual) {
       return (
-        <button
-          onClick={handleToggle}
-          className="flex items-center justify-center gap-2 text-orange-500"
-        >
+        <button onClick={handleToggle} className="flex items-center justify-center gap-2 text-orange-500">
           <CheckCircle className="h-5 w-5" />
           {timestamp && <span className="text-xs">{timestamp}</span>}
         </button>
       );
     }
   
-    // ✔ Presença AUTOMÁTICA (não clicável)
     return (
       <div className="flex items-center justify-center gap-2 text-green-600">
         <CheckCircle className="h-5 w-5" />
@@ -343,90 +283,41 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         <Card>
             <CardHeader>
                 <CardTitle>Relatório Detalhado de Participação</CardTitle>
-                <CardDescription>
-                    Análise de presença para: <span className="font-semibold">{formacao.name}</span>
-                </CardDescription>
+                <CardDescription>Análise de presença para: <span className="font-semibold">{formacao.name}</span></CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="flex flex-wrap items-end gap-4">
-                    <div className="flex-1 min-w-[200px]">
-                        <Label htmlFor="date-filter">Data</Label>
-                        <Select value={dateFilter} onValueChange={setDateFilter}>
-                            <SelectTrigger id="date-filter"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                {dateOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="flex-1 min-w-[250px]">
-                        <Label htmlFor="search">Buscar por Nome ou CPF</Label>
-                        <Input id="search" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Digite para buscar..." />
-                    </div>
-                    <div className="flex-1 min-w-[150px]">
-                        <Label htmlFor="presence-filter">Presença</Label>
-                        <Select value={presenceFilter} onValueChange={setPresenceFilter}>
-                            <SelectTrigger id="presence-filter"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="todos">Todos</SelectItem>
-                                <SelectItem value="manha">Só Manhã</SelectItem>
-                                <SelectItem value="tarde">Só Tarde</SelectItem>
-                                <SelectItem value="ambos">Ambos</SelectItem>
-                                <SelectItem value="nenhum">Nenhuma</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="flex-1 min-w-[150px]">
-                        <Label htmlFor="source-filter">Origem</Label>
-                        <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                            <SelectTrigger id="source-filter"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="todos">Todos</SelectItem>
-                                <SelectItem value="inscrito">Inscrito</SelectItem>
-                                <SelectItem value="avulso">Avulso</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    <div className="flex-1 min-w-[200px]"><Label htmlFor="date-filter">Data</Label><Select value={dateFilter} onValueChange={setDateFilter}><SelectTrigger id="date-filter"><SelectValue /></SelectTrigger><SelectContent>{dateOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="flex-1 min-w-[250px]"><Label htmlFor="search">Buscar por Nome ou CPF</Label><Input id="search" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Digite para buscar..." /></div>
+                    <div className="flex-1 min-w-[150px]"><Label htmlFor="presence-filter">Presença</Label><Select value={presenceFilter} onValueChange={setPresenceFilter}><SelectTrigger id="presence-filter"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="manha">Só Manhã</SelectItem><SelectItem value="tarde">Só Tarde</SelectItem><SelectItem value="ambos">Ambos</SelectItem><SelectItem value="nenhum">Nenhuma</SelectItem></SelectContent></Select></div>
+                    <div className="flex-1 min-w-[150px]"><Label htmlFor="source-filter">Origem</Label><Select value={sourceFilter} onValueChange={setSourceFilter}><SelectTrigger id="source-filter"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="inscrito">Inscrito</SelectItem><SelectItem value="avulso">Avulso</SelectItem></SelectContent></Select></div>
                 </div>
             </CardContent>
         </Card>
 
         <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
                 <CardTitle>Participantes</CardTitle>
-                <CardDescription>
-                    Lista de participantes com detalhes de presença.
-                </CardDescription>
+                <CardDescription>Lista de participantes com detalhes de presença.</CardDescription>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setPresenceCache({})} disabled={loadingPresence}><RefreshCw className={`h-4 w-4 ${loadingPresence ? 'animate-spin' : ''}`} /></Button>
             </CardHeader>
             <CardContent>
                 <div className="rounded-md border">
                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Nome</TableHead>
-                                <TableHead>CPF</TableHead>
-                                <TableHead>Regional</TableHead>
-                                <TableHead className="text-center">Presença Manhã</TableHead>
-                                <TableHead className="text-center">Presença Tarde</TableHead>
-                                <TableHead>Fonte</TableHead>
-                            </TableRow>
-                        </TableHeader>
+                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>CPF</TableHead><TableHead>Regional</TableHead><TableHead className="text-center">Presença Manhã</TableHead><TableHead className="text-center">Presença Tarde</TableHead><TableHead>Fonte</TableHead></TableRow></TableHeader>
                         <TableBody>
-                            {paginatedParticipants.length > 0 ? paginatedParticipants.map(p => (
+                            {loadingPresence && paginatedParticipants.length === 0 ? (
+                                <TableRow><TableCell colSpan={6} className="text-center h-24"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
+                            ) : paginatedParticipants.length > 0 ? paginatedParticipants.map(p => (
                                 <TableRow key={p.id}>
                                     <TableCell className="font-medium">{p.nome_completo}</TableCell>
                                     <TableCell>{p.cpf}</TableCell>
                                     <TableCell>{p.regional}</TableCell>
-                                    <TableCell className="text-center">
-                                        <PresenceStatus participantId={p.id} periodo="MAT" presence={p.presenca_matutina} />
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        <PresenceStatus participantId={p.id} periodo="VESP" presence={p.presenca_vespertina} />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant={p.fonte === 'AVULSO' ? 'secondary' : 'default'}>
-                                            {p.fonte}
-                                        </Badge>
-                                    </TableCell>
+                                    <TableCell className="text-center">{!presenceCache[p.id] || loadingPresence ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : <PresenceStatus participantId={p.id} periodo="MAT" presence={p.presenca_matutina} />}</TableCell>
+                                    <TableCell className="text-center">{!presenceCache[p.id] || loadingPresence ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : <PresenceStatus participantId={p.id} periodo="VESP" presence={p.presenca_vespertina} />}</TableCell>
+                                    <TableCell><Badge variant={p.fonte === 'AVULSO' ? 'secondary' : 'default'}>{p.fonte}</Badge></TableCell>
                                 </TableRow>
                             )) : (
                                 <TableRow><TableCell colSpan={6} className="text-center h-24">Nenhum participante encontrado para os filtros selecionados.</TableCell></TableRow>
@@ -437,12 +328,10 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             </CardContent>
             <CardFooter>
                  <div className="flex items-center justify-between w-full">
-                    <span className="text-sm text-muted-foreground">
-                        Mostrando {Math.min(filteredParticipants.length, (currentPage - 1) * ITEMS_PER_PAGE + 1)} a {Math.min(filteredParticipants.length, currentPage * ITEMS_PER_PAGE)} de {filteredParticipants.length}
-                    </span>
+                    <span className="text-sm text-muted-foreground">Mostrando {paginatedParticipants.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} a {Math.min(filteredParticipants.length, currentPage * ITEMS_PER_PAGE)} de {filteredParticipants.length}</span>
                     <div className="flex gap-2">
-                        <Button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Anterior</Button>
-                        <Button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Próximo</Button>
+                        <Button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || loadingPresence}>Anterior</Button>
+                        <Button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || loadingPresence}>Próximo</Button>
                     </div>
                 </div>
             </CardFooter>
@@ -451,22 +340,11 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         <Card className="mt-6">
             <CardHeader>
                 <CardTitle>Análise de Dados</CardTitle>
+                <CardDescription>Gráficos baseados nos {filteredParticipants.filter(p=>presenceCache[p.id]).length} participantes com dados de presença carregados.</CardDescription>
             </CardHeader>
             <CardContent className="grid md:grid-cols-1 lg:grid-cols-2 gap-6">
-                <RankingChart
-                    data={regionalStats.commitmentData}
-                    dataKey="taxaComprometimento"
-                    unit="%"
-                    title="Taxa de Comprometimento (Inscritos)"
-                    description="Este gráfico mede a eficiência de cada regional em mobilizar seus próprios servidores. Ele calcula a porcentagem de participantes que se inscreveram previamente na formação e que efetivamente registraram presença."
-                />
-                <RankingChart
-                    data={regionalStats.avulsosData}
-                    dataKey="avulsos"
-                    unit=""
-                    title="Participantes Avulsos"
-                    description="Este gráfico mostra o número total de participantes que compareceram à formação sem terem feito uma inscrição prévia. Este dado é útil para medir o interesse espontâneo e o alcance que a formação gerou em cada localidade."
-                />
+                <RankingChart data={regionalStats.commitmentData} dataKey="taxaComprometimento" unit="%" title="Taxa de Comprometimento (Inscritos)" description="Percentual de inscritos que registraram presença, por regional."/>
+                <RankingChart data={regionalStats.avulsosData} dataKey="avulsos" unit="" title="Participantes Avulsos" description="Total de participantes não inscritos que registraram presença, por regional."/>
             </CardContent>
         </Card>
     </div>

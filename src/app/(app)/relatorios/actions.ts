@@ -5,31 +5,9 @@ import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { startOfDay, endOfDay, parse } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 
-const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
-    const inscricaoFonteMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
-    const uniqueInscritosPresentes = new Set<string>();
-    const uniqueAvulsosPresentes = new Set<string>();
-
-    frequencias.forEach(freq => {
-        const fonte = inscricaoFonteMap.get(freq.inscricao_id);
-        if (fonte === 'AVULSO') {
-            uniqueAvulsosPresentes.add(freq.inscricao_id);
-        } else {
-            // Considera presente como 'inscrito' se não for 'AVULSO' ou se não houver fonte (legado)
-            uniqueInscritosPresentes.add(freq.inscricao_id);
-        }
-    });
-    
-    const inscritosCount = uniqueInscritosPresentes.size;
-    const avulsosCount = uniqueAvulsosPresentes.size;
-
-    return {
-        total: inscritosCount + avulsosCount,
-        inscritos: inscritosCount,
-        avulsos: avulsosCount,
-    };
-};
+const saoPauloTimeZone = 'America/Sao_Paulo';
 
 export async function getFormacoesForRelatorios(): Promise<Formacao[]> {
     const cookieStore = cookies();
@@ -71,7 +49,6 @@ export async function getSingleParticipacaoSummary(formacaoId: string): Promise<
     const inscricoes = (inscricoesResult.data as Inscricao[]) || [];
     const todasFrequencias = (frequenciasResult.data as Frequencia[]) || [];
     
-    // Processamento para contar pessoas únicas
     const processUnique = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
         const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
         const uniqueInscritos = new Set<string>();
@@ -105,14 +82,13 @@ export async function getSingleParticipacaoSummary(formacaoId: string): Promise<
     };
 }
 
-const saoPauloTimeZone = 'America/Sao_Paulo';
 
 export async function setManualPresence(inscricaoId: string, formacaoId: string, date: string, periodo: 'MAT' | 'VESP') {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDate = parse(date, 'yyyy-MM-dd', new Date());
+        const targetDate = toZonedTime(parse(date, 'yyyy-MM-dd', new Date()), saoPauloTimeZone);
         const startOfQueryDay = startOfDay(targetDate);
         const endOfQueryDay = endOfDay(targetDate);
 
@@ -138,7 +114,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                      console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
                     return { error: `Erro ao remover presença manual: ${deleteError.message}` };
                 }
-                revalidatePath(`/relatorios/${formacaoId}`);
+                revalidatePath(`/relatorios/${formacaoId}`); 
                 return { success: true, status: 'REMOVED' };
             } else {
                  console.warn('[SERVER_ACTION_WARN] setManualPresence: Attempted to remove automatic presence.');
@@ -150,15 +126,15 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 return { error: 'Inscrição não encontrada.' };
             }
             
-            const registrationTimestamp = `${date}T12:00:00.000Z`;
+            const registrationTimestamp = new Date(date + 'T12:00:00.000Z');
 
             const { error: insertError } = await supabase.from('frequencia').insert({
                 formacao_id: formacaoId,
                 inscricao_id: inscricaoId,
                 cpf: inscricao.cpf,
                 periodo: periodo,
-                registered_at: registrationTimestamp,
-                source: false, // false for MANUAL
+                registered_at: registrationTimestamp.toISOString(),
+                source: false,
             });
 
             if (insertError) {
@@ -189,37 +165,74 @@ export type DetailedParticipant = {
     }[];
 };
 
-
 export async function getDetailedParticipationReport(formacaoId: string): Promise<{ formacao: Formacao, participants: DetailedParticipant[] } | null> {
+    console.log('[SERVER-ACTION-LOG] getDetailedParticipationReport: Fetching base data...');
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
     const formacaoPromise = supabase.from('formacoes').select('*').eq('id', formacaoId).single();
     const inscricoesPromise = supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId);
-    const frequenciasPromise = supabase.from('frequencia').select('inscricao_id, registered_at, periodo, source').eq('formacao_id', formacaoId).limit(10000);
-
-    const [formacaoResult, inscricoesResult, frequenciasResult] = await Promise.all([
+    
+    const [formacaoResult, inscricoesResult] = await Promise.all([
         formacaoPromise,
         inscricoesPromise,
-        frequenciasPromise,
     ]);
 
-    if (formacaoResult.error || inscricoesResult.error || frequenciasResult.error) {
-        console.error('[SERVER-ACTION-ERROR] Error fetching data for detailed report:', formacaoResult.error || inscricoesResult.error || frequenciasResult.error);
+    if (formacaoResult.error || inscricoesResult.error) {
+        console.error('[SERVER-ACTION-ERROR] Error fetching base data for detailed report:', formacaoResult.error || inscricoesResult.error);
         return null;
     }
 
     const formacao = formacaoResult.data as Formacao;
     const inscricoes = inscricoesResult.data as Inscricao[];
-    const frequencias = frequenciasResult.data as Frequencia[];
+
+    const participants: DetailedParticipant[] = inscricoes.map(inscricao => {
+        return {
+            id: inscricao.id,
+            nome_completo: inscricao.nome_completo,
+            cpf: inscricao.cpf,
+            email: inscricao.email,
+            fonte: inscricao.fonte || 'Inscrito',
+            dados: inscricao.dados,
+            presencas: [], 
+        };
+    });
+
+    console.log(`[SERVER-ACTION-LOG] getDetailedParticipationReport: Found ${participants.length} participants.`);
+    return { formacao, participants };
+}
+
+export async function getPresenceForParticipants(
+    formacaoId: string,
+    participantIds: string[]
+): Promise<Record<string, DetailedParticipant['presencas']>> {
+    if (!participantIds || participantIds.length === 0) {
+        return {};
+    }
+    console.log(`[SERVER-ACTION-LOG] getPresenceForParticipants: Fetching presence for ${participantIds.length} participants.`);
+
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
     
+    const { data: formacao } = await supabase.from('formacoes').select('dates').eq('id', formacaoId).single();
+    const allFormacaoDates = (formacao?.dates as any[] | undefined)?.map((d: any) => d.date.substring(0, 10)) || [];
+
+    const { data: frequencias, error } = await supabase
+        .from('frequencia')
+        .select('inscricao_id, registered_at, periodo, source')
+        .eq('formacao_id', formacaoId)
+        .in('inscricao_id', participantIds);
+
+    if (error) {
+        console.error('[SERVER-ACTION-ERROR] getPresenceForParticipants:', error);
+        return {};
+    }
+
     type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
-    console.log(`[SERVER-ACTION-LOG] Processing ${frequencias.length} raw frequency records.`);
     for (const freq of frequencias) {
         const dateKey = freq.registered_at.substring(0, 10);
-        console.log(`[SERVER-ACTION-LOG] Processing freq record: inscricao_id=${freq.inscricao_id}, registered_at=${freq.registered_at}, periodo=${freq.periodo}, Generated dateKey=${dateKey}`);
         
         if (!frequenciaMap.has(freq.inscricao_id)) {
             frequenciaMap.set(freq.inscricao_id, {});
@@ -231,44 +244,26 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
         }
         
         const presenceInfo = { registered_at: freq.registered_at, source: freq.source };
+        const cleanPeriodo = freq.periodo?.trim().toUpperCase();
 
-        if (freq.periodo === 'MAT') {
+        if (cleanPeriodo === 'MAT') {
             participantData[dateKey].matutino = presenceInfo;
-        } else if (freq.periodo === 'VESP') {
+        } else if (cleanPeriodo === 'VESP') {
             participantData[dateKey].vespertino = presenceInfo;
         }
     }
     
-    const participants: DetailedParticipant[] = inscricoes.map(inscricao => {
-        const participantFrequencias = frequenciaMap.get(inscricao.id) || {};
-        
-        const allFormacaoDates = (formacao.dates as any[] | undefined)?.map((d: any) => (d.date as string).substring(0, 10)) || [];
+    const result: Record<string, DetailedParticipant['presencas']> = {};
 
-        const presencasArray = allFormacaoDates.map(date => {
-            const presenceForDate = participantFrequencias[date];
-            return {
-                date: date,
-                matutino: presenceForDate?.matutino || null,
-                vespertino: presenceForDate?.vespertino || null,
-            };
-        });
-
-        const participantToReturn = {
-            id: inscricao.id,
-            nome_completo: inscricao.nome_completo,
-            cpf: inscricao.cpf,
-            email: inscricao.email,
-            fonte: inscricao.fonte || 'Inscrito',
-            dados: inscricao.dados,
-            presencas: presencasArray,
-        };
-        
-        if (inscricao.cpf === '012.632.973-74') {
-             console.log('[SERVER-ACTION-LOG] Final participant data for LEILANE ALVES NOGUEIRA (sample):', JSON.stringify(participantToReturn, null, 2));
-        }
-
-        return participantToReturn;
-    });
-
-    return { formacao, participants };
+    for (const participantId of participantIds) {
+        const participantFrequencias = frequenciaMap.get(participantId) || {};
+        result[participantId] = allFormacaoDates.map(date => ({
+            date: date,
+            matutino: participantFrequencias[date]?.matutino || null,
+            vespertino: participantFrequencias[date]?.vespertino || null,
+        }));
+    }
+    
+    console.log(`[SERVER-ACTION-LOG] getPresenceForParticipants: Processed and returning data for ${Object.keys(result).length} participants.`);
+    return result;
 }
