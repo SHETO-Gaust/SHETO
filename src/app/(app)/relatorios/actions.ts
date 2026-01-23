@@ -6,7 +6,7 @@ import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
-import { startOfDay, endOfDay } from 'date-fns';
+import { startOfDay, endOfDay, parse } from 'date-fns';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
     const inscricaoFonteMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
@@ -114,9 +114,9 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDateInSP = toZonedTime(new Date(date), saoPauloTimeZone);
-        const startOfQueryDay = startOfDay(targetDateInSP);
-        const endOfQueryDay = endOfDay(targetDateInSP);
+        const targetDate = parse(date, 'yyyy-MM-dd', new Date());
+        const startOfQueryDay = startOfDay(targetDate);
+        const endOfQueryDay = endOfDay(targetDate);
 
         const { data: existingRecords, error: fetchError } = await supabase
             .from('frequencia')
@@ -151,13 +151,15 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             if (!inscricao) {
                 return { error: 'Inscrição não encontrada.' };
             }
+            
+            const registrationTimestamp = `${date}T12:00:00.000Z`;
 
             const { error: insertError } = await supabase.from('frequencia').insert({
                 formacao_id: formacaoId,
                 inscricao_id: inscricaoId,
                 cpf: inscricao.cpf,
                 periodo: periodo,
-                registered_at: new Date().toISOString(),
+                registered_at: registrationTimestamp,
                 source: false, // false for MANUAL
             });
 
@@ -191,7 +193,6 @@ export type DetailedParticipant = {
 
 
 export async function getDetailedParticipationReport(formacaoId: string): Promise<{ formacao: Formacao, participants: DetailedParticipant[] } | null> {
-    console.log(`[SERVER-ACTION] getDetailedParticipationReport called for formacaoId: ${formacaoId}`);
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
@@ -214,13 +215,10 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const inscricoes = inscricoesResult.data as Inscricao[];
     const frequencias = frequenciasResult.data as Frequencia[];
     
-    console.log('[SERVER-ACTION-LOG] Raw frequencias from DB:', JSON.stringify(frequencias, null, 2));
-
     type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     for (const freq of frequencias) {
-        // console.log(`[SERVER-ACTION-LOG] Processing freq record for inscricao_id ${freq.inscricao_id}:`, JSON.stringify(freq));
         const zonedDate = toZonedTime(new Date(freq.registered_at), saoPauloTimeZone);
         const dateKey = formatInTimeZone(zonedDate, saoPauloTimeZone, 'yyyy-MM-dd');
         
@@ -242,12 +240,10 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
         }
     }
     
-    console.log('[SERVER-ACTION-LOG] Final FrequenciaMap:', JSON.stringify(Object.fromEntries(frequenciaMap), null, 2));
-    
     const participants: DetailedParticipant[] = inscricoes.map(inscricao => {
         const participantFrequencias = frequenciaMap.get(inscricao.id) || {};
         
-        const allFormacaoDates = (formacao.dates as any[] | undefined)?.map((d: any) => formatInTimeZone(toZonedTime(new Date(d.date), saoPauloTimeZone), saoPauloTimeZone, 'yyyy-MM-dd')) || [];
+        const allFormacaoDates = (formacao.dates as any[] | undefined)?.map((d: any) => (d.date as string).substring(0, 10)) || [];
 
         const presencasArray = allFormacaoDates.map(date => {
             const presenceForDate = participantFrequencias[date];
@@ -270,8 +266,6 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
 
         return participantToReturn;
     });
-    
-    console.log(`[SERVER-ACTION-LOG] Final participant data for ${participants[0]?.nome_completo} (sample):`, JSON.stringify(participants[0], null, 2));
 
     return { formacao, participants };
 }

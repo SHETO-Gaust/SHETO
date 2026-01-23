@@ -109,8 +109,6 @@ const RankingChart = ({
 );
 
 export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDetalhadoClientProps) {
-  console.log('[CLIENT] Component received participants data:', JSON.stringify(participants, null, 2));
-
   const router = useRouter();
   const { toast } = useToast();
 
@@ -119,7 +117,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d: any) => {
         const utcDate = parseISO(d.date);
-        // Correctly handle timezone by treating the date string as being in UTC, then formatting in SP time
         const zonedDate = toZonedTime(utcDate, saoPauloTimeZone);
         return {
           value: formatInTimeZone(zonedDate, saoPauloTimeZone, 'yyyy-MM-dd'),
@@ -178,11 +175,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         let regional = p.dados?.regional || 'N/A';
         if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
 
-        if (p.cpf === '012.632.973-74') {
-             console.log(`[CLIENT-LOG] Processing participant ${p.nome_completo} for date ${dateFilter}`);
-             console.log(`[CLIENT-LOG]   -> Daily presence object found:`, JSON.stringify(daily, null, 2));
-        }
-
         return {
             ...p,
             regional,
@@ -191,8 +183,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         };
     });
     
-    console.log('[CLIENT-LOG] Paginated participants for view:', JSON.stringify(participantsForView.map(p => ({name: p.nome_completo, mat: p.presenca_matutina, vesp: p.presenca_vespertina})), null, 2));
-
     return { paginatedParticipants: participantsForView, totalPages };
   }, [filteredParticipants, currentPage, dateFilter]);
 
@@ -280,7 +270,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       setTogglingPresence(loadingKey);
       
       const params = {participantId, formacaoId: formacao.id, dateFilter, periodo};
-      console.log('[CLIENT] Chamando setManualPresence com:', params);
 
       const result = await setManualPresence(
         participantId,
@@ -288,8 +277,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
         dateFilter,
         periodo
       );
-
-      console.log('[CLIENT] Resultado de setManualPresence:', result);
   
       if (result?.error) {
         toast({
