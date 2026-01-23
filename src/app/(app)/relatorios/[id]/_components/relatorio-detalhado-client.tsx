@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -28,8 +27,8 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { parseISO } from 'date-fns';
-import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import { parse, format } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
 import type { DetailedParticipant } from '../../actions';
@@ -112,15 +111,17 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   const router = useRouter();
   const { toast } = useToast();
 
+  console.log('[CLIENT-LOG-START] Raw data received by component:', { formacao, participants });
+
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d: any) => {
-        const utcDate = parseISO(d.date);
-        const zonedDate = toZonedTime(utcDate, saoPauloTimeZone);
+        // Treat date string as UTC to avoid timezone shifts on parsing
+        const date = parse(d.date.substring(0, 10), 'yyyy-MM-dd', new Date());
         return {
-          value: formatInTimeZone(zonedDate, saoPauloTimeZone, 'yyyy-MM-dd'),
-          label: formatInTimeZone(zonedDate, saoPauloTimeZone, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+          value: format(date, 'yyyy-MM-dd'),
+          label: format(date, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
         };
       }),
     [formacao.dates]
@@ -132,6 +133,10 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   const [dateFilter, setDateFilter] = useState(dateOptions[0]?.value || '');
   const [currentPage, setCurrentPage] = useState(1);
   const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
+  
+  useEffect(() => {
+    console.log('[CLIENT-LOG-FILTERS] Filters updated:', { dateFilter, presenceFilter, sourceFilter, searchTerm, currentPage });
+  }, [dateFilter, presenceFilter, sourceFilter, searchTerm, currentPage]);
 
   const ITEMS_PER_PAGE = 25;
 
@@ -171,16 +176,26 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     const paginated = filteredParticipants.slice(start, start + ITEMS_PER_PAGE);
 
     const participantsForView = paginated.map(p => {
+        console.log(`[CLIENT-LOG-PROCESSING] Processing participant: ${p.nome_completo} (CPF: ${p.cpf}) for date: ${dateFilter}`);
+        console.log(`[CLIENT-LOG-PROCESSING] Full presences array for participant:`, p.presencas);
+
         const daily = p.presencas.find(pr => pr.date === dateFilter);
+
+        console.log(`[CLIENT-LOG-PROCESSING] Found daily presence object for date ${dateFilter}:`, daily);
+        
         let regional = p.dados?.regional || 'N/A';
         if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
 
-        return {
+        const finalParticipantObject = {
             ...p,
             regional,
             presenca_matutina: daily?.matutino ?? null,
             presenca_vespertina: daily?.vespertino ?? null,
         };
+
+        console.log(`[CLIENT-LOG-PROCESSING] Final object for rendering:`, finalParticipantObject);
+
+        return finalParticipantObject;
     });
     
     return { paginatedParticipants: participantsForView, totalPages };
@@ -252,9 +267,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       const timestamp = useMemo(() => {
         if (!presence?.registered_at) return null;
       
-        return formatInTimeZone(new Date(presence.registered_at), saoPauloTimeZone, 'HH:mm:ss', {
-            locale: ptBR,
-        });
+        return toZonedTime(new Date(presence.registered_at), saoPauloTimeZone).toLocaleTimeString('pt-BR');
       }, [presence?.registered_at]);      
   
     const handleToggle = async () => {
@@ -269,8 +282,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   
       setTogglingPresence(loadingKey);
       
-      const params = {participantId, formacaoId: formacao.id, dateFilter, periodo};
-
       const result = await setManualPresence(
         participantId,
         formacao.id,
