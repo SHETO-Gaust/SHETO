@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import { startOfDay, endOfDay } from 'date-fns';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
     const inscricaoFonteMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
@@ -113,9 +114,9 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDate = toZonedTime(date, saoPauloTimeZone);
-        const startOfQueryDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0);
-        const endOfQueryDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59);
+        const targetDateInSP = toZonedTime(date, saoPauloTimeZone);
+        const startOfQueryDay = startOfDay(targetDateInSP);
+        const endOfQueryDay = endOfDay(targetDateInSP);
 
         const { data: existingRecords, error: fetchError } = await supabase
             .from('frequencia')
@@ -164,7 +165,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
-        console.error('[SERVER_ACTION_ERROR] setManualPresence/unexpected:', e);
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
 }
@@ -211,25 +211,21 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
-    // Robusto loop de agrupamento
     for (const freq of frequencias) {
-        const zonedDate = toZonedTime(freq.registered_at, saoPauloTimeZone);
+        const zonedDate = toZonedTime(new Date(freq.registered_at), saoPauloTimeZone);
         const dateKey = formatInTimeZone(zonedDate, saoPauloTimeZone, 'yyyy-MM-dd');
         
-        // Garante que o participante existe no mapa
         if (!frequenciaMap.has(freq.inscricao_id)) {
             frequenciaMap.set(freq.inscricao_id, {});
         }
         const participantData = frequenciaMap.get(freq.inscricao_id)!;
 
-        // Garante que a data existe para o participante
         if (!participantData[dateKey]) {
             participantData[dateKey] = { matutino: null, vespertino: null };
         }
         
         const presenceInfo = { registered_at: freq.registered_at, source: freq.source };
 
-        // Preenche o período correto sem sobrescrever o outro
         if (freq.periodo === 'MAT') {
             participantData[dateKey].matutino = presenceInfo;
         } else if (freq.periodo === 'VESP') {
@@ -258,4 +254,3 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
 
     return { formacao, participants };
 }
-
