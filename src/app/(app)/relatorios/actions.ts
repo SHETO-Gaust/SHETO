@@ -107,11 +107,15 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
         }
 
         if (existingRecords && existingRecords.length > 0) {
-            // Presence exists, so remove it (toggle off)
-            const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existingRecords[0].id);
-            if (deleteError) {
-                console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
-                return { error: `Erro ao remover presença: ${deleteError.message}` };
+            // Presence exists, check if it's manual before allowing toggle off
+            if (existingRecords[0].source === false) { // It's manual, so remove it
+                const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existingRecords[0].id);
+                if (deleteError) {
+                    console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
+                    return { error: `Erro ao remover presença: ${deleteError.message}` };
+                }
+            } else { // It's automatic, do not remove
+                return { error: 'Não é possível remover uma frequência registrada automaticamente.' };
             }
         } else {
             // Presence does not exist, add it (toggle on)
@@ -223,6 +227,7 @@ export async function setBulkPresence(
                 .in('inscricao_id', inscricaoIds)
                 .eq('formacao_id', formacaoId)
                 .eq('periodo', periodo)
+                .eq('source', false) // Only delete manual entries
                 .gte('registered_at', startOfTargetDay.toISOString())
                 .lte('registered_at', endOfTargetDay.toISOString());
             

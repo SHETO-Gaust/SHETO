@@ -199,8 +199,10 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
         const daily = presences?.find(pr => pr.date === dateFilter);
         let regional = p.dados?.regional || 'N/A';
         if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
+        
+        const isUnselectable = daily?.matutino?.source === false && daily?.vespertino?.source === false;
 
-        return { ...p, regional, presenca_matutina: daily?.matutino ?? null, presenca_vespertina: daily?.vespertino ?? null };
+        return { ...p, regional, presenca_matutina: daily?.matutino ?? null, presenca_vespertina: daily?.vespertino ?? null, isUnselectable };
     });
     
     return { paginatedParticipants: participantsForView, totalPages };
@@ -234,7 +236,8 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   
   const handleSelectAll = (checked: boolean | 'indeterminate') => {
     if (checked === true) {
-        setSelectedIds(paginatedParticipants.map(p => p.id));
+        const selectableIds = paginatedParticipants.filter(p => !p.isUnselectable).map(p => p.id);
+        setSelectedIds(selectableIds);
     } else {
         setSelectedIds([]);
     }
@@ -260,7 +263,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
       } else if (result.success && result.updatedPresence) {
           toast({
               title: 'Sucesso!',
-              description: `${Object.keys(result.updatedPresence).length} participante(s) atualizado(s).`,
+              description: `Ação em lote concluída. A tabela foi atualizada.`,
           });
           setPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
           setChartPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
@@ -309,6 +312,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
     const loadingKey = `${participantId}-${periodo}-${dateFilter}`;
     const isLoading = togglingPresence === loadingKey;
     const isManual = presence?.source === false;
+    const isAutomatic = presence?.source === true;
   
     const timestamp = useMemo(() => {
       if (!presence?.registered_at) return null;
@@ -338,15 +342,29 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
       }
     };
   
-    if (isLoading) return <Loader2 className="h-5 w-5 animate-spin" />;
-    if (!presence) return <button onClick={handleToggle}><XCircle className="h-5 w-5 text-red-500" /></button>;
+    if (isLoading) {
+      return <Loader2 className="h-5 w-5 animate-spin mx-auto" />;
+    }
   
-    return (
-      <button onClick={handleToggle} className={`flex items-center justify-center gap-2 ${isManual ? 'text-orange-500' : 'text-green-600'}`}>
-        <CheckCircle className="h-5 w-5" />
-        {timestamp && <span className="text-xs">{timestamp}</span>}
-      </button>
-    );
+    if (isAutomatic) {
+      return (
+        <div className="flex items-center justify-center gap-2 text-green-600">
+          <CheckCircle className="h-5 w-5" title="Presença automática (não pode ser alterada)" />
+          {timestamp && <span className="text-xs">{timestamp}</span>}
+        </div>
+      );
+    }
+  
+    if (isManual) {
+      return (
+        <button onClick={handleToggle} className="flex items-center justify-center gap-2 text-orange-500">
+          <CheckCircle className="h-5 w-5" />
+          {timestamp && <span className="text-xs">{timestamp}</span>}
+        </button>
+      );
+    }
+  
+    return <button onClick={handleToggle}><XCircle className="h-5 w-5 text-red-500" /></button>;
   };
   
   const BulkActionBar = () => (
@@ -366,7 +384,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                             Adicionar Presença
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleBulkAction('MAT', 'remove')} className="text-destructive focus:text-destructive">
-                           <Trash2 className="mr-2 h-4 w-4"/> Remover Presença
+                           <Trash2 className="mr-2 h-4 w-4"/> Remover Presença (Manual)
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -383,7 +401,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                             Adicionar Presença
                         </DropdownMenuItem>
                          <DropdownMenuItem onClick={() => handleBulkAction('VESP', 'remove')} className="text-destructive focus:text-destructive">
-                           <Trash2 className="mr-2 h-4 w-4"/> Remover Presença
+                           <Trash2 className="mr-2 h-4 w-4"/> Remover Presença (Manual)
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -426,7 +444,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                           <TableRow>
                             <TableHead className="w-12">
                               <Checkbox
-                                  checked={paginatedParticipants.length > 0 && selectedIds.length === paginatedParticipants.length}
+                                  checked={paginatedParticipants.filter(p => !p.isUnselectable).length > 0 && selectedIds.length === paginatedParticipants.filter(p => !p.isUnselectable).length}
                                   onCheckedChange={(checked) => handleSelectAll(checked)}
                                   aria-label="Select all rows on this page"
                               />
@@ -449,13 +467,14 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                                           checked={selectedIds.includes(p.id)}
                                           onCheckedChange={(checked) => handleSelectRow(p.id, !!checked)}
                                           aria-label={`Select row for ${p.nome_completo}`}
+                                          disabled={p.isUnselectable}
                                       />
                                     </TableCell>
                                     <TableCell className="font-medium">{p.nome_completo}</TableCell>
                                     <TableCell>{p.cpf}</TableCell>
                                     <TableCell>{p.regional}</TableCell>
-                                    <TableCell className="text-center">{!presenceCache[p.id] || loadingPresence ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : <PresenceStatus participantId={p.id} periodo="MAT" presence={p.presenca_matutina} />}</TableCell>
-                                    <TableCell className="text-center">{!presenceCache[p.id] || loadingPresence ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : <PresenceStatus participantId={p.id} periodo="VESP" presence={p.presenca_vespertina} />}</TableCell>
+                                    <TableCell className="text-center"><PresenceStatus participantId={p.id} periodo="MAT" presence={p.presenca_matutina} /></TableCell>
+                                    <TableCell className="text-center"><PresenceStatus participantId={p.id} periodo="VESP" presence={p.presenca_vespertina} /></TableCell>
                                     <TableCell><Badge variant={p.fonte === 'AVULSO' ? 'secondary' : 'default'}>{p.fonte}</Badge></TableCell>
                                 </TableRow>
                             )) : (
