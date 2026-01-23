@@ -180,8 +180,8 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
       const hasAfternoon = !!daily?.vespertino;
 
       let matchesPresence = true;
-      if (presenceFilter === 'manha') matchesPresence = hasMorning;
-      else if (presenceFilter === 'tarde') matchesPresence = hasAfternoon;
+      if (presenceFilter === 'manha') matchesPresence = hasMorning && !hasAfternoon;
+      else if (presenceFilter === 'tarde') matchesPresence = !hasMorning && hasAfternoon;
       else if (presenceFilter === 'ambos') matchesPresence = hasMorning && hasAfternoon;
       else if (presenceFilter === 'nenhum') matchesPresence = !hasMorning && !hasAfternoon;
 
@@ -200,7 +200,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
         let regional = p.dados?.regional || 'N/A';
         if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
         
-        const isUnselectable = daily?.matutino?.source === false && daily?.vespertino?.source === false;
+        const isUnselectable = (daily?.matutino?.source === true && daily?.vespertino?.source === true) || (daily?.matutino?.source === false && daily?.vespertino?.source === false)
 
         return { ...p, regional, presenca_matutina: daily?.matutino ?? null, presenca_vespertina: daily?.vespertino ?? null, isUnselectable };
     });
@@ -322,8 +322,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
     const handleToggle = async () => {
       setTogglingPresence(loadingKey);
       const result = await setManualPresence(participantId, formacao.id, dateFilter, periodo);
-      setTogglingPresence(null);
-
+      
       if (result?.error) {
         toast({ title: 'Erro', description: result.error, variant: 'destructive' });
       } else if (result.success && result.updatedPresence) {
@@ -340,6 +339,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
       } else {
         toast({ title: 'Erro', description: 'Não foi possível atualizar a presença. Resposta inesperada do servidor.', variant: 'destructive' });
       }
+       setTogglingPresence(null);
     };
   
     if (isLoading) {
