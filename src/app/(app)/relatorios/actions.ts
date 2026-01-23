@@ -220,7 +220,12 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     frequencias.forEach(freq => {
-        const dateKey = format(parseISO(freq.registered_at), 'yyyy-MM-dd');
+        const date = new Date(freq.registered_at);
+const dateKey = format(
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())),
+  'yyyy-MM-dd'
+);
+
         const entry = frequenciaMap.get(freq.inscricao_id) || {};
         
         if (!entry[dateKey]) {

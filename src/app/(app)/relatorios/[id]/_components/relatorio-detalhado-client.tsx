@@ -242,71 +242,91 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   }) => {
     const loadingKey = `${participantId}-${periodo}-${dateFilter}`;
     const isLoading = togglingPresence === loadingKey;
-
+  
+    const isManual =
+      presence?.source?.trim().toUpperCase() === 'MANUAL';
+  
+      const timestamp = useMemo(() => {
+        if (!presence?.registered_at) return null;
+      
+        const date = new Date(presence.registered_at);
+      
+        return date.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+      }, [presence?.registered_at]);      
+  
     const handleToggle = async () => {
-      // Use trim() and toUpperCase() for robust comparison
-      if (presence?.source?.trim().toUpperCase() === 'AUTOMATIC') {
+      if (!isManual && presence) {
         toast({
           title: 'Ação não permitida',
           description: 'Presenças automáticas não podem ser removidas.',
         });
         return;
       }
-
+  
       setTogglingPresence(loadingKey);
-      
+  
       const result = await setManualPresence(
         participantId,
         formacao.id,
         dateFilter,
         periodo
       );
-      
-      if (result.error) {
-        toast({ title: 'Erro', description: result.error, variant: 'destructive' });
+  
+      if (result?.error) {
+        toast({
+          title: 'Erro',
+          description: result.error,
+          variant: 'destructive'
+        });
       } else {
         toast({
           title: 'Sucesso',
-          description: presence ? 'Presença removida.' : 'Presença adicionada.',
+          description: presence
+            ? 'Presença removida.'
+            : 'Presença adicionada.',
         });
         router.refresh();
       }
-
+  
       setTogglingPresence(null);
     };
-
+  
     if (isLoading) {
       return <Loader2 className="h-5 w-5 animate-spin" />;
     }
-
-    if (presence) {
-      const timestamp = format(parseISO(presence.registered_at), 'HH:mm');
-
-      // Use trim() and toUpperCase() for robust comparison
-      if (presence.source?.trim().toUpperCase() === 'MANUAL') {
-        return (
-          <button
-            onClick={handleToggle}
-            className="flex items-center justify-center gap-2 text-orange-500"
-          >
-            <CheckCircle className="h-5 w-5" />
-            <span className="text-xs">{timestamp}</span>
-          </button>
-        );
-      }
-
+  
+    // ❌ Sem presença
+    if (!presence) {
       return (
-        <div className="flex items-center justify-center gap-2 text-green-600">
-          <CheckCircle className="h-5 w-5" />
-          <span className="text-xs">{timestamp}</span>
-        </div>
+        <button onClick={handleToggle}>
+          <XCircle className="h-5 w-5 text-red-500" />
+        </button>
       );
     }
-
+  
+    // ✔ Presença MANUAL (clicável)
+    if (isManual) {
+      return (
+        <button
+          onClick={handleToggle}
+          className="flex items-center justify-center gap-2 text-orange-500"
+        >
+          <CheckCircle className="h-5 w-5" />
+          {timestamp && <span className="text-xs">{timestamp}</span>}
+        </button>
+      );
+    }
+  
+    // ✔ Presença AUTOMÁTICA (não clicável)
     return (
-      <button onClick={handleToggle}>
-        <XCircle className="h-5 w-5 text-red-500" />
-      </button>
+      <div className="flex items-center justify-center gap-2 text-green-600">
+        <CheckCircle className="h-5 w-5" />
+        {timestamp && <span className="text-xs">{timestamp}</span>}
+      </div>
     );
   };
   
