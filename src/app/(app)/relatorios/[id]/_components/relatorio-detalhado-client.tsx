@@ -27,7 +27,8 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
 import type { DetailedParticipant } from '../../actions';
@@ -114,11 +115,9 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d: any) => {
         const date = parseISO(d.date);
-        // Create a new date using UTC components to avoid timezone shift during formatting
-        const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
         return {
-          value: format(utcDate, 'yyyy-MM-dd'),
-          label: format(utcDate, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+          value: formatInTimeZone(date, 'UTC', 'yyyy-MM-dd'),
+          label: formatInTimeZone(date, 'UTC', "dd/MM/yyyy (EEEE)", { locale: ptBR }),
         };
       }),
     [formacao.dates]

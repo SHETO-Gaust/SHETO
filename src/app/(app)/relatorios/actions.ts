@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { revalidatePath } from 'next/cache';
+import { formatInTimeZone } from 'date-fns-tz';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
     const inscricaoFonteMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
@@ -110,7 +111,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const day = parseISO(`${date}T12:00:00.000Z`); // Explicitly parse as UTC noon to avoid timezone edge cases.
+        const day = parseISO(`${date}T12:00:00.000Z`);
         const startOfQueryDay = startOfDay(day);
         const endOfQueryDay = endOfDay(day);
         
@@ -124,6 +125,10 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .lte('registered_at', endOfQueryDay.toISOString());
 
         if (fetchError) {
+            console.error('[SERVER_ACTION_ERROR] setManualPresence/fetchError:', {
+                message: fetchError.message,
+                details: fetchError.details,
+            });
             return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
         }
 
@@ -218,12 +223,8 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     frequencias.forEach(freq => {
-        const date = new Date(freq.registered_at);
-        const dateKey = format(
-          new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())),
-          'yyyy-MM-dd'
-        );
-
+        const dateKey = formatInTimeZone(new Date(freq.registered_at), 'UTC', 'yyyy-MM-dd');
+        
         const entry = frequenciaMap.get(freq.inscricao_id) || {};
         
         if (!entry[dateKey]) {
