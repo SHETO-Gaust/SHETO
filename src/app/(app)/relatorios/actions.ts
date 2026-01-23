@@ -112,6 +112,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                      console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
                     return { error: `Erro ao remover presença manual: ${deleteError.message}` };
                 }
+                revalidatePath('/relatorios');
                 return { success: true, status: 'REMOVED' };
             } else {
                  console.warn('[SERVER_ACTION_WARN] setManualPresence: Attempted to remove automatic presence.');
@@ -139,6 +140,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 console.error('[SERVER_ACTION_ERROR] setManualPresence/insertError:', insertError);
                 return { error: `Erro ao adicionar presença manual: ${insertError.message}` };
             }
+            revalidatePath('/relatorios');
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
