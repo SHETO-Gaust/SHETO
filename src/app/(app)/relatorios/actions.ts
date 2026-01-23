@@ -126,7 +126,8 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 return { error: 'Inscrição não encontrada.' };
             }
             
-            const registrationTimestamp = new Date(date + 'T12:00:00.000Z');
+            const time = periodo === 'MAT' ? 'T12:00:00.000Z' : 'T20:00:00.000Z';
+            const registrationTimestamp = new Date(date + time);
 
             const { error: insertError } = await supabase.from('frequencia').insert({
                 formacao_id: formacaoId,
