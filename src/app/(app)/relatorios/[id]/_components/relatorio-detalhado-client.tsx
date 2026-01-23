@@ -111,6 +111,8 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   const router = useRouter();
   const { toast } = useToast();
 
+  console.log('[CLIENT-LOG-START] Raw data received by component:', { formacao, participants });
+
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -161,6 +163,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
 
   useEffect(() => {
     setCurrentPage(1);
+     console.log('[CLIENT-LOG-FILTERS] Filters updated:', { dateFilter, presenceFilter, sourceFilter, searchTerm, currentPage });
   }, [searchTerm, presenceFilter, sourceFilter, dateFilter]);
 
   const { paginatedParticipants, totalPages } = useMemo(() => {
@@ -169,8 +172,13 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     const paginated = filteredParticipants.slice(start, start + ITEMS_PER_PAGE);
 
     const participantsForView = paginated.map(p => {
+        console.log(`[CLIENT-LOG-PROCESSING] Processing participant: ${p.nome_completo} (CPF: ${p.cpf}) for date: ${dateFilter}`);
+        console.log(`[CLIENT-LOG-PROCESSING] Full presences array for participant:`, p.presencas);
+        
         const daily = p.presencas.find(pr => pr.date === dateFilter);
         
+        console.log(`[CLIENT-LOG-PROCESSING] Found daily presence object for date ${dateFilter}:`, daily);
+
         let regional = p.dados?.regional || 'N/A';
         if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
 
@@ -180,6 +188,8 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             presenca_matutina: daily?.matutino ?? null,
             presenca_vespertina: daily?.vespertino ?? null,
         };
+
+        console.log('[CLIENT-LOG-PROCESSING] Final object for rendering:', finalParticipantObject);
         return finalParticipantObject;
     });
     

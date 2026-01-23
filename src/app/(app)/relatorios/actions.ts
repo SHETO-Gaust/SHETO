@@ -216,8 +216,10 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
+    console.log(`[SERVER-ACTION-LOG] Processing ${frequencias.length} raw frequency records.`);
     for (const freq of frequencias) {
         const dateKey = freq.registered_at.substring(0, 10);
+        console.log(`[SERVER-ACTION-LOG] Processing freq record: inscricao_id=${freq.inscricao_id}, registered_at=${freq.registered_at}, periodo=${freq.periodo}, Generated dateKey=${dateKey}`);
         
         if (!frequenciaMap.has(freq.inscricao_id)) {
             frequenciaMap.set(freq.inscricao_id, {});
@@ -261,6 +263,10 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
             presencas: presencasArray,
         };
         
+        if (inscricao.cpf === '012.632.973-74') {
+             console.log('[SERVER-ACTION-LOG] Final participant data for LEILANE ALVES NOGUEIRA (sample):', JSON.stringify(participantToReturn, null, 2));
+        }
+
         return participantToReturn;
     });
 
