@@ -114,9 +114,11 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d: any) => {
         const date = parseISO(d.date);
+        // Create a new date using UTC components to avoid timezone shift during formatting
+        const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
         return {
-          value: format(date, 'yyyy-MM-dd'),
-          label: format(date, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+          value: format(utcDate, 'yyyy-MM-dd'),
+          label: format(utcDate, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
         };
       }),
     [formacao.dates]

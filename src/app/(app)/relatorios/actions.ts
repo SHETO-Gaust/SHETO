@@ -124,7 +124,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .lte('registered_at', endOfQueryDay.toISOString());
 
         if (fetchError) {
-            console.error(`[SERVER_ERROR] setManualPresence/fetchError:`, fetchError);
             return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
         }
 
@@ -162,7 +161,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
-        console.error(`[SERVER_ERROR] setManualPresence/catch:`, e);
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
 }
