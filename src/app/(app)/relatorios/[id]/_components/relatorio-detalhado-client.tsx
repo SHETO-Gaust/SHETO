@@ -25,13 +25,13 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { CheckCircle, XCircle, Loader2, RefreshCw } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, RefreshCw, Sun, Sunset, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
 import type { DetailedParticipant } from '../../actions';
-import { setManualPresence, getPresenceForParticipants } from '../../actions';
+import { setManualPresence, getPresenceForParticipants, setBulkPresence } from '../../actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,6 +47,13 @@ import {
 } from "recharts";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 type PresenceData = {
   registered_at: string;
@@ -132,6 +139,8 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   const [sourceFilter, setSourceFilter] = useState('todos');
   const [dateFilter, setDateFilter] = useState(dateOptions[0]?.value || '');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   const fetchAllPresenceData = useCallback(async () => {
     setLoadingCharts(true);
@@ -180,35 +189,6 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
     });
   }, [allParticipants, searchTerm, sourceFilter, presenceFilter, presenceCache, dateFilter]);
 
-  useEffect(() => {
-    const fetchPageData = async () => {
-      const start = (currentPage - 1) * ITEMS_PER_PAGE;
-      const end = start + ITEMS_PER_PAGE;
-      const participantsOnPage = filteredParticipants.slice(start, end);
-
-      const idsToFetch = participantsOnPage
-        .map(p => p.id)
-        .filter(id => !presenceCache[id]);
-
-      if (idsToFetch.length > 0) {
-        setLoadingPresence(true);
-        try {
-          const newPresenceData = await getPresenceForParticipants(formacao.id, idsToFetch);
-          setPresenceCache(prevCache => ({ ...prevCache, ...newPresenceData }));
-        } catch (error) {
-          toast({ title: "Erro ao carregar presenças.", variant: "destructive" });
-        } finally {
-          setLoadingPresence(false);
-        }
-      }
-    };
-    fetchPageData();
-  }, [currentPage, filteredParticipants, formacao.id, presenceCache, toast]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, presenceFilter, sourceFilter, dateFilter]);
-
   const { paginatedParticipants, totalPages } = useMemo(() => {
     const totalPages = Math.ceil(filteredParticipants.length / ITEMS_PER_PAGE);
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -225,6 +205,71 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
     
     return { paginatedParticipants: participantsForView, totalPages };
   }, [filteredParticipants, currentPage, dateFilter, presenceCache]);
+  
+  useEffect(() => {
+    const fetchPageData = async () => {
+      const idsToFetch = paginatedParticipants
+        .map(p => p.id)
+        .filter(id => !presenceCache[id]);
+
+      if (idsToFetch.length > 0) {
+        setLoadingPresence(true);
+        try {
+          const newPresenceData = await getPresenceForParticipants(formacao.id, idsToFetch);
+          setPresenceCache(prevCache => ({ ...prevCache, ...newPresenceData }));
+        } catch (error) {
+          toast({ title: "Erro ao carregar presenças.", variant: "destructive" });
+        } finally {
+          setLoadingPresence(false);
+        }
+      }
+    };
+    fetchPageData();
+  }, [paginatedParticipants, formacao.id, presenceCache, toast]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedIds([]);
+  }, [searchTerm, presenceFilter, sourceFilter, dateFilter]);
+  
+  const handleSelectAll = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+        setSelectedIds(paginatedParticipants.map(p => p.id));
+    } else {
+        setSelectedIds([]);
+    }
+  }
+
+  const handleSelectRow = (id: string, checked: boolean) => {
+      setSelectedIds(prev => 
+          checked ? [...prev, id] : prev.filter(rowId => rowId !== id)
+      );
+  }
+
+  const handleBulkAction = async (periodo: 'MAT' | 'VESP', action: 'add' | 'remove') => {
+      if (selectedIds.length === 0) {
+          toast({ title: 'Nenhum participante selecionado.', variant: 'destructive' });
+          return;
+      }
+      setBulkActionLoading(true);
+      const result = await setBulkPresence(formacao.id, selectedIds, dateFilter, periodo, action);
+      setBulkActionLoading(false);
+
+      if (result.error) {
+          toast({ title: 'Erro na ação em lote', description: result.error, variant: 'destructive' });
+      } else if (result.success && result.updatedPresence) {
+          toast({
+              title: 'Sucesso!',
+              description: `${Object.keys(result.updatedPresence).length} participante(s) atualizado(s).`,
+          });
+          setPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
+          setChartPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
+          setSelectedIds([]);
+      } else {
+          toast({ title: 'Erro', description: 'Não foi possível atualizar as presenças.', variant: 'destructive' });
+      }
+  }
+
 
   const regionalStats = useMemo(() => {
     const stats: { [key: string]: { inscritos: number; presentes: number; avulsos: number } } = {};
@@ -271,11 +316,6 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
     }, [presence?.registered_at]);      
   
     const handleToggle = async () => {
-      if (presence && !isManual) {
-        toast({ title: 'Ação não permitida', description: 'Presenças automáticas não podem ser removidas.' });
-        return;
-      }
-  
       setTogglingPresence(loadingKey);
       const result = await setManualPresence(participantId, formacao.id, dateFilter, periodo);
       setTogglingPresence(null);
@@ -301,23 +341,57 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
     if (isLoading) return <Loader2 className="h-5 w-5 animate-spin" />;
     if (!presence) return <button onClick={handleToggle}><XCircle className="h-5 w-5 text-red-500" /></button>;
   
-    if (isManual) {
-      return (
-        <button onClick={handleToggle} className="flex items-center justify-center gap-2 text-orange-500">
-          <CheckCircle className="h-5 w-5" />
-          {timestamp && <span className="text-xs">{timestamp}</span>}
-        </button>
-      );
-    }
-  
     return (
-      <div className="flex items-center justify-center gap-2 text-green-600">
+      <button onClick={handleToggle} className={`flex items-center justify-center gap-2 ${isManual ? 'text-orange-500' : 'text-green-600'}`}>
         <CheckCircle className="h-5 w-5" />
         {timestamp && <span className="text-xs">{timestamp}</span>}
-      </div>
+      </button>
     );
   };
   
+  const BulkActionBar = () => (
+    <Card className="mb-4 sticky top-2 z-20 bg-background/95 backdrop-blur-sm shadow-lg">
+        <CardContent className="p-2 flex items-center justify-between">
+            <p className="text-sm font-medium">{selectedIds.length} selecionado(s)</p>
+            <div className="flex items-center gap-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={bulkActionLoading}>
+                            {bulkActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sun className="mr-2 h-4 w-4" />}
+                            Ações Manhã
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => handleBulkAction('MAT', 'add')}>
+                            Adicionar Presença
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleBulkAction('MAT', 'remove')} className="text-destructive focus:text-destructive">
+                           <Trash2 className="mr-2 h-4 w-4"/> Remover Presença
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={bulkActionLoading}>
+                             {bulkActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sunset className="mr-2 h-4 w-4" />}
+                            Ações Tarde
+                        </Button>
+                    </DropdownMenuTrigger>
+                     <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => handleBulkAction('VESP', 'add')}>
+                            Adicionar Presença
+                        </DropdownMenuItem>
+                         <DropdownMenuItem onClick={() => handleBulkAction('VESP', 'remove')} className="text-destructive focus:text-destructive">
+                           <Trash2 className="mr-2 h-4 w-4"/> Remover Presença
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        </CardContent>
+    </Card>
+);
+
   return (
     <div className="space-y-6">
         <Card>
@@ -335,6 +409,8 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
             </CardContent>
         </Card>
 
+        {selectedIds.length > 0 && <BulkActionBar />}
+
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -346,12 +422,35 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
             <CardContent>
                 <div className="rounded-md border">
                     <Table>
-                        <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>CPF</TableHead><TableHead>Regional</TableHead><TableHead className="text-center">Presença Manhã</TableHead><TableHead className="text-center">Presença Tarde</TableHead><TableHead>Fonte</TableHead></TableRow></TableHeader>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12">
+                              <Checkbox
+                                  checked={paginatedParticipants.length > 0 && selectedIds.length === paginatedParticipants.length}
+                                  onCheckedChange={(checked) => handleSelectAll(checked)}
+                                  aria-label="Select all rows on this page"
+                              />
+                            </TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead>CPF</TableHead>
+                            <TableHead>Regional</TableHead>
+                            <TableHead className="text-center">Presença Manhã</TableHead>
+                            <TableHead className="text-center">Presença Tarde</TableHead>
+                            <TableHead>Fonte</TableHead>
+                          </TableRow>
+                        </TableHeader>
                         <TableBody>
                             {loadingPresence && paginatedParticipants.length === 0 ? (
-                                <TableRow><TableCell colSpan={6} className="text-center h-24"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={7} className="text-center h-24"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></TableCell></TableRow>
                             ) : paginatedParticipants.length > 0 ? paginatedParticipants.map(p => (
-                                <TableRow key={p.id}>
+                                <TableRow key={p.id} data-state={selectedIds.includes(p.id) ? 'selected' : ''}>
+                                    <TableCell>
+                                      <Checkbox
+                                          checked={selectedIds.includes(p.id)}
+                                          onCheckedChange={(checked) => handleSelectRow(p.id, !!checked)}
+                                          aria-label={`Select row for ${p.nome_completo}`}
+                                      />
+                                    </TableCell>
                                     <TableCell className="font-medium">{p.nome_completo}</TableCell>
                                     <TableCell>{p.cpf}</TableCell>
                                     <TableCell>{p.regional}</TableCell>
@@ -360,7 +459,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                                     <TableCell><Badge variant={p.fonte === 'AVULSO' ? 'secondary' : 'default'}>{p.fonte}</Badge></TableCell>
                                 </TableRow>
                             )) : (
-                                <TableRow><TableCell colSpan={6} className="text-center h-24">Nenhum participante encontrado para os filtros selecionados.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhum participante encontrado para os filtros selecionados.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>

@@ -107,18 +107,14 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
         }
 
         if (existingRecords && existingRecords.length > 0) {
-            const existing = existingRecords[0];
-            if (existing.source === false) { // source: false is MANUAL
-                const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
-                if (deleteError) {
-                     console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
-                    return { error: `Erro ao remover presença manual: ${deleteError.message}` };
-                }
-            } else {
-                 console.warn('[SERVER_ACTION_WARN] setManualPresence: Attempted to remove automatic presence.');
-                return { error: 'Não é possível remover uma presença registrada automaticamente.' };
+            // Presence exists, so remove it (toggle off)
+            const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existingRecords[0].id);
+            if (deleteError) {
+                console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
+                return { error: `Erro ao remover presença: ${deleteError.message}` };
             }
         } else {
+            // Presence does not exist, add it (toggle on)
             const { data: inscricao } = await supabase.from('inscricoes').select('cpf').eq('id', inscricaoId).single();
             if (!inscricao) {
                 return { error: 'Inscrição não encontrada.' };
@@ -133,7 +129,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 cpf: inscricao.cpf,
                 periodo: periodo,
                 registered_at: registrationTimestamp.toISOString(),
-                source: false,
+                source: false, // manual
             });
 
             if (insertError) {
@@ -146,8 +142,104 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
     
+    revalidatePath(`/relatorios/${formacaoId}`);
     revalidatePath('/relatorios');
     const updatedPresence = await getPresenceForParticipants(formacaoId, [inscricaoId]);
+    return { success: true, updatedPresence };
+}
+
+
+export async function setBulkPresence(
+    formacaoId: string,
+    inscricaoIds: string[],
+    date: string,
+    periodo: 'MAT' | 'VESP',
+    action: 'add' | 'remove'
+) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    if (!inscricaoIds || inscricaoIds.length === 0) {
+        return { error: "Nenhum participante selecionado." };
+    }
+
+    try {
+        const targetDate = toZonedTime(parse(date, 'yyyy-MM-dd', new Date()), saoPauloTimeZone);
+        const startOfTargetDay = startOfDay(targetDate);
+        const endOfTargetDay = endOfDay(targetDate);
+
+        if (action === 'add') {
+            const { data: inscricoes, error: inscricaoError } = await supabase
+                .from('inscricoes')
+                .select('id, cpf')
+                .in('id', inscricaoIds);
+
+            if (inscricaoError) {
+                 console.error('[SERVER_ACTION_ERROR] setBulkPresence/fetchInscricoes:', inscricaoError);
+                 return { error: `Erro ao buscar CPFs: ${inscricaoError.message}` };
+            }
+            
+            const { data: existingRecords, error: fetchError } = await supabase
+                .from('frequencia')
+                .select('inscricao_id')
+                .in('inscricao_id', inscricaoIds)
+                .eq('formacao_id', formacaoId)
+                .eq('periodo', periodo)
+                .gte('registered_at', startOfTargetDay.toISOString())
+                .lte('registered_at', endOfTargetDay.toISOString());
+
+            if (fetchError) {
+                console.error('[SERVER_ACTION_ERROR] setBulkPresence/fetchExisting:', fetchError);
+                return { error: `Erro ao verificar presenças existentes: ${fetchError.message}` };
+            }
+
+            const time = periodo === 'MAT' ? 'T12:00:00.000Z' : 'T20:00:00.000Z';
+            const registrationTimestamp = new Date(date + time).toISOString();
+            
+            const existingInscricaoIds = new Set(existingRecords.map(r => r.inscricao_id));
+            const recordsToInsert = inscricoes
+                .filter(insc => !existingInscricaoIds.has(insc.id))
+                .map(insc => ({
+                    formacao_id: formacaoId,
+                    inscricao_id: insc.id,
+                    cpf: insc.cpf,
+                    periodo: periodo,
+                    registered_at: registrationTimestamp,
+                    source: false, // manual
+                }));
+            
+            if (recordsToInsert.length > 0) {
+                 const { error: insertError } = await supabase.from('frequencia').insert(recordsToInsert);
+                if (insertError) {
+                    console.error('[SERVER_ACTION_ERROR] setBulkPresence/insertError:', insertError);
+                    return { error: `Erro ao adicionar presenças em lote: ${insertError.message}` };
+                }
+            }
+           
+        } else if (action === 'remove') {
+            const { error: deleteError } = await supabase
+                .from('frequencia')
+                .delete()
+                .in('inscricao_id', inscricaoIds)
+                .eq('formacao_id', formacaoId)
+                .eq('periodo', periodo)
+                .gte('registered_at', startOfTargetDay.toISOString())
+                .lte('registered_at', endOfTargetDay.toISOString());
+            
+            if (deleteError) {
+                 console.error('[SERVER_ACTION_ERROR] setBulkPresence/deleteError:', deleteError);
+                 return { error: `Erro ao remover presenças em lote: ${deleteError.message}` };
+            }
+        }
+
+    } catch (e: any) {
+        console.error('[SERVER_ACTION_ERROR] setBulkPresence/catchAll:', e);
+        return { error: 'Ocorreu um erro inesperado.' };
+    }
+
+    const updatedPresence = await getPresenceForParticipants(formacaoId, inscricaoIds);
+    revalidatePath('/relatorios');
+    revalidatePath(`/relatorios/${formacaoId}`);
     return { success: true, updatedPresence };
 }
 
