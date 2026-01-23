@@ -217,12 +217,21 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const inscricoes = inscricoesResult.data as Inscricao[];
     const frequencias = frequenciasResult.data as Frequencia[];
     
+    console.log('[SERVER] Raw Frequencias fetched from DB:', JSON.stringify(frequencias, null, 2));
+    
     type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     frequencias.forEach(freq => {
-        const dateKey = formatInTimeZone(new Date(freq.registered_at), saoPauloTimeZone, 'yyyy-MM-dd');
+        const zonedDate = toZonedTime(freq.registered_at, saoPauloTimeZone);
+        const dateKey = formatInTimeZone(zonedDate, saoPauloTimeZone, 'yyyy-MM-dd');
         
+        console.log(`[SERVER] Processing freq record for inscricao ${freq.inscricao_id}:`);
+        console.log(`  - Original UTC Timestamp: ${freq.registered_at}`);
+        console.log(`  - Converted Sao Paulo Time: ${zonedDate}`);
+        console.log(`  - Calculated dateKey: ${dateKey}`);
+        console.log(`  - Periodo: ${freq.periodo}`);
+
         const entry = frequenciaMap.get(freq.inscricao_id) || {};
         
         if (!entry[dateKey]) {
@@ -238,6 +247,8 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
         }
         frequenciaMap.set(freq.inscricao_id, entry);
     });
+
+    console.log('[SERVER] Final frequenciaMap:', JSON.stringify(Object.fromEntries(frequenciaMap), null, 2));
     
     const participants: DetailedParticipant[] = inscricoes.map(inscricao => {
         const presencasPorData = frequenciaMap.get(inscricao.id) || {};

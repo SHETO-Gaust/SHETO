@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/table';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { parseISO } from 'date-fns';
-import { formatInTimeZone } from 'date-fns-tz';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
 import type { DetailedParticipant } from '../../actions';
@@ -112,14 +112,17 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   const router = useRouter();
   const { toast } = useToast();
 
+  console.log('[CLIENT] Received participants data:', JSON.stringify(participants, null, 2));
+
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d: any) => {
         const utcDate = parseISO(d.date);
+        const zonedDate = toZonedTime(utcDate, saoPauloTimeZone);
         return {
-          value: formatInTimeZone(utcDate, saoPauloTimeZone, 'yyyy-MM-dd'),
-          label: formatInTimeZone(utcDate, saoPauloTimeZone, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+          value: formatInTimeZone(zonedDate, saoPauloTimeZone, 'yyyy-MM-dd'),
+          label: formatInTimeZone(zonedDate, saoPauloTimeZone, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
         };
       }),
     [formacao.dates]
