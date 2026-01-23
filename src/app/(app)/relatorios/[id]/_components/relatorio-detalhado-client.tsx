@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -42,7 +42,8 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Cell
+  Cell,
+  LabelList,
 } from "recharts";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Label } from '@/components/ui/label';
@@ -62,7 +63,7 @@ const saoPauloTimeZone = 'America/Sao_Paulo';
 const ITEMS_PER_PAGE = 25;
 
 
-const RankingChart = ({ data, dataKey, unit, title, description }: { data: any[]; dataKey: string; unit: string; title: string; description: string; }) => (
+const RankingChart = ({ data, dataKey, unit, title, description, showLabel = false }: { data: any[]; dataKey: string; unit: string; title: string; description: string; showLabel?: boolean; }) => (
   <Card>
     <CardHeader>
       <CardTitle className="truncate">{title}</CardTitle>
@@ -72,11 +73,20 @@ const RankingChart = ({ data, dataKey, unit, title, description }: { data: any[]
       {data.length > 0 ? (
         <ChartContainer config={{}} className="h-80 w-full">
           <ResponsiveContainer>
-            <BarChart data={data} layout="vertical" margin={{ left: 120, right: 30 }}>
+            <BarChart data={data} layout="vertical" margin={{ left: 120, right: 60 }}>
               <XAxis type="number" dataKey={dataKey} unit={unit} tick={{ fontSize: 12 }} />
               <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} interval={0} />
               <Tooltip cursor={{ fill: 'hsl(var(--secondary))' }} content={<ChartTooltipContent />} />
               <Bar dataKey={dataKey} radius={[0, 4, 4, 0]}>
+                {showLabel &&
+                  <LabelList 
+                    dataKey={dataKey} 
+                    position="right" 
+                    offset={5} 
+                    formatter={(value: number) => value > 0 ? `${value.toFixed(2)}${unit}` : ''}
+                    style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} 
+                  />
+                }
                 {data.map((_, index) => (
                   <Cell key={index} fill={COLORS[index % COLORS.length]} />
                 ))}
@@ -101,6 +111,9 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   const [loadingPresence, setLoadingPresence] = useState(false);
   const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
 
+  const [chartPresenceCache, setChartPresenceCache] = useState<Record<string, DetailedParticipant['presencas']>>({});
+  const [loadingCharts, setLoadingCharts] = useState(true);
+
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -119,6 +132,23 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   const [sourceFilter, setSourceFilter] = useState('todos');
   const [dateFilter, setDateFilter] = useState(dateOptions[0]?.value || '');
   const [currentPage, setCurrentPage] = useState(1);
+
+  const fetchAllPresenceData = useCallback(async () => {
+    setLoadingCharts(true);
+    const allParticipantIds = initialParticipants.map(p => p.id);
+    try {
+        const allPresenceData = await getPresenceForParticipants(formacao.id, allParticipantIds);
+        setChartPresenceCache(allPresenceData);
+    } catch (error) {
+        toast({ title: "Erro ao carregar dados para os gráficos.", variant: "destructive" });
+    } finally {
+        setLoadingCharts(false);
+    }
+  }, [formacao.id, initialParticipants, toast]);
+
+  useEffect(() => {
+    fetchAllPresenceData();
+  }, [fetchAllPresenceData]);
   
   const filteredParticipants = useMemo(() => {
     return allParticipants.filter(p => {
@@ -198,9 +228,8 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
 
   const regionalStats = useMemo(() => {
     const stats: { [key: string]: { inscritos: number; presentes: number; avulsos: number } } = {};
-    const participantsWithPresence = filteredParticipants.filter(p => presenceCache[p.id]);
-
-    participantsWithPresence.forEach(p => {
+    
+    allParticipants.forEach(p => {
       let regional = p.dados?.regional || 'N/A';
       if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
       
@@ -208,7 +237,12 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
         stats[regional] = { inscritos: 0, presentes: 0, avulsos: 0 };
       }
 
-      const daily = presenceCache[p.id]?.find(pr => pr.date === dateFilter);
+      const presences = chartPresenceCache[p.id];
+      if (!presences) {
+        return;
+      }
+
+      const daily = presences.find(pr => pr.date === dateFilter);
       const isPresente = !!daily?.matutino || !!daily?.vespertino;
 
       if (p.fonte === 'AVULSO') {
@@ -219,11 +253,11 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
       }
     });
 
-    const commitmentData = Object.entries(stats).map(([name, data]) => ({ name, taxaComprometimento: data.inscritos > 0 ? (data.presentes / data.inscritos) * 100 : 0 })).sort((a, b) => b.taxaComprometimento - a.taxaComprometimento).slice(0, 10);
+    const comparecimentoData = Object.entries(stats).map(([name, data]) => ({ name, taxaComparecimento: data.inscritos > 0 ? (data.presentes / data.inscritos) * 100 : 0 })).sort((a, b) => b.taxaComparecimento - a.taxaComparecimento).slice(0, 10);
     const avulsosData = Object.entries(stats).map(([name, data]) => ({ name, avulsos: data.avulsos })).filter(item => item.avulsos > 0).sort((a, b) => b.avulsos - a.avulsos).slice(0, 10);
       
-    return { commitmentData, avulsosData };
-  }, [filteredParticipants, dateFilter, presenceCache]);
+    return { comparecimentoData, avulsosData };
+  }, [allParticipants, dateFilter, chartPresenceCache]);
 
 
   const PresenceStatus = ({ participantId, periodo, presence }: { participantId: string; periodo: 'MAT' | 'VESP'; presence: PresenceData | null; }) => {
@@ -244,18 +278,21 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   
       setTogglingPresence(loadingKey);
       const result = await setManualPresence(participantId, formacao.id, dateFilter, periodo);
-  
+      setTogglingPresence(null);
+
       if (result?.error) {
         toast({ title: 'Erro', description: result.error, variant: 'destructive' });
       } else {
         toast({ title: 'Sucesso', description: presence ? 'Presença removida.' : 'Presença adicionada.' });
+        // Invalidate table cache for this user to trigger its own refetch
         setPresenceCache(prevCache => {
-          const newCache = { ...prevCache };
-          delete newCache[participantId];
-          return newCache;
+            const newCache = { ...prevCache };
+            delete newCache[participantId];
+            return newCache;
         });
+        // Refetch all chart data to ensure consistency
+        fetchAllPresenceData();
       }
-      setTogglingPresence(null);
     };
   
     if (isLoading) return <Loader2 className="h-5 w-5 animate-spin" />;
@@ -301,7 +338,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                 <CardTitle>Participantes</CardTitle>
                 <CardDescription>Lista de participantes com detalhes de presença.</CardDescription>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setPresenceCache({})} disabled={loadingPresence}><RefreshCw className={`h-4 w-4 ${loadingPresence ? 'animate-spin' : ''}`} /></Button>
+              <Button variant="ghost" size="icon" onClick={() => { setPresenceCache({}); fetchAllPresenceData(); }} disabled={loadingPresence || loadingCharts}><RefreshCw className={`h-4 w-4 ${(loadingPresence || loadingCharts) ? 'animate-spin' : ''}`} /></Button>
             </CardHeader>
             <CardContent>
                 <div className="rounded-md border">
@@ -340,12 +377,19 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
         <Card className="mt-6">
             <CardHeader>
                 <CardTitle>Análise de Dados</CardTitle>
-                <CardDescription>Gráficos baseados nos {filteredParticipants.filter(p=>presenceCache[p.id]).length} participantes com dados de presença carregados.</CardDescription>
+                <CardDescription>Gráficos baseados no total de {allParticipants.length} participantes da formação.</CardDescription>
             </CardHeader>
-            <CardContent className="grid md:grid-cols-1 lg:grid-cols-2 gap-6">
-                <RankingChart data={regionalStats.commitmentData} dataKey="taxaComprometimento" unit="%" title="Taxa de Comprometimento (Inscritos)" description="Percentual de inscritos que registraram presença, por regional."/>
-                <RankingChart data={regionalStats.avulsosData} dataKey="avulsos" unit="" title="Participantes Avulsos" description="Total de participantes não inscritos que registraram presença, por regional."/>
-            </CardContent>
+             {loadingCharts ? (
+              <CardContent className="grid md:grid-cols-1 lg:grid-cols-2 gap-6 h-96">
+                <div className="flex items-center justify-center text-muted-foreground border rounded-lg"><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Carregando gráficos...</div>
+                <div className="flex items-center justify-center text-muted-foreground border rounded-lg"><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Carregando gráficos...</div>
+              </CardContent>
+            ) : (
+              <CardContent className="grid md:grid-cols-1 lg:grid-cols-2 gap-6">
+                  <RankingChart data={regionalStats.comparecimentoData} dataKey="taxaComparecimento" unit="%" title="Taxa de Comparecimento (Inscritos)" description="Percentual de inscritos que registraram presença, por regional." showLabel={true}/>
+                  <RankingChart data={regionalStats.avulsosData} dataKey="avulsos" unit="" title="Participantes Avulsos" description="Total de participantes não inscritos que registraram presença, por regional."/>
+              </CardContent>
+            )}
         </Card>
     </div>
   );
