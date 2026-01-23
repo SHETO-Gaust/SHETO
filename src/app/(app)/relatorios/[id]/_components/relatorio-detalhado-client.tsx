@@ -112,8 +112,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   const router = useRouter();
   const { toast } = useToast();
 
-  console.log('[CLIENT] Received participants data:', JSON.stringify(participants, null, 2));
-
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -170,21 +168,19 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   const { paginatedParticipants, totalPages } = useMemo(() => {
     const totalPages = Math.ceil(filteredParticipants.length / ITEMS_PER_PAGE);
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-
     const paginated = filteredParticipants.slice(start, start + ITEMS_PER_PAGE);
 
     const participantsForView = paginated.map(p => {
-      const daily = p.presencas.find(pr => pr.date === dateFilter) || null;
+        const daily = p.presencas.find(pr => pr.date === dateFilter);
+        let regional = p.dados?.regional || 'N/A';
+        if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
 
-      let regional = p.dados?.regional || 'N/A';
-      if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
-
-      return {
-        ...p,
-        regional,
-        presenca_matutina: daily?.matutino ?? null,
-        presenca_vespertina: daily?.vespertino ?? null,
-      };
+        return {
+            ...p,
+            regional,
+            presenca_matutina: daily?.matutino ?? null,
+            presenca_vespertina: daily?.vespertino ?? null,
+        };
     });
 
     return { paginatedParticipants: participantsForView, totalPages };

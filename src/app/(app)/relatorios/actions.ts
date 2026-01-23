@@ -113,9 +113,10 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const startOfQueryDay = toZonedTime(`${date}T00:00:00`, saoPauloTimeZone);
-        const endOfQueryDay = toZonedTime(`${date}T23:59:59`, saoPauloTimeZone);
-        
+        const targetDate = toZonedTime(date, saoPauloTimeZone);
+        const startOfQueryDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0);
+        const endOfQueryDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59);
+
         const { data: existingRecords, error: fetchError } = await supabase
             .from('frequencia')
             .select('id, source')
@@ -126,7 +127,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .lte('registered_at', endOfQueryDay.toISOString());
 
         if (fetchError) {
-            return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
+             return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
         }
 
         if (existingRecords && existingRecords.length > 0) {
@@ -198,18 +199,8 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
         frequenciasPromise,
     ]);
 
-    if (formacaoResult.error) {
-        console.error('Error fetching formacao for detailed report:', formacaoResult.error);
-        return null;
-    }
-    
-    if (inscricoesResult.error) {
-        console.error('Error fetching inscricoes for detailed report:', inscricoesResult.error);
-        return null;
-    }
-
-    if (frequenciasResult.error) {
-        console.error('Error fetching frequencias for detailed report:', frequenciasResult.error);
+    if (formacaoResult.error || inscricoesResult.error || frequenciasResult.error) {
+        console.error('Error fetching data for detailed report:', formacaoResult.error || inscricoesResult.error || frequenciasResult.error);
         return null;
     }
 
@@ -217,38 +208,34 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const inscricoes = inscricoesResult.data as Inscricao[];
     const frequencias = frequenciasResult.data as Frequencia[];
     
-    console.log('[SERVER] Raw Frequencias fetched from DB:', JSON.stringify(frequencias, null, 2));
-    
     type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
-    frequencias.forEach(freq => {
+    // Robusto loop de agrupamento
+    for (const freq of frequencias) {
         const zonedDate = toZonedTime(freq.registered_at, saoPauloTimeZone);
         const dateKey = formatInTimeZone(zonedDate, saoPauloTimeZone, 'yyyy-MM-dd');
         
-        console.log(`[SERVER] Processing freq record for inscricao ${freq.inscricao_id}:`);
-        console.log(`  - Original UTC Timestamp: ${freq.registered_at}`);
-        console.log(`  - Converted Sao Paulo Time: ${zonedDate}`);
-        console.log(`  - Calculated dateKey: ${dateKey}`);
-        console.log(`  - Periodo: ${freq.periodo}`);
-
-        const entry = frequenciaMap.get(freq.inscricao_id) || {};
-        
-        if (!entry[dateKey]) {
-            entry[dateKey] = { matutino: null, vespertino: null };
+        // Garante que o participante existe no mapa
+        if (!frequenciaMap.has(freq.inscricao_id)) {
+            frequenciaMap.set(freq.inscricao_id, {});
         }
+        const participantData = frequenciaMap.get(freq.inscricao_id)!;
 
+        // Garante que a data existe para o participante
+        if (!participantData[dateKey]) {
+            participantData[dateKey] = { matutino: null, vespertino: null };
+        }
+        
         const presenceInfo = { registered_at: freq.registered_at, source: freq.source };
 
+        // Preenche o período correto sem sobrescrever o outro
         if (freq.periodo === 'MAT') {
-            entry[dateKey].matutino = presenceInfo;
+            participantData[dateKey].matutino = presenceInfo;
         } else if (freq.periodo === 'VESP') {
-            entry[dateKey].vespertino = presenceInfo;
+            participantData[dateKey].vespertino = presenceInfo;
         }
-        frequenciaMap.set(freq.inscricao_id, entry);
-    });
-
-    console.log('[SERVER] Final frequenciaMap:', JSON.stringify(Object.fromEntries(frequenciaMap), null, 2));
+    }
     
     const participants: DetailedParticipant[] = inscricoes.map(inscricao => {
         const presencasPorData = frequenciaMap.get(inscricao.id) || {};
@@ -271,3 +258,4 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
 
     return { formacao, participants };
 }
+
