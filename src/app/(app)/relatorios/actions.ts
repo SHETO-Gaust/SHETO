@@ -88,9 +88,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDate = toZonedTime(parse(date, 'yyyy-MM-dd', new Date()), saoPauloTimeZone);
-        const startOfQueryDay = startOfDay(targetDate);
-        const endOfQueryDay = endOfDay(targetDate);
+        const targetDate = parse(date, 'yyyy-MM-dd', new Date());
 
         const { data: existingRecords, error: fetchError } = await supabase
             .from('frequencia')
@@ -98,8 +96,8 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .eq('inscricao_id', inscricaoId)
             .eq('formacao_id', formacaoId)
             .eq('periodo', periodo)
-            .gte('registered_at', startOfQueryDay.toISOString())
-            .lte('registered_at', endOfQueryDay.toISOString());
+            .gte('registered_at', startOfDay(targetDate).toISOString())
+            .lte('registered_at', endOfDay(targetDate).toISOString());
             
         if (fetchError) {
              console.error('[SERVER_ACTION_ERROR] setManualPresence/fetchError:', fetchError);
@@ -114,7 +112,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                      console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
                     return { error: `Erro ao remover presença manual: ${deleteError.message}` };
                 }
-                revalidatePath(`/relatorios/${formacaoId}`); 
                 return { success: true, status: 'REMOVED' };
             } else {
                  console.warn('[SERVER_ACTION_WARN] setManualPresence: Attempted to remove automatic presence.');
@@ -142,7 +139,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 console.error('[SERVER_ACTION_ERROR] setManualPresence/insertError:', insertError);
                 return { error: `Erro ao adicionar presença manual: ${insertError.message}` };
             }
-            revalidatePath(`/relatorios/${formacaoId}`);
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
@@ -167,7 +163,6 @@ export type DetailedParticipant = {
 };
 
 export async function getDetailedParticipationReport(formacaoId: string): Promise<{ formacao: Formacao, participants: DetailedParticipant[] } | null> {
-    console.log('[SERVER-ACTION-LOG] getDetailedParticipationReport: Fetching base data...');
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
@@ -199,7 +194,6 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
         };
     });
 
-    console.log(`[SERVER-ACTION-LOG] getDetailedParticipationReport: Found ${participants.length} participants.`);
     return { formacao, participants };
 }
 
@@ -210,7 +204,6 @@ export async function getPresenceForParticipants(
     if (!participantIds || participantIds.length === 0) {
         return {};
     }
-    console.log(`[SERVER-ACTION-LOG] getPresenceForParticipants: Fetching presence for ${participantIds.length} participants.`);
 
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
@@ -265,6 +258,5 @@ export async function getPresenceForParticipants(
         }));
     }
     
-    console.log(`[SERVER-ACTION-LOG] getPresenceForParticipants: Processed and returning data for ${Object.keys(result).length} participants.`);
     return result;
 }
