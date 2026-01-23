@@ -114,7 +114,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDateInSP = toZonedTime(date, saoPauloTimeZone);
+        const targetDateInSP = toZonedTime(new Date(date), saoPauloTimeZone);
         const startOfQueryDay = startOfDay(targetDateInSP);
         const endOfQueryDay = endOfDay(targetDateInSP);
 
@@ -126,8 +126,9 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .eq('periodo', periodo)
             .gte('registered_at', startOfQueryDay.toISOString())
             .lte('registered_at', endOfQueryDay.toISOString());
-
+            
         if (fetchError) {
+             console.error('[SERVER_ACTION_ERROR] setManualPresence/fetchError:', fetchError);
              return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
         }
 
@@ -136,11 +137,13 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             if (existing.source === false) { // source: false is MANUAL
                 const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
                 if (deleteError) {
+                     console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
                     return { error: `Erro ao remover presença manual: ${deleteError.message}` };
                 }
                 revalidatePath(`/relatorios/${formacaoId}`);
                 return { success: true, status: 'REMOVED' };
             } else {
+                 console.warn('[SERVER_ACTION_WARN] setManualPresence: Attempted to remove automatic presence.');
                 return { error: 'Não é possível remover uma presença registrada automaticamente.' };
             }
         } else {
@@ -159,12 +162,14 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             });
 
             if (insertError) {
+                console.error('[SERVER_ACTION_ERROR] setManualPresence/insertError:', insertError);
                 return { error: `Erro ao adicionar presença manual: ${insertError.message}` };
             }
             revalidatePath(`/relatorios/${formacaoId}`);
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
+        console.error('[SERVER_ACTION_ERROR] setManualPresence/catchAll:', e);
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
 }
@@ -186,6 +191,7 @@ export type DetailedParticipant = {
 
 
 export async function getDetailedParticipationReport(formacaoId: string): Promise<{ formacao: Formacao, participants: DetailedParticipant[] } | null> {
+    console.log(`[SERVER-ACTION] getDetailedParticipationReport called for formacaoId: ${formacaoId}`);
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
@@ -200,7 +206,7 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     ]);
 
     if (formacaoResult.error || inscricoesResult.error || frequenciasResult.error) {
-        console.error('Error fetching data for detailed report:', formacaoResult.error || inscricoesResult.error || frequenciasResult.error);
+        console.error('[SERVER-ACTION-ERROR] Error fetching data for detailed report:', formacaoResult.error || inscricoesResult.error || frequenciasResult.error);
         return null;
     }
 
@@ -208,10 +214,13 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const inscricoes = inscricoesResult.data as Inscricao[];
     const frequencias = frequenciasResult.data as Frequencia[];
     
+    console.log('[SERVER-ACTION-LOG] Raw frequencias from DB:', JSON.stringify(frequencias, null, 2));
+
     type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     for (const freq of frequencias) {
+        // console.log(`[SERVER-ACTION-LOG] Processing freq record for inscricao_id ${freq.inscricao_id}:`, JSON.stringify(freq));
         const zonedDate = toZonedTime(new Date(freq.registered_at), saoPauloTimeZone);
         const dateKey = formatInTimeZone(zonedDate, saoPauloTimeZone, 'yyyy-MM-dd');
         
@@ -233,15 +242,23 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
         }
     }
     
+    console.log('[SERVER-ACTION-LOG] Final FrequenciaMap:', JSON.stringify(Object.fromEntries(frequenciaMap), null, 2));
+    
     const participants: DetailedParticipant[] = inscricoes.map(inscricao => {
-        const presencasPorData = frequenciaMap.get(inscricao.id) || {};
-        const presencasArray = Object.entries(presencasPorData).map(([date, presence]) => ({
-            date: date,
-            matutino: presence.matutino,
-            vespertino: presence.vespertino,
-        }));
+        const participantFrequencias = frequenciaMap.get(inscricao.id) || {};
+        
+        const allFormacaoDates = (formacao.dates as any[] | undefined)?.map((d: any) => formatInTimeZone(toZonedTime(new Date(d.date), saoPauloTimeZone), saoPauloTimeZone, 'yyyy-MM-dd')) || [];
 
-        return {
+        const presencasArray = allFormacaoDates.map(date => {
+            const presenceForDate = participantFrequencias[date];
+            return {
+                date: date,
+                matutino: presenceForDate?.matutino || null,
+                vespertino: presenceForDate?.vespertino || null,
+            };
+        });
+
+        const participantToReturn = {
             id: inscricao.id,
             nome_completo: inscricao.nome_completo,
             cpf: inscricao.cpf,
@@ -250,7 +267,11 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
             dados: inscricao.dados,
             presencas: presencasArray,
         };
+
+        return participantToReturn;
     });
+    
+    console.log(`[SERVER-ACTION-LOG] Final participant data for ${participants[0]?.nome_completo} (sample):`, JSON.stringify(participants[0], null, 2));
 
     return { formacao, participants };
 }
