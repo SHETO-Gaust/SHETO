@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -59,6 +60,7 @@ type RelatorioDetalhadoClientProps = {
 };
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"];
+const saoPauloTimeZone = 'America/Sao_Paulo';
 
 const RankingChart = ({
   data,
@@ -114,10 +116,10 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     (formacao.dates || [])
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d: any) => {
-        const date = parseISO(d.date);
+        const utcDate = parseISO(d.date);
         return {
-          value: formatInTimeZone(date, 'UTC', 'yyyy-MM-dd'),
-          label: formatInTimeZone(date, 'UTC', "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+          value: formatInTimeZone(utcDate, saoPauloTimeZone, 'yyyy-MM-dd'),
+          label: formatInTimeZone(utcDate, saoPauloTimeZone, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
         };
       }),
     [formacao.dates]
@@ -251,12 +253,8 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       const timestamp = useMemo(() => {
         if (!presence?.registered_at) return null;
       
-        const date = new Date(presence.registered_at);
-      
-        return date.toLocaleTimeString('pt-BR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
+        return formatInTimeZone(new Date(presence.registered_at), saoPauloTimeZone, 'HH:mm:ss', {
+            locale: ptBR,
         });
       }, [presence?.registered_at]);      
   

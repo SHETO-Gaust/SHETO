@@ -1,11 +1,11 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
-import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { revalidatePath } from 'next/cache';
-import { formatInTimeZone } from 'date-fns-tz';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
     const inscricaoFonteMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
@@ -106,14 +106,15 @@ export async function getSingleParticipacaoSummary(formacaoId: string): Promise<
     };
 }
 
+const saoPauloTimeZone = 'America/Sao_Paulo';
+
 export async function setManualPresence(inscricaoId: string, formacaoId: string, date: string, periodo: 'MAT' | 'VESP') {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     
     try {
-        const day = parseISO(`${date}T12:00:00.000Z`);
-        const startOfQueryDay = startOfDay(day);
-        const endOfQueryDay = endOfDay(day);
+        const startOfQueryDay = toZonedTime(`${date}T00:00:00`, saoPauloTimeZone);
+        const endOfQueryDay = toZonedTime(`${date}T23:59:59`, saoPauloTimeZone);
         
         const { data: existingRecords, error: fetchError } = await supabase
             .from('frequencia')
@@ -125,10 +126,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .lte('registered_at', endOfQueryDay.toISOString());
 
         if (fetchError) {
-            console.error('[SERVER_ACTION_ERROR] setManualPresence/fetchError:', {
-                message: fetchError.message,
-                details: fetchError.details,
-            });
             return { error: `Erro ao verificar presença existente: ${fetchError.message}` };
         }
 
@@ -155,7 +152,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 inscricao_id: inscricaoId,
                 cpf: inscricao.cpf,
                 periodo: periodo,
-                registered_at: day.toISOString(),
+                registered_at: new Date().toISOString(),
                 source: false, // false for MANUAL
             });
 
@@ -166,6 +163,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
+        console.error('[SERVER_ACTION_ERROR] setManualPresence/unexpected:', e);
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
 }
@@ -223,7 +221,7 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     frequencias.forEach(freq => {
-        const dateKey = formatInTimeZone(new Date(freq.registered_at), 'UTC', 'yyyy-MM-dd');
+        const dateKey = formatInTimeZone(new Date(freq.registered_at), saoPauloTimeZone, 'yyyy-MM-dd');
         
         const entry = frequenciaMap.get(freq.inscricao_id) || {};
         
