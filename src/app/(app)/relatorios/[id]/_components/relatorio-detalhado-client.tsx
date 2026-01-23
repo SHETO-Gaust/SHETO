@@ -27,7 +27,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { parse, format } from 'date-fns';
+import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
@@ -117,11 +117,13 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     (formacao.dates || [])
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d: any) => {
-        // Treat date string as UTC to avoid timezone shifts on parsing
-        const date = parse(d.date.substring(0, 10), 'yyyy-MM-dd', new Date());
+        const dateString = d.date.substring(0, 10); // '2026-01-20'
+        const [year, month, day] = dateString.split('-').map(Number);
+        // Create date object in UTC to format it correctly for the label, avoiding local timezone shifts.
+        const utcDate = new Date(Date.UTC(year, month - 1, day));
         return {
-          value: format(date, 'yyyy-MM-dd'),
-          label: format(date, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+          value: dateString, // The value for filtering is the simple string.
+          label: format(utcDate, "dd/MM/yyyy (EEEE)", { locale: ptBR, timeZone: 'UTC' }),
         };
       }),
     [formacao.dates]
