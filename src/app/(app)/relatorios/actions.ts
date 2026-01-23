@@ -130,10 +130,10 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
 
         if (existingRecords && existingRecords.length > 0) {
             const existing = existingRecords[0];
-            if (existing.source === 'MANUAL') {
+            if (existing.source === false) { // source: false is MANUAL
                 const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existing.id);
                 if (deleteError) {
-                    return { error: 'Erro ao remover presença manual.' };
+                    return { error: `Erro ao remover presença manual: ${deleteError.message}` };
                 }
                 revalidatePath(`/relatorios/${formacaoId}`);
                 return { success: true, status: 'REMOVED' };
@@ -152,11 +152,11 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 cpf: inscricao.cpf,
                 periodo: periodo,
                 registered_at: day.toISOString(),
-                source: 'MANUAL',
+                source: false, // false for MANUAL
             });
 
             if (insertError) {
-                return { error: 'Erro ao adicionar presença manual.' };
+                return { error: `Erro ao adicionar presença manual: ${insertError.message}` };
             }
             revalidatePath(`/relatorios/${formacaoId}`);
             return { success: true, status: 'ADDED' };
@@ -177,8 +177,8 @@ export type DetailedParticipant = {
     dados: any;
     presencas: {
         date: string; // YYYY-MM-DD
-        matutino: { registered_at: string; source: string; } | null;
-        vespertino: { registered_at: string; source: string; } | null;
+        matutino: { registered_at: string; source: boolean; } | null;
+        vespertino: { registered_at: string; source: boolean; } | null;
     }[];
 };
 
@@ -216,15 +216,15 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const inscricoes = inscricoesResult.data as Inscricao[];
     const frequencias = frequenciasResult.data as Frequencia[];
     
-    type PresenceInfo = { registered_at: string; source: string; } | null;
+    type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     frequencias.forEach(freq => {
         const date = new Date(freq.registered_at);
-const dateKey = format(
-  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())),
-  'yyyy-MM-dd'
-);
+        const dateKey = format(
+          new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())),
+          'yyyy-MM-dd'
+        );
 
         const entry = frequenciaMap.get(freq.inscricao_id) || {};
         
@@ -232,12 +232,12 @@ const dateKey = format(
             entry[dateKey] = { matutino: null, vespertino: null };
         }
 
-        const presenceInfo = { registered_at: freq.registered_at, source: freq.source || 'AUTOMATIC' };
+        const presenceInfo = { registered_at: freq.registered_at, source: freq.source };
 
         if (freq.periodo === 'MAT') {
-            entry[dateKey].matutino = presenceInfo as { registered_at: string; source: string; };
+            entry[dateKey].matutino = presenceInfo;
         } else if (freq.periodo === 'VESP') {
-            entry[dateKey].vespertino = presenceInfo as { registered_at: string; source: string; };
+            entry[dateKey].vespertino = presenceInfo;
         }
         frequenciaMap.set(freq.inscricao_id, entry);
     });

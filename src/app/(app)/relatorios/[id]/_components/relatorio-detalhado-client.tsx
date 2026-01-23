@@ -49,7 +49,7 @@ import { Label } from '@/components/ui/label';
 
 type PresenceData = {
   registered_at: string;
-  source: string;
+  source: boolean; // true for AUTOMATIC, false for MANUAL
 };
 
 type RelatorioDetalhadoClientProps = {
@@ -243,8 +243,9 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     const loadingKey = `${participantId}-${periodo}-${dateFilter}`;
     const isLoading = togglingPresence === loadingKey;
   
-    const isManual =
-      presence?.source?.trim().toUpperCase() === 'MANUAL';
+    // source === false is MANUAL
+    // source === true is AUTOMATIC
+    const isManual = presence?.source === false;
   
       const timestamp = useMemo(() => {
         if (!presence?.registered_at) return null;
@@ -259,7 +260,8 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
       }, [presence?.registered_at]);      
   
     const handleToggle = async () => {
-      if (!isManual && presence) {
+      // Don't allow removing automatic presence
+      if (presence && !isManual) {
         toast({
           title: 'Ação não permitida',
           description: 'Presenças automáticas não podem ser removidas.',

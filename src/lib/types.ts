@@ -8,6 +8,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -97,7 +98,7 @@ export type Frequencia = {
   cpf: string;
   periodo?: string;
   registered_at: string; // timestamp with time zone
-  source?: string;
+  source: boolean; // TRUE for AUTOMATIC, FALSE for MANUAL
 };
 
 export type Inscricao = {
