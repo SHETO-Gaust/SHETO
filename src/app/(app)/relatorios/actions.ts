@@ -4,8 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
-import { startOfDay, endOfDay, parseISO, parse } from 'date-fns';
-import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import { startOfDay, endOfDay, parse } from 'date-fns';
 
 const processFrequencia = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
     const inscricaoFonteMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
@@ -113,7 +112,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDate = parseISO(`${date}T12:00:00.000Z`);
+        const targetDate = parse(date, 'yyyy-MM-dd', new Date());
         const startOfQueryDay = startOfDay(targetDate);
         const endOfQueryDay = endOfDay(targetDate);
 
@@ -197,7 +196,7 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
 
     const formacaoPromise = supabase.from('formacoes').select('*').eq('id', formacaoId).single();
     const inscricoesPromise = supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId);
-    const frequenciasPromise = supabase.from('frequencia').select('inscricao_id, registered_at, periodo, source').eq('formacao_id', formacaoId);
+    const frequenciasPromise = supabase.from('frequencia').select('inscricao_id, registered_at, periodo, source').eq('formacao_id', formacaoId).limit(10000);
 
     const [formacaoResult, inscricoesResult, frequenciasResult] = await Promise.all([
         formacaoPromise,
@@ -218,7 +217,6 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
     for (const freq of frequencias) {
-        // IMPORTANT: Convert DB timestamp (UTC) to a 'YYYY-MM-DD' string key, also in UTC.
         const dateKey = freq.registered_at.substring(0, 10);
         
         if (!frequenciaMap.has(freq.inscricao_id)) {
@@ -263,10 +261,6 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
             presencas: presencasArray,
         };
         
-        if (inscricao.nome_completo.includes('LEILANE ALVES NOGUEIRA')) {
-            console.log(`[SERVER-ACTION-LOG] Final participant data for ${inscricao.nome_completo} (sample):`, JSON.stringify(participantToReturn, null, 2));
-        }
-
         return participantToReturn;
     });
 

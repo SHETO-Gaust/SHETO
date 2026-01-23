@@ -27,7 +27,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
 import type { Formacao } from '@/lib/types';
@@ -111,19 +111,14 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   const router = useRouter();
   const { toast } = useToast();
 
-  console.log('[CLIENT-LOG-START] Raw data received by component:', { formacao, participants });
-
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((d: any) => {
-        const dateString = d.date.substring(0, 10); // '2026-01-20'
-        const [year, month, day] = dateString.split('-').map(Number);
-        // Create date object in UTC to format it correctly for the label, avoiding local timezone shifts.
-        const utcDate = new Date(Date.UTC(year, month - 1, day));
+        const dateString = d.date.substring(0, 10);
         return {
-          value: dateString, // The value for filtering is the simple string.
-          label: format(utcDate, "dd/MM/yyyy (EEEE)", { locale: ptBR, timeZone: 'UTC' }),
+          value: dateString,
+          label: format(parseISO(d.date), "dd/MM/yyyy (EEEE)", { locale: ptBR }),
         };
       }),
     [formacao.dates]
@@ -136,10 +131,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
   const [currentPage, setCurrentPage] = useState(1);
   const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
   
-  useEffect(() => {
-    console.log('[CLIENT-LOG-FILTERS] Filters updated:', { dateFilter, presenceFilter, sourceFilter, searchTerm, currentPage });
-  }, [dateFilter, presenceFilter, sourceFilter, searchTerm, currentPage]);
-
   const ITEMS_PER_PAGE = 25;
 
   const filteredParticipants = useMemo(() => {
@@ -178,12 +169,7 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
     const paginated = filteredParticipants.slice(start, start + ITEMS_PER_PAGE);
 
     const participantsForView = paginated.map(p => {
-        console.log(`[CLIENT-LOG-PROCESSING] Processing participant: ${p.nome_completo} (CPF: ${p.cpf}) for date: ${dateFilter}`);
-        console.log(`[CLIENT-LOG-PROCESSING] Full presences array for participant:`, p.presencas);
-
         const daily = p.presencas.find(pr => pr.date === dateFilter);
-
-        console.log(`[CLIENT-LOG-PROCESSING] Found daily presence object for date ${dateFilter}:`, daily);
         
         let regional = p.dados?.regional || 'N/A';
         if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
@@ -194,9 +180,6 @@ export function RelatorioDetalhadoClient({ formacao, participants }: RelatorioDe
             presenca_matutina: daily?.matutino ?? null,
             presenca_vespertina: daily?.vespertino ?? null,
         };
-
-        console.log(`[CLIENT-LOG-PROCESSING] Final object for rendering:`, finalParticipantObject);
-
         return finalParticipantObject;
     });
     
