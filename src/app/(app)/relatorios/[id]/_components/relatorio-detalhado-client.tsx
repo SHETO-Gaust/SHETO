@@ -282,16 +282,19 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
 
       if (result?.error) {
         toast({ title: 'Erro', description: result.error, variant: 'destructive' });
-      } else {
+      } else if (result.success && result.updatedPresence) {
         toast({ title: 'Sucesso', description: presence ? 'Presença removida.' : 'Presença adicionada.' });
-        // Invalidate table cache for this user to trigger its own refetch
-        setPresenceCache(prevCache => {
-            const newCache = { ...prevCache };
-            delete newCache[participantId];
-            return newCache;
-        });
-        // Refetch all chart data to ensure consistency
-        fetchAllPresenceData();
+        
+        setPresenceCache(prevCache => ({
+            ...prevCache,
+            ...result.updatedPresence,
+        }));
+        setChartPresenceCache(prevCache => ({
+            ...prevCache,
+            ...result.updatedPresence,
+        }));
+      } else {
+        toast({ title: 'Erro', description: 'Não foi possível atualizar a presença. Resposta inesperada do servidor.', variant: 'destructive' });
       }
     };
   

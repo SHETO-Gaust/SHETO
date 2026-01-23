@@ -88,7 +88,9 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDate = parse(date, 'yyyy-MM-dd', new Date());
+        const targetDate = toZonedTime(parse(date, 'yyyy-MM-dd', new Date()), saoPauloTimeZone);
+        const startOfTargetDay = startOfDay(targetDate);
+        const endOfTargetDay = endOfDay(targetDate);
 
         const { data: existingRecords, error: fetchError } = await supabase
             .from('frequencia')
@@ -96,8 +98,8 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
             .eq('inscricao_id', inscricaoId)
             .eq('formacao_id', formacaoId)
             .eq('periodo', periodo)
-            .gte('registered_at', startOfDay(targetDate).toISOString())
-            .lte('registered_at', endOfDay(targetDate).toISOString());
+            .gte('registered_at', startOfTargetDay.toISOString())
+            .lte('registered_at', endOfTargetDay.toISOString());
             
         if (fetchError) {
              console.error('[SERVER_ACTION_ERROR] setManualPresence/fetchError:', fetchError);
@@ -112,8 +114,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                      console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
                     return { error: `Erro ao remover presença manual: ${deleteError.message}` };
                 }
-                revalidatePath('/relatorios');
-                return { success: true, status: 'REMOVED' };
             } else {
                  console.warn('[SERVER_ACTION_WARN] setManualPresence: Attempted to remove automatic presence.');
                 return { error: 'Não é possível remover uma presença registrada automaticamente.' };
@@ -140,13 +140,15 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 console.error('[SERVER_ACTION_ERROR] setManualPresence/insertError:', insertError);
                 return { error: `Erro ao adicionar presença manual: ${insertError.message}` };
             }
-            revalidatePath('/relatorios');
-            return { success: true, status: 'ADDED' };
         }
     } catch(e: any) {
         console.error('[SERVER_ACTION_ERROR] setManualPresence/catchAll:', e);
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
+    
+    revalidatePath('/relatorios');
+    const updatedPresence = await getPresenceForParticipants(formacaoId, [inscricaoId]);
+    return { success: true, updatedPresence };
 }
 
 
