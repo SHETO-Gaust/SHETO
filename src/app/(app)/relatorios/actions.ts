@@ -4,12 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
-import { startOfDay, endOfDay, parse } from 'date-fns';
+import { startOfDay, endOfDay, parse, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
 
-export async function getFormacoesForRelatorios(): Promise<Formacao[]> {
+export async function getParticipationSummaries(): Promise<ParticipacaoSummary[]> {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
@@ -19,37 +19,50 @@ export async function getFormacoesForRelatorios(): Promise<Formacao[]> {
         .order('created_at', { ascending: false });
 
     if (formacoesError) {
-        console.error('Error fetching formacoes for participation summary:', formacoesError);
+        console.error('Error fetching formacoes for summary:', formacoesError);
         return [];
     }
-    return formacoes;
-}
 
-export async function getSingleParticipacaoSummary(formacaoId: string): Promise<Omit<ParticipacaoSummary, 'formacao'>> {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
-
-    const [inscricoesResult, frequenciasResult] = await Promise.all([
-        supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId),
-        supabase.from('frequencia').select('*').eq('formacao_id', formacaoId)
-    ]);
+    const { data: todasInscricoes, error: inscricoesError } = await supabase
+        .from('inscricoes')
+        .select('id, formacao_id, fonte');
     
-    if (inscricoesResult.error || frequenciasResult.error) {
-        console.error('Error fetching details for single summary:', inscricoesResult.error || frequenciasResult.error);
-        return {
+    const { data: todasFrequencias, error: frequenciasError } = await supabase
+        .from('frequencia')
+        .select('inscricao_id, formacao_id, periodo');
+
+    if (inscricoesError || frequenciasError) {
+        console.error('Error fetching details for summary:', inscricoesError || frequenciasError);
+        // Return a structure that allows the page to render gracefully
+        return formacoes.map(formacao => ({
+            formacao,
             totalInscritos: 0,
             frequencia: {
                 geral: { total: 0, inscritos: 0, avulsos: 0 },
                 matutino: { total: 0, inscritos: 0, avulsos: 0 },
                 vespertino: { total: 0, inscritos: 0, avulsos: 0 },
             }
-        };
+        }));
     }
 
-    const inscricoes = (inscricoesResult.data as Inscricao[]) || [];
-    const todasFrequencias = (frequenciasResult.data as Frequencia[]) || [];
+    const inscricoesPorFormacao = (todasInscricoes || []).reduce((acc, inscricao) => {
+        if (!acc[inscricao.formacao_id]) {
+            acc[inscricao.formacao_id] = [];
+        }
+        acc[inscricao.formacao_id].push(inscricao);
+        return acc;
+    }, {} as { [key: string]: Pick<Inscricao, 'id' | 'formacao_id' | 'fonte'>[] });
     
-    const processUnique = (frequencias: Frequencia[], inscricoes: Inscricao[]): FrequenciaPeriodoSummary => {
+    const frequenciasPorFormacao = (todasFrequencias || []).reduce((acc, frequencia) => {
+        if (!acc[frequencia.formacao_id]) {
+            acc[frequencia.formacao_id] = [];
+        }
+        acc[frequencia.formacao_id].push(frequencia);
+        return acc;
+    }, {} as { [key: string]: Pick<Frequencia, 'inscricao_id' | 'formacao_id' | 'periodo'>[] });
+
+
+    const processUnique = (frequencias: Pick<Frequencia, 'inscricao_id' | 'periodo'>[], inscricoes: Pick<Inscricao, 'id' | 'fonte'>[]): FrequenciaPeriodoSummary => {
         const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
         const uniqueInscritos = new Set<string>();
         const uniqueAvulsos = new Set<string>();
@@ -69,17 +82,25 @@ export async function getSingleParticipacaoSummary(formacaoId: string): Promise<
         };
     };
 
-    const freqMatutino = todasFrequencias.filter(f => f.periodo === 'MAT');
-    const freqVespertino = todasFrequencias.filter(f => f.periodo === 'VESP');
+    const summaries: ParticipacaoSummary[] = formacoes.map(formacao => {
+        const inscricoes = inscricoesPorFormacao[formacao.id] || [];
+        const frequencias = frequenciasPorFormacao[formacao.id] || [];
+        
+        const freqMatutino = frequencias.filter(f => f.periodo === 'MAT');
+        const freqVespertino = frequencias.filter(f => f.periodo === 'VESP');
 
-    return {
-        totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,
-        frequencia: {
-            geral: processUnique(todasFrequencias, inscricoes),
-            matutino: processUnique(freqMatutino, inscricoes),
-            vespertino: processUnique(freqVespertino, inscricoes),
-        }
-    };
+        return {
+            formacao,
+            totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,
+            frequencia: {
+                geral: processUnique(frequencias, inscricoes),
+                matutino: processUnique(freqMatutino, inscricoes),
+                vespertino: processUnique(freqVespertino, inscricoes),
+            }
+        };
+    });
+
+    return summaries;
 }
 
 
@@ -146,7 +167,6 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
     
-    revalidatePath(`/relatorios/${formacaoId}`);
     revalidatePath('/relatorios');
     const updatedPresence = await getPresenceForParticipants(formacaoId, [inscricaoId]);
     return { success: true, updatedPresence };
@@ -244,7 +264,6 @@ export async function setBulkPresence(
 
     const updatedPresence = await getPresenceForParticipants(formacaoId, inscricaoIds);
     revalidatePath('/relatorios');
-    revalidatePath(`/relatorios/${formacaoId}`);
     return { success: true, updatedPresence };
 }
 
@@ -268,7 +287,7 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const supabase = createClient(cookieStore);
 
     const formacaoPromise = supabase.from('formacoes').select('*').eq('id', formacaoId).single();
-    const inscricoesPromise = supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId);
+    const inscricoesPromise = supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId).limit(10000);
     
     const [formacaoResult, inscricoesResult] = await Promise.all([
         formacaoPromise,
