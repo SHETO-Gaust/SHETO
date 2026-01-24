@@ -4,10 +4,6 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
-import { startOfDay, endOfDay, parseISO } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
-
-const saoPauloTimeZone = 'America/Sao_Paulo';
 
 export async function getFormacaoIds(): Promise<Pick<Formacao, 'id'>[]> {
     const cookieStore = cookies();
@@ -103,9 +99,8 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDate = toZonedTime(parseISO(date), saoPauloTimeZone);
-        const startOfTargetDay = startOfDay(targetDate);
-        const endOfTargetDay = endOfDay(targetDate);
+        const startOfTargetDay = new Date(`${date}T00:00:00.000Z`);
+        const endOfTargetDay = new Date(`${date}T23:59:59.999Z`);
 
         const { data: existingRecords, error: fetchError } = await supabase
             .from('frequencia')
@@ -182,9 +177,8 @@ export async function setBulkPresence(
     }
 
     try {
-        const targetDate = toZonedTime(parseISO(date), saoPauloTimeZone);
-        const startOfTargetDay = startOfDay(targetDate);
-        const endOfTargetDay = endOfDay(targetDate);
+        const startOfTargetDay = new Date(`${date}T00:00:00.000Z`);
+        const endOfTargetDay = new Date(`${date}T23:59:59.999Z`);
 
         if (action === 'add') {
             const { data: inscricoes, error: inscricaoError } = await supabase
