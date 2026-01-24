@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ParticipacaoSummary } from "@/lib/types";
@@ -7,12 +8,42 @@ import { Users, Sun, Sunset, BarChart3 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { RelatorioPeriodoContent } from "./relatorio-periodo-content";
+import { getParticipationSummary } from '@/app/(app)/relatorios/actions';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type RelatorioCardProps = {
-    summary: ParticipacaoSummary;
+    formacaoId: string;
 };
 
-export function RelatorioCard({ summary }: RelatorioCardProps) {
+export function RelatorioCard({ formacaoId }: RelatorioCardProps) {
+    const [summary, setSummary] = useState<ParticipacaoSummary | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchSummary = async () => {
+            setLoading(true);
+            const data = await getParticipationSummary(formacaoId);
+            setSummary(data);
+            setLoading(false);
+        };
+        fetchSummary();
+    }, [formacaoId]);
+
+    if (loading) {
+        return <Skeleton className="h-96 w-full rounded-xl" />;
+    }
+
+    if (!summary) {
+        return (
+            <Card className="flex flex-col h-96 justify-center items-center">
+                <CardHeader>
+                    <CardTitle className="text-center">Erro ao carregar</CardTitle>
+                    <CardDescription>Não foi possível carregar o resumo para esta formação.</CardDescription>
+                </CardHeader>
+            </Card>
+        );
+    }
+    
     const { formacao, frequencia, totalInscritos } = summary;
 
     return (

@@ -1,11 +1,26 @@
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getParticipationSummaries } from './actions';
-import { RelatorioCard } from '@/components/relatorios/relatorio-card';
-import type { ParticipacaoSummary } from '@/lib/types';
-import { FileText } from "lucide-react";
+'use client';
 
-export default async function RelatoriosPage() {
-    const summaries: ParticipacaoSummary[] = await getParticipationSummaries();
+import { useState, useEffect } from 'react';
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getFormacaoIds } from './actions';
+import { RelatorioCard } from '@/components/relatorios/relatorio-card';
+import type { Formacao } from '@/lib/types';
+import { FileText } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+export default function RelatoriosPage() {
+    const [formacoes, setFormacoes] = useState<Pick<Formacao, 'id'>[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchFormacoes = async () => {
+            setLoading(true);
+            const data = await getFormacaoIds();
+            setFormacoes(data);
+            setLoading(false);
+        };
+        fetchFormacoes();
+    }, []);
 
     return (
         <div className="space-y-6">
@@ -18,10 +33,15 @@ export default async function RelatoriosPage() {
                 </CardHeader>
             </Card>
             
-            {summaries.length > 0 ? (
+            {loading ? (
+                 <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+                    <Skeleton className="h-96 w-full rounded-xl" />
+                    <Skeleton className="h-96 w-full rounded-xl" />
+                 </div>
+            ) : formacoes.length > 0 ? (
                 <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-                    {summaries.map((summary) => (
-                        <RelatorioCard key={summary.formacao.id} summary={summary} />
+                    {formacoes.map((formacao) => (
+                        <RelatorioCard key={formacao.id} formacaoId={formacao.id} />
                     ))}
                 </div>
             ) : (

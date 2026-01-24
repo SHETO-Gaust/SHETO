@@ -4,37 +4,74 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
-import { startOfDay, endOfDay, parse, parseISO } from 'date-fns';
+import { startOfDay, endOfDay, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
 
-export async function getParticipationSummaries(): Promise<ParticipacaoSummary[]> {
+export async function getFormacaoIds(): Promise<Pick<Formacao, 'id'>[]> {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+    const { data, error } = await supabase
+        .from('formacoes')
+        .select('id')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching formacao ids:', error);
+        return [];
+    }
+    return data;
+}
+
+const processUniqueFrequencies = (frequencias: Pick<Frequencia, 'inscricao_id' | 'periodo'>[], inscricoes: Pick<Inscricao, 'id' | 'fonte'>[]): FrequenciaPeriodoSummary => {
+    const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
+    const uniqueInscritos = new Set<string>();
+    const uniqueAvulsos = new Set<string>();
+
+    frequencias.forEach(freq => {
+        if (inscricaoMap.get(freq.inscricao_id) === 'AVULSO') {
+            uniqueAvulsos.add(freq.inscricao_id);
+        } else {
+            uniqueInscritos.add(freq.inscricao_id);
+        }
+    });
+
+    return {
+        total: uniqueInscritos.size + uniqueAvulsos.size,
+        inscritos: uniqueInscritos.size,
+        avulsos: uniqueAvulsos.size,
+    };
+};
+
+export async function getParticipationSummary(formacaoId: string): Promise<ParticipacaoSummary | null> {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
-    const { data: formacoes, error: formacoesError } = await supabase
+    const { data: formacao, error: formacaoError } = await supabase
         .from('formacoes')
         .select('*')
-        .order('created_at', { ascending: false });
-
-    if (formacoesError) {
-        console.error('Error fetching formacoes for summary:', formacoesError);
-        return [];
+        .eq('id', formacaoId)
+        .single();
+    
+    if (formacaoError || !formacao) {
+        console.error(`Error fetching formacao for summary (${formacaoId}):`, formacaoError);
+        return null;
     }
 
-    const { data: todasInscricoes, error: inscricoesError } = await supabase
+    const { data: inscricoes, error: inscricoesError } = await supabase
         .from('inscricoes')
-        .select('id, formacao_id, fonte');
+        .select('id, formacao_id, fonte')
+        .eq('formacao_id', formacaoId);
     
-    const { data: todasFrequencias, error: frequenciasError } = await supabase
+    const { data: frequencias, error: frequenciasError } = await supabase
         .from('frequencia')
-        .select('inscricao_id, formacao_id, periodo');
+        .select('inscricao_id, formacao_id, periodo')
+        .eq('formacao_id', formacaoId);
 
     if (inscricoesError || frequenciasError) {
-        console.error('Error fetching details for summary:', inscricoesError || frequenciasError);
-        // Return a structure that allows the page to render gracefully
-        return formacoes.map(formacao => ({
+        console.error(`Error fetching details for summary (${formacaoId}):`, inscricoesError || frequenciasError);
+        return {
             formacao,
             totalInscritos: 0,
             frequencia: {
@@ -42,74 +79,31 @@ export async function getParticipationSummaries(): Promise<ParticipacaoSummary[]
                 matutino: { total: 0, inscritos: 0, avulsos: 0 },
                 vespertino: { total: 0, inscritos: 0, avulsos: 0 },
             }
-        }));
-    }
-
-    const inscricoesPorFormacao = (todasInscricoes || []).reduce((acc, inscricao) => {
-        if (!acc[inscricao.formacao_id]) {
-            acc[inscricao.formacao_id] = [];
-        }
-        acc[inscricao.formacao_id].push(inscricao);
-        return acc;
-    }, {} as { [key: string]: Pick<Inscricao, 'id' | 'formacao_id' | 'fonte'>[] });
-    
-    const frequenciasPorFormacao = (todasFrequencias || []).reduce((acc, frequencia) => {
-        if (!acc[frequencia.formacao_id]) {
-            acc[frequencia.formacao_id] = [];
-        }
-        acc[frequencia.formacao_id].push(frequencia);
-        return acc;
-    }, {} as { [key: string]: Pick<Frequencia, 'inscricao_id' | 'formacao_id' | 'periodo'>[] });
-
-
-    const processUnique = (frequencias: Pick<Frequencia, 'inscricao_id' | 'periodo'>[], inscricoes: Pick<Inscricao, 'id' | 'fonte'>[]): FrequenciaPeriodoSummary => {
-        const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
-        const uniqueInscritos = new Set<string>();
-        const uniqueAvulsos = new Set<string>();
-
-        frequencias.forEach(freq => {
-            if (inscricaoMap.get(freq.inscricao_id) === 'AVULSO') {
-                uniqueAvulsos.add(freq.inscricao_id);
-            } else {
-                uniqueInscritos.add(freq.inscricao_id);
-            }
-        });
-
-        return {
-            total: uniqueInscritos.size + uniqueAvulsos.size,
-            inscritos: uniqueInscritos.size,
-            avulsos: uniqueAvulsos.size,
         };
+    }
+    
+    const freqMatutino = (frequencias || []).filter(f => f.periodo === 'MAT');
+    const freqVespertino = (frequencias || []).filter(f => f.periodo === 'VESP');
+
+    const summary: ParticipacaoSummary = {
+        formacao,
+        totalInscritos: (inscricoes || []).filter(i => i.fonte !== 'AVULSO').length,
+        frequencia: {
+            geral: processUniqueFrequencies(frequencias || [], inscricoes || []),
+            matutino: processUniqueFrequencies(freqMatutino, inscricoes || []),
+            vespertino: processUniqueFrequencies(freqVespertino, inscricoes || []),
+        }
     };
 
-    const summaries: ParticipacaoSummary[] = formacoes.map(formacao => {
-        const inscricoes = inscricoesPorFormacao[formacao.id] || [];
-        const frequencias = frequenciasPorFormacao[formacao.id] || [];
-        
-        const freqMatutino = frequencias.filter(f => f.periodo === 'MAT');
-        const freqVespertino = frequencias.filter(f => f.periodo === 'VESP');
-
-        return {
-            formacao,
-            totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,
-            frequencia: {
-                geral: processUnique(frequencias, inscricoes),
-                matutino: processUnique(freqMatutino, inscricoes),
-                vespertino: processUnique(freqVespertino, inscricoes),
-            }
-        };
-    });
-
-    return summaries;
+    return summary;
 }
-
 
 export async function setManualPresence(inscricaoId: string, formacaoId: string, date: string, periodo: 'MAT' | 'VESP') {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     
     try {
-        const targetDate = toZonedTime(parse(date, 'yyyy-MM-dd', new Date()), saoPauloTimeZone);
+        const targetDate = toZonedTime(parseISO(date), saoPauloTimeZone);
         const startOfTargetDay = startOfDay(targetDate);
         const endOfTargetDay = endOfDay(targetDate);
 
@@ -188,7 +182,7 @@ export async function setBulkPresence(
     }
 
     try {
-        const targetDate = toZonedTime(parse(date, 'yyyy-MM-dd', new Date()), saoPauloTimeZone);
+        const targetDate = toZonedTime(parseISO(date), saoPauloTimeZone);
         const startOfTargetDay = startOfDay(targetDate);
         const endOfTargetDay = endOfDay(targetDate);
 
