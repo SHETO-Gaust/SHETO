@@ -1,3 +1,4 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -55,14 +56,14 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
         return null;
     }
 
-    const { data: inscricoes, error: inscricoesError } = await supabase
+    const { data: allInscricoes, error: inscricoesError } = await supabase
         .from('inscricoes')
         .select('id, formacao_id, fonte')
         .eq('formacao_id', formacaoId);
     
-    const { data: frequencias, error: frequenciasError } = await supabase
+    const { data: allFrequencias, error: frequenciasError } = await supabase
         .from('frequencia')
-        .select('inscricao_id, formacao_id, periodo')
+        .select('id, inscricao_id, formacao_id, periodo, registered_at')
         .eq('formacao_id', formacaoId);
 
     if (inscricoesError || frequenciasError) {
@@ -78,16 +79,69 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
         };
     }
     
-    const freqMatutino = (frequencias || []).filter(f => f.periodo === 'MAT');
-    const freqVespertino = (frequencias || []).filter(f => f.periodo === 'VESP');
+    const inscricoes = allInscricoes || [];
+    const frequencias = allFrequencias || [];
 
+    // Detailed "Avulso" analysis
+    const avulsoInscricoes = inscricoes.filter(i => i.fonte === 'AVULSO');
+    const avulsoIds = new Set(avulsoInscricoes.map(i => i.id));
+    
+    const firstPresenceByAvulso: { [inscricaoId: string]: Frequencia } = {};
+
+    frequencias
+        .filter(f => avulsoIds.has(f.inscricao_id))
+        .sort((a, b) => new Date(a.registered_at).getTime() - new Date(b.registered_at).getTime())
+        .forEach(f => {
+            if (!firstPresenceByAvulso[f.inscricao_id]) {
+                firstPresenceByAvulso[f.inscricao_id] = f;
+            }
+        });
+
+    const avulsosOrigemMatutinoIds = new Set<string>();
+    const avulsosOrigemVespertinoIds = new Set<string>();
+
+    Object.values(firstPresenceByAvulso).forEach(f => {
+        if (f.periodo === 'MAT') {
+            avulsosOrigemMatutinoIds.add(f.inscricao_id);
+        } else if (f.periodo === 'VESP') {
+            avulsosOrigemVespertinoIds.add(f.inscricao_id);
+        }
+    });
+
+    const totalAvulsosOrigemMatutino = avulsosOrigemMatutinoIds.size;
+    const totalAvulsosOrigemVespertino = avulsosOrigemVespertinoIds.size;
+    
+    const avulsosOrigemMatutinoComPresencaVesp = new Set<string>();
+    frequencias.forEach(f => {
+        if (f.periodo === 'VESP' && avulsosOrigemMatutinoIds.has(f.inscricao_id)) {
+            avulsosOrigemMatutinoComPresencaVesp.add(f.inscricao_id);
+        }
+    });
+    const crossoverAvulsos = avulsosOrigemMatutinoComPresencaVesp.size;
+
+
+    // Standard summaries
+    const freqMatutino = frequencias.filter(f => f.periodo === 'MAT');
+    const freqVespertino = frequencias.filter(f => f.periodo === 'VESP');
+
+    const geralSummary = processUniqueFrequencies(frequencias, inscricoes);
+    const matutinoSummary = processUniqueFrequencies(freqMatutino, inscricoes);
+    const vespertinoSummary = processUniqueFrequencies(freqVespertino, inscricoes);
+
+    // Augment summaries with new data
+    geralSummary.totalAvulsosOrigemMatutino = totalAvulsosOrigemMatutino;
+    geralSummary.totalAvulsosOrigemVespertino = totalAvulsosOrigemVespertino;
+    geralSummary.crossoverAvulsos = crossoverAvulsos;
+    matutinoSummary.totalAvulsosOrigemMatutino = totalAvulsosOrigemMatutino;
+    vespertinoSummary.totalAvulsosOrigemVespertino = totalAvulsosOrigemVespertino;
+    
     const summary: ParticipacaoSummary = {
         formacao,
-        totalInscritos: (inscricoes || []).filter(i => i.fonte !== 'AVULSO').length,
+        totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,
         frequencia: {
-            geral: processUniqueFrequencies(frequencias || [], inscricoes || []),
-            matutino: processUniqueFrequencies(freqMatutino, inscricoes || []),
-            vespertino: processUniqueFrequencies(freqVespertino, inscricoes || []),
+            geral: geralSummary,
+            matutino: matutinoSummary,
+            vespertino: vespertinoSummary,
         }
     };
 
@@ -250,8 +304,8 @@ export async function setBulkPresence(
         return { error: 'Ocorreu um erro inesperado.' };
     }
 
-    const updatedPresence = await getPresenceForParticipants(formacaoId, inscricaoIds);
     revalidatePath('/relatorios');
+    const updatedPresence = await getPresenceForParticipants(formacaoId, inscricaoIds);
     return { success: true, updatedPresence };
 }
 

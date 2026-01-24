@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -70,19 +71,22 @@ export function RelatorioCard({ formacaoId }: RelatorioCardProps) {
                     <TabsContent value="geral" className="pt-4">
                         <RelatorioPeriodoContent 
                             periodoSummary={frequencia.geral} 
-                            totalInscritos={totalInscritos} 
+                            totalInscritos={totalInscritos}
+                            periodo="geral" 
                         />
                     </TabsContent>
                     <TabsContent value="matutino" className="pt-4">
                         <RelatorioPeriodoContent 
                             periodoSummary={frequencia.matutino} 
-                            totalInscritos={totalInscritos} 
+                            totalInscritos={totalInscritos}
+                            periodo="matutino" 
                         />
                     </TabsContent>
                     <TabsContent value="vespertino" className="pt-4">
                         <RelatorioPeriodoContent 
                             periodoSummary={frequencia.vespertino} 
-                            totalInscritos={totalInscritos} 
+                            totalInscritos={totalInscritos}
+                            periodo="vespertino" 
                         />
                     </TabsContent>
                 </Tabs>

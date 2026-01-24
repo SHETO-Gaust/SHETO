@@ -9,6 +9,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -156,6 +157,9 @@ export type FrequenciaPeriodoSummary = {
     total: number;
     inscritos: number;
     avulsos: number;
+    totalAvulsosOrigemMatutino?: number;
+    totalAvulsosOrigemVespertino?: number;
+    crossoverAvulsos?: number;
 };
 
 export type ParticipacaoSummary = {
