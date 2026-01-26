@@ -235,9 +235,12 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
             setLoadingEscolas(false);
             
             if (ergonData && ergonData.vinculos?.[0] && form.getValues('lotacao') === 'ue') {
-                const setorNome = ergonData.vinculos[0].setorNome;
-                if (data.includes(setorNome)) {
-                    form.setValue('escola', setorNome, { shouldValidate: true });
+                const setorNomeFromApi = ergonData.vinculos[0].setorNome?.trim();
+                if (setorNomeFromApi) {
+                    const matchingSchool = data.find(schoolName => schoolName.trim().toLowerCase() === setorNomeFromApi.toLowerCase());
+                    if (matchingSchool) {
+                        form.setValue('escola', matchingSchool, { shouldValidate: true });
+                    }
                 }
             }
         };
