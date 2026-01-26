@@ -12,6 +12,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -125,13 +126,6 @@ export type Profile = {
   modules?: string[];
   created_at: string; // timestamp with time zone
   updated_at: string; // timestamp with time zone
-};
-
-export type Notification = {
-  id: string;
-  message: string;
-  createdAt: string;
-  read: boolean;
 };
 
 export type AvaliacaoQuestionAvg = {

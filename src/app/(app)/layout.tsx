@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
-import { NotificationsPopover } from '@/components/notifications-popover';
 import type { Profile } from '@/lib/types';
 
 export default async function AppLayout({
@@ -67,7 +66,6 @@ export default async function AppLayout({
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
           <SidebarTrigger className="md/hidden" />
           <div className="ml-auto flex items-center gap-4">
-            <NotificationsPopover />
             <UserNav user={user} profile={userProfile} />
           </div>
         </header>
