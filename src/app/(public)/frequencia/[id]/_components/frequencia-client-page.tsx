@@ -247,6 +247,8 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
             value={cpf}
             onChange={(e) => setCpf(formatCPF(e.target.value))}
             disabled={loading}
+            type="tel"
+            inputMode="numeric"
           />
         </div>
         <Button onClick={handleCpfCheck} className="w-full" disabled={loading || cpf.length !== 14}>

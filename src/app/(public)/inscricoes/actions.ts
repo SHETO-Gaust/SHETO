@@ -4,11 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
+import { validateCPF } from '@/lib/utils';
 
 const formSchema = z.object({
   formacao_id: z.string(),
   nome_completo: z.string().min(3, 'Nome completo é obrigatório.'),
-  cpf: z.string().length(14, 'CPF inválido.'),
+  cpf: z.string().length(14, 'CPF inválido.').refine(validateCPF, 'CPF inválido.'),
   email: z.string().email('Email inválido.'),
   dados: z.record(z.any()),
 });

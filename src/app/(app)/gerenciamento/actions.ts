@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { validateCPF } from '@/lib/utils';
 
 export async function updateSubscriptionFormConfig(formacaoId: string, config: any) {
   const cookieStore = cookies();
@@ -121,7 +122,7 @@ export async function deleteInscricoes(ids: string[]) {
 const formSchema = z.object({
   id: z.string(),
   nome_completo: z.string().min(3, 'Nome completo é obrigatório.'),
-  cpf: z.string().length(14, 'CPF inválido.'),
+  cpf: z.string().length(14, 'CPF inválido.').refine(validateCPF, 'CPF inválido.'),
   email: z.string().email('Email inválido.'),
   dados: z.record(z.any()),
 });

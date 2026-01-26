@@ -25,12 +25,13 @@ import { getRegionais, getEscolasPorRegional } from '@/lib/escolas';
 import type { Formacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { useRouter } from 'next/navigation';
+import { validateCPF } from '@/lib/utils';
 
 
 const generateSchema = (formConfig: any) => {
     let schema: any = {
         nomeCompleto: z.string().min(3, 'Nome completo é obrigatório.'),
-        cpf: z.string().length(14, 'CPF inválido.'),
+        cpf: z.string().length(14, 'CPF inválido.').refine(validateCPF, 'CPF inválido.'),
         email: z.string().email('Email inválido.'),
     };
 
@@ -244,6 +245,8 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                                 placeholder="000.000.000-00" 
                                                 {...field} 
                                                 onChange={e => field.onChange(formatCPF(e.target.value))}
+                                                type="tel"
+                                                inputMode="numeric"
                                             />
                                         </FormControl>
                                         <FormMessage />

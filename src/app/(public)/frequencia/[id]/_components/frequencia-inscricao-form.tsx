@@ -21,11 +21,12 @@ import { getRegionais, getEscolasPorRegional } from '@/lib/escolas';
 import type { Formacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useEffect, useState } from 'react';
+import { validateCPF } from '@/lib/utils';
 
 const generateSchema = (formConfig: any) => {
     let schema: any = {
         nome_completo: z.string().min(3, 'Nome completo é obrigatório.'),
-        cpf: z.string().length(14, 'CPF inválido.'),
+        cpf: z.string().length(14, 'CPF inválido.').refine(validateCPF, 'CPF inválido.'),
         email: z.string().email('Email inválido.'),
     };
 

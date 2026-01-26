@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { toZonedTime } from 'date-fns-tz';
 import { set, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import type { Coordinates } from '@/lib/types';
+import { validateCPF } from '@/lib/utils';
 
 const saoPauloTimeZone = 'America/Sao_Paulo';
 
@@ -153,7 +154,7 @@ const registrationSchema = z.union([
     }),
     z.object({ // New user
         nome_completo: z.string().min(3),
-        cpf: z.string().length(14),
+        cpf: z.string().length(14).refine(validateCPF, 'CPF inválido.'),
         email: z.string().email(),
         dados: z.record(z.any()).optional(),
     })
@@ -214,6 +215,24 @@ export async function registerFrequency(formacaoId: string, formData: any, userC
 
     if (isAvulso) {
         const { nome_completo, cpf, email, dados } = validatedFields.data;
+
+        // Check for duplicate CPF just in case
+        const { data: existing, error: existingError } = await supabase
+            .from('inscricoes')
+            .select('id')
+            .eq('formacao_id', formacaoId)
+            .eq('cpf', cpf)
+            .single();
+
+        if (existingError && existingError.code !== 'PGRST116') {
+            console.error('Error checking for existing inscricao on avulso registration:', existingError);
+            return { success: false, error: 'Ocorreu um erro ao verificar os dados. Tente novamente.' };
+        }
+
+        if (existing) {
+            return { success: false, error: 'Este CPF já consta como inscrito. Por favor, volte e tente registrar a frequência apenas com seu CPF.' };
+        }
+
         const { data: newInscrito, error: insertError } = await supabase
             .from('inscricoes')
             .insert({ formacao_id: formacaoId, cpf, nome_completo, email, dados, fonte: 'AVULSO' })

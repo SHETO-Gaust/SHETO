@@ -23,12 +23,13 @@ import { updateInscricao } from '@/app/(app)/gerenciamento/actions';
 import { getRegionais, getEscolasPorRegional } from '@/lib/escolas';
 import type { Formacao, Inscricao } from '@/lib/types';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetFooter } from '../ui/sheet';
+import { validateCPF } from '@/lib/utils';
 
 const generateSchema = (formConfig: any) => {
     let schema: any = {
         id: z.string(),
         nome_completo: z.string().min(3, 'Nome completo é obrigatório.'),
-        cpf: z.string().length(14, 'CPF inválido.'),
+        cpf: z.string().length(14, 'CPF inválido.').refine(validateCPF, 'CPF inválido.'),
         email: z.string().email('Email inválido.'),
     };
 
@@ -223,6 +224,8 @@ export function EditInscricaoSheet({ isOpen, setIsOpen, inscricao, formacao, onU
                                                 placeholder="000.000.000-00" 
                                                 {...field} 
                                                 onChange={e => field.onChange(formatCPF(e.target.value))}
+                                                type="tel"
+                                                inputMode="numeric"
                                             />
                                         </FormControl>
                                         <FormMessage />
