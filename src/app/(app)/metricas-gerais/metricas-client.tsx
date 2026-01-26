@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const CHART_COLORS = ['#219EBC', '#8ECAE6', '#FFB703', '#FB8500', '#D90429', '#EF476F', '#FFD166', '#06D6A0', '#118AB2', '#073B4C'];
 
-const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueFormatter }: { data: any[], title: string, description: string, dataKey: string, nameKey: string, unit: string, valueFormatter: (value: any) => string }) => {
+const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueFormatter, domainMax }: { data: any[], title: string, description: string, dataKey: string, nameKey: string, unit: string, valueFormatter: (value: any) => string, domainMax?: number }) => {
     
     const chartData = useMemo(() => data.slice(0, 10), [data]);
 
@@ -31,10 +31,10 @@ const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueF
             <CardContent>
                 {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={chartData} layout="vertical" margin={{ left: 120, right: 40 }}>
+                        <BarChart data={chartData} layout="vertical" margin={{ left: 200, right: 40 }}>
                             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                            <XAxis type="number" domain={[0, 'dataMax + 10']} />
-                            <YAxis dataKey={nameKey} type="category" width={120} interval={0} axisLine={false} tickLine={false} />
+                            <XAxis type="number" domain={domainMax ? [0, domainMax] : undefined} />
+                            <YAxis dataKey={nameKey} type="category" width={200} interval={0} axisLine={false} tickLine={false} />
                             <Tooltip formatter={(value) => `${valueFormatter(value)}${unit}`} cursor={{ fill: 'hsl(var(--muted))' }}/>
                             <Bar dataKey={dataKey} barSize={30} radius={[0, 4, 4, 0]}>
                                {chartData.map((entry, index) => (
@@ -198,6 +198,7 @@ export function MetricasClient({ finishedFormacoes }: MetricasClientProps) {
                         nameKey="name"
                         unit="/5.0"
                         valueFormatter={(v) => Number(v).toFixed(2)}
+                        domainMax={5}
                     />
                      <RankingChart
                         data={metricas.comparecimentoRegional}
@@ -207,6 +208,7 @@ export function MetricasClient({ finishedFormacoes }: MetricasClientProps) {
                         nameKey="regional"
                         unit="%"
                         valueFormatter={(v) => Number(v).toFixed(1)}
+                        domainMax={100}
                     />
                      <RankingChart
                         data={metricas.naoInscritosRegional}
@@ -222,3 +224,4 @@ export function MetricasClient({ finishedFormacoes }: MetricasClientProps) {
         </div>
     );
 }
+
