@@ -68,3 +68,87 @@ export async function createInscricao(formData: z.infer<typeof formSchema>) {
     revalidatePath(`/inscricoes/${formacao_id}`);
     return { data };
 }
+
+
+// --- ERGON API INTEGRATION ---
+
+let token: string | null = null;
+let tokenExpiresAt: number | null = null;
+
+async function getAuthToken() {
+    const now = Date.now();
+    // Check if token exists and is not expired (assuming 1-hour expiry for safety)
+    if (token && tokenExpiresAt && now < tokenExpiresAt) {
+        return token;
+    }
+    
+    if (!process.env.ergon_base || !process.env.ergon_auth || !process.env.ergon_lg || !process.env.ergon_psw) {
+        throw new Error('Variáveis de ambiente do SisErgon não configuradas.');
+    }
+
+    const authUrl = `${process.env.ergon_base}${process.env.ergon_auth}`;
+    
+    const loginResponse = await fetch(authUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            login: process.env.ergon_lg,
+            password: process.env.ergon_psw,
+        }),
+    });
+
+    if (!loginResponse.ok) {
+        console.error('Ergon API Auth failed:', loginResponse.status, loginResponse.statusText);
+        throw new Error('Falha na autenticação com o serviço do SisErgon.');
+    }
+    
+    const body = await loginResponse.json();
+    
+    if(body.token) {
+        token = body.token;
+        tokenExpiresAt = now + 3600 * 1000; // Cache for 1 hour
+        return token;
+    }
+    
+    console.error('Ergon API Auth: Token not found in response body.');
+    throw new Error('Token de autenticação não encontrado na resposta do SisErgon.');
+}
+
+export async function fetchErgonDataByCpf(cpf: string) {
+    if (!cpf || cpf.replace(/\D/g, '').length !== 11) {
+        return { error: 'CPF inválido.' };
+    }
+
+    try {
+        const authToken = await getAuthToken();
+        const cpfUrl = `${process.env.ergon_base}${process.env.ergon_cpf}/${cpf.replace(/\D/g, '')}`;
+        
+        const response = await fetch(cpfUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+
+        if (!response.ok) {
+            if(response.status === 404) {
+                 return { data: null }; // Not found is not an error, just no data
+            }
+            console.error('Ergon API CPF fetch failed:', response.status, response.statusText);
+            throw new Error(`Falha ao consultar o CPF no SisErgon. Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const personData = Array.isArray(data) ? data[0] : data;
+
+        if (!personData) {
+            return { data: null };
+        }
+
+        return { data: personData };
+
+    } catch (e: any) {
+        console.error('Ergon action error:', e);
+        return { error: e.message || 'Ocorreu um erro ao consultar os dados.' };
+    }
+}

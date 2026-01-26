@@ -20,7 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { createInscricao } from '@/app/(public)/inscricoes/actions';
+import { createInscricao, fetchErgonDataByCpf } from '@/app/(public)/inscricoes/actions';
 import { getRegionais, getEscolasPorRegional } from '@/lib/escolas';
 import type { Formacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -77,6 +77,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [isCpfLoading, setIsCpfLoading] = useState(false);
   
   const formSchema = generateSchema(formacao.subscription_form_config);
   type InscricaoFormValues = z.infer<typeof formSchema>;
@@ -113,6 +114,39 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
 
   const selectedRegional = form.watch('regional');
   const selectedLotacao = form.watch('lotacao');
+  const cpfValue = form.watch('cpf');
+
+  useEffect(() => {
+    const rawCpf = cpfValue?.replace(/\D/g, '') || '';
+    if (rawCpf.length === 11) {
+      const timer = setTimeout(() => {
+        const fetchData = async () => {
+          setIsCpfLoading(true);
+          const result = await fetchErgonDataByCpf(cpfValue);
+          setIsCpfLoading(false);
+
+          if (result.data) {
+            if(result.data.nome) form.setValue('nomeCompleto', result.data.nome, { shouldValidate: true });
+            if(result.data.email) form.setValue('email', result.data.email, { shouldValidate: true });
+            toast({
+              title: "Dados encontrados!",
+              description: "Seu nome e email foram preenchidos automaticamente."
+            });
+          } else if (result.error) {
+            toast({
+              title: "Erro na consulta de CPF",
+              description: result.error,
+              variant: 'destructive',
+            });
+          }
+        };
+        fetchData();
+      }, 500); 
+
+      return () => clearTimeout(timer);
+    }
+  }, [cpfValue, form, toast]);
+
 
   useEffect(() => {
     const fetchRegionais = async () => {
@@ -241,13 +275,16 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                         <FormItem>
                                         <FormLabel>CPF</FormLabel>
                                         <FormControl>
-                                            <Input 
-                                                placeholder="000.000.000-00" 
-                                                {...field} 
-                                                onChange={e => field.onChange(formatCPF(e.target.value))}
-                                                type="tel"
-                                                inputMode="numeric"
-                                            />
+                                            <div className="relative">
+                                                <Input 
+                                                    placeholder="000.000.000-00" 
+                                                    {...field} 
+                                                    onChange={e => field.onChange(formatCPF(e.target.value))}
+                                                    type="tel"
+                                                    inputMode="numeric"
+                                                />
+                                                {isCpfLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
+                                            </div>
                                         </FormControl>
                                         <FormMessage />
                                         </FormItem>
