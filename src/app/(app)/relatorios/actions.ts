@@ -37,28 +37,6 @@ export async function getFormacaoIds(): Promise<Pick<Formacao, 'id'>[]> {
     return data;
 }
 
-const processUniqueFrequencies = (frequencias: Pick<Frequencia, 'inscricao_id'>[], inscricoes: Pick<Inscricao, 'id' | 'fonte'>[]): FrequenciaPeriodoSummary => {
-    const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
-    const uniqueInscritos = new Set<string>();
-    const uniqueAvulsos = new Set<string>();
-
-    frequencias.forEach(freq => {
-        if (inscricaoMap.has(freq.inscricao_id)) {
-             if (inscricaoMap.get(freq.inscricao_id) === 'AVULSO') {
-                uniqueAvulsos.add(freq.inscricao_id);
-            } else {
-                uniqueInscritos.add(freq.inscricao_id);
-            }
-        }
-    });
-
-    return {
-        total: uniqueInscritos.size + uniqueAvulsos.size,
-        inscritos: uniqueInscritos.size,
-        avulsos: uniqueAvulsos.size,
-    };
-};
-
 export async function getParticipationSummary(formacaoId: string): Promise<ParticipacaoSummary | null> {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
@@ -83,7 +61,7 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
         .from('frequencia')
         .select('id, inscricao_id, formacao_id, periodo, registered_at')
         .eq('formacao_id', formacaoId)
-        .limit(50000); // Aumentado limite
+        .limit(50000);
 
     if (inscricoesError || frequenciasError) {
         console.error(`Error fetching details for summary (${formacaoId}):`, inscricoesError || frequenciasError);
@@ -100,13 +78,54 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
     
     const inscricoes = allInscricoes || [];
     const frequencias = allFrequencias || [];
+    const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
 
-    const freqMatutino = frequencias.filter(f => f.periodo?.trim().toUpperCase() === 'MAT');
-    const freqVespertino = frequencias.filter(f => f.periodo?.trim().toUpperCase() === 'VESP');
+    const matutinoInscritos = new Set<string>();
+    const matutinoAvulsos = new Set<string>();
+    const vespertinoInscritos = new Set<string>();
+    const vespertinoAvulsos = new Set<string>();
 
-    const geralSummary = processUniqueFrequencies(frequencias, inscricoes);
-    const matutinoSummary = processUniqueFrequencies(freqMatutino, inscricoes);
-    const vespertinoSummary = processUniqueFrequencies(freqVespertino, inscricoes);
+    for (const freq of frequencias) {
+        const fonte = inscricaoMap.get(freq.inscricao_id);
+        if (fonte === undefined) continue;
+
+        const periodo = freq.periodo?.trim().toUpperCase();
+
+        if (periodo === 'MAT') {
+            if (fonte === 'AVULSO') {
+                matutinoAvulsos.add(freq.inscricao_id);
+            } else {
+                matutinoInscritos.add(freq.inscricao_id);
+            }
+        } else if (periodo === 'VESP') {
+            if (fonte === 'AVULSO') {
+                vespertinoAvulsos.add(freq.inscricao_id);
+            } else {
+                vespertinoInscritos.add(freq.inscricao_id);
+            }
+        }
+    }
+
+    const matutinoSummary: FrequenciaPeriodoSummary = {
+        inscritos: matutinoInscritos.size,
+        avulsos: matutinoAvulsos.size,
+        total: matutinoInscritos.size + matutinoAvulsos.size,
+    };
+
+    const vespertinoSummary: FrequenciaPeriodoSummary = {
+        inscritos: vespertinoInscritos.size,
+        avulsos: vespertinoAvulsos.size,
+        total: vespertinoInscritos.size + vespertinoAvulsos.size,
+    };
+    
+    const geralInscritos = new Set([...matutinoInscritos, ...vespertinoInscritos]);
+    const geralAvulsos = new Set([...matutinoAvulsos, ...vespertinoAvulsos]);
+    
+    const geralSummary: FrequenciaPeriodoSummary = {
+        inscritos: geralInscritos.size,
+        avulsos: geralAvulsos.size,
+        total: geralInscritos.size + geralAvulsos.size,
+    };
     
     const totalInscritosPrevistos = inscricoes.filter(i => i.fonte !== 'AVULSO').length;
 
