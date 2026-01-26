@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import type { Profile } from '@/lib/types';
@@ -51,8 +51,7 @@ const createUserSchema = z.object({
 });
 
 export async function createUser(formData: z.infer<typeof createUserSchema>) {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
+    const supabaseAdmin = createAdminClient();
 
     const validatedFields = createUserSchema.safeParse(formData);
 
@@ -65,7 +64,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
     
     const { email, password, name, role, modules } = validatedFields.data;
 
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: email,
         password: password,
         email_confirm: true, // Auto-confirma o usuário
@@ -84,7 +83,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         return { error: 'Não foi possível criar o usuário, tente novamente.' };
     }
 
-    const { error: profileError } = await supabase
+    const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .insert({
             id: authData.user.id,
@@ -97,7 +96,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
     if (profileError) {
         console.error('Error creating profile:', profileError);
         // Desfaz a criação do usuário na autenticação para evitar usuários órfãos
-        await supabase.auth.admin.deleteUser(authData.user.id);
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         return { error: `Ocorreu um erro ao criar o perfil do usuário: ${profileError.message}` };
     }
 
