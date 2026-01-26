@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, LabelList } from "recharts";
 import {
   Card,
   CardContent,
@@ -70,13 +70,26 @@ const ScoreDistributionChart = ({ title, data }: { title: string, data: any[] })
         <BarChart data={data} layout="vertical" margin={{ left: 10, right: 10 }}>
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="name" hide />
-          <Tooltip cursor={{ fill: 'hsl(var(--secondary))' }} content={<ChartTooltipContent />} />
+          <Tooltip 
+            cursor={{ fill: 'hsl(var(--secondary))' }} 
+            content={<ChartTooltipContent formatter={(value) => `${(value as number).toFixed(2)}%`} />} 
+          />
           <Legend />
-          <Bar dataKey="1" stackId="a" fill="var(--color-1)" radius={[4, 0, 0, 4]} />
-          <Bar dataKey="2" stackId="a" fill="var(--color-2)" />
-          <Bar dataKey="3" stackId="a" fill="var(--color-3)" />
-          <Bar dataKey="4" stackId="a" fill="var(--color-4)" />
-          <Bar dataKey="5" stackId="a" fill="var(--color-5)" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="1" stackId="a" fill="var(--color-1)" radius={[4, 0, 0, 4]}>
+            <LabelList dataKey="1" position="center" fill="white" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
+          </Bar>
+          <Bar dataKey="2" stackId="a" fill="var(--color-2)" >
+            <LabelList dataKey="2" position="center" fill="black" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
+          </Bar>
+          <Bar dataKey="3" stackId="a" fill="var(--color-3)">
+            <LabelList dataKey="3" position="center" fill="white" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
+          </Bar>
+          <Bar dataKey="4" stackId="a" fill="var(--color-4)">
+            <LabelList dataKey="4" position="center" fill="black" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
+          </Bar>
+          <Bar dataKey="5" stackId="a" fill="var(--color-5)" radius={[0, 4, 4, 0]}>
+            <LabelList dataKey="5" position="center" fill="white" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
+          </Bar>
         </BarChart>
       </ChartContainer>
     </CardContent>
