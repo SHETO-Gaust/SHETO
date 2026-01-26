@@ -20,7 +20,8 @@ const CHART_COLORS = ['#219EBC', '#8ECAE6', '#FFB703', '#FB8500', '#D90429', '#E
 
 const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueFormatter, domainMax }: { data: any[], title: string, description: string, dataKey: string, nameKey: string, unit: string, valueFormatter: (value: any) => string, domainMax?: number }) => {
     
-    const chartData = useMemo(() => data.slice(0, 10), [data]);
+    const chartData = useMemo(() => data, [data]);
+    const chartHeight = Math.max(400, chartData.length * 45);
 
     return (
         <Card>
@@ -30,8 +31,8 @@ const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueF
             </CardHeader>
             <CardContent>
                 {chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={chartData} layout="vertical" margin={{ left: 200, right: 40 }}>
+                    <ResponsiveContainer width="100%" height={chartHeight}>
+                        <BarChart data={chartData} layout="vertical" margin={{ left: 200, right: 80 }}>
                             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                             <XAxis type="number" domain={domainMax ? [0, domainMax] : undefined} />
                             <YAxis dataKey={nameKey} type="category" width={200} interval={0} axisLine={false} tickLine={false} />
