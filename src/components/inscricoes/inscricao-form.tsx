@@ -25,6 +25,7 @@ import type { Formacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { useRouter } from 'next/navigation';
 import { validateCPF } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 
 const generateSchema = (formConfig: any) => {
@@ -168,7 +169,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
       const vinculo = ergonData.vinculos?.[0];
       if (vinculo) {
         const apiRegional = vinculo.regional;
-        const setorNome = vinculo.setorNome;
+        const setorNome = vinculo.setorNome?.trim().toLowerCase();
 
         let regionalToSet: string | undefined = undefined;
 
@@ -177,31 +178,34 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
             (r) => r.toLowerCase() === 'palmas'
           );
           form.setValue('lotacao', 'sede', { shouldValidate: true });
-          form.setValue('lotacao_especifica', setorNome, {
+          form.setValue('lotacao_especifica', vinculo.setorNome, {
             shouldValidate: true,
           });
-        } else if (setorNome.toLowerCase().includes('superintendência regional')) {
+        } else if (setorNome.includes('superintendência regional')) {
           form.setValue('lotacao', 'sre', { shouldValidate: true });
-          form.setValue('lotacao_especifica', setorNome, {
+          form.setValue('lotacao_especifica', vinculo.setorNome, {
             shouldValidate: true,
           });
 
-          const match = setorNome.match(/de\s(.*)$/i);
+          // Tenta extrair a regional do nome do setor
+          const match = vinculo.setorNome.match(/de\s(.*)$/i);
           if (match && match[1]) {
-            const extractedRegional = match[1];
+            const extractedRegional = match[1].trim().toLowerCase();
             regionalToSet = regionais.find(
-              (r) => r.toLowerCase() === extractedRegional.toLowerCase()
+              (r) => r.toLowerCase() === extractedRegional
             );
           }
 
+          // Fallback para a regional principal se a extração falhar
           if (!regionalToSet) {
             regionalToSet = regionais.find(
               (r) => r.toLowerCase() === apiRegional.toLowerCase()
             );
           }
         } else {
+          // Assume que é uma unidade escolar
           form.setValue('lotacao', 'ue', { shouldValidate: true });
-          regionalToSet = regionais.find(
+           regionalToSet = regionais.find(
             (r) => r.toLowerCase() === apiRegional.toLowerCase()
           );
         }
@@ -235,9 +239,9 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
             setLoadingEscolas(false);
             
             if (ergonData && ergonData.vinculos?.[0] && form.getValues('lotacao') === 'ue') {
-                const setorNomeFromApi = ergonData.vinculos[0].setorNome?.trim();
+                const setorNomeFromApi = ergonData.vinculos[0].setorNome?.trim().toLowerCase();
                 if (setorNomeFromApi) {
-                    const matchingSchool = data.find(schoolName => schoolName.trim().toLowerCase() === setorNomeFromApi.toLowerCase());
+                    const matchingSchool = data.find(schoolName => schoolName.trim().toLowerCase() === setorNomeFromApi);
                     if (matchingSchool) {
                         form.setValue('escola', matchingSchool, { shouldValidate: true });
                     }
@@ -361,7 +365,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                             <FormItem>
                                             <FormLabel>Nome Completo</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="Seu nome completo" {...field} readOnly={!!ergonData} />
+                                                <Input placeholder="Seu nome completo" {...field} readOnly={!!ergonData} className={cn(ergonData && 'bg-muted/50')} />
                                             </FormControl>
                                             <FormMessage />
                                             </FormItem>
@@ -378,7 +382,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                             <FormItem>
                                             <FormLabel>Email</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="seu.email@exemplo.com" {...field} />
+                                                <Input placeholder="seu.email@exemplo.com" {...field} readOnly={!!ergonData} className={cn(ergonData && 'bg-muted/50')} />
                                             </FormControl>
                                             <FormMessage />
                                             </FormItem>
@@ -394,7 +398,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                         render={({ field }) => (
                                             <FormItem>
                                             <FormLabel>Regional</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value} disabled={loadingRegionais}>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={loadingRegionais || !!ergonData}>
                                                 <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder={loadingRegionais ? "Carregando..." : "Selecione sua regional"} />
@@ -425,6 +429,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                                 onValueChange={field.onChange}
                                                 value={field.value}
                                                 className="flex flex-col space-y-1"
+                                                disabled={!!ergonData}
                                                 >
                                                 <FormItem className="flex items-center space-x-3 space-y-0">
                                                     <FormControl>
@@ -470,7 +475,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                 <FormItem>
                                 <FormLabel>Especifique sua lotação</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="Ex: Supervisão, setor, etc." {...field} />
+                                    <Input placeholder="Ex: Supervisão, setor, etc." {...field} readOnly={!!ergonData} className={cn(ergonData && 'bg-muted/50')} />
                                 </FormControl>
                                 <FormMessage />
                                 </FormItem>
@@ -484,7 +489,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                             render={({ field }) => (
                                 <FormItem>
                                 <FormLabel>Unidade Escolar</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value} disabled={!selectedRegional || loadingEscolas}>
+                                <Select onValueChange={field.onChange} value={field.value} disabled={!selectedRegional || loadingEscolas || !!ergonData}>
                                     <FormControl>
                                     <SelectTrigger>
                                         <SelectValue placeholder={
