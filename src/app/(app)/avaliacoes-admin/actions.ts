@@ -62,6 +62,49 @@ const calculateAverages = (avaliacoes: Avaliacao[]): PeriodSummary => {
     };
 };
 
+async function calculateSummaryForFormacao(formacao: Formacao, allAvals: Avaliacao[]): Promise<AvaliacaoSummary> {
+    const matutinoAvals = allAvals.filter(a => a.periodo === 'MAT');
+    const vespertinoAvals = allAvals.filter(a => a.periodo === 'VESP');
+
+    return {
+        formacao,
+        summaries: {
+            geral: calculateAverages(allAvals),
+            matutino: calculateAverages(matutinoAvals),
+            vespertino: calculateAverages(vespertinoAvals),
+        }
+    };
+}
+
+export async function getSingleAvaliationSummary(formacaoId: string): Promise<AvaliacaoSummary | null> {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const { data: formacao, error: formacaoError } = await supabase
+        .from('formacoes')
+        .select('*')
+        .eq('id', formacaoId)
+        .single();
+    
+    if(formacaoError) {
+        console.error('Error fetching formacao for single summary:', formacaoError);
+        return null;
+    }
+
+    const { data: avaliacoes, error: avaliacoesError } = await supabase
+        .from('avaliacoes')
+        .select('*')
+        .eq('formacao_id', formacaoId);
+
+    if (avaliacoesError) {
+        console.error('Error fetching avaliacoes for single summary:', avaliacoesError);
+        return null;
+    }
+
+    const summary = await calculateSummaryForFormacao(formacao, avaliacoes as Avaliacao[]);
+    return summary;
+}
+
 
 export async function getAvaliationsSummary(): Promise<AvaliacaoSummary[]> {
     const cookieStore = cookies();
@@ -94,22 +137,30 @@ export async function getAvaliationsSummary(): Promise<AvaliacaoSummary[]> {
         return acc;
     }, {} as { [key: string]: Avaliacao[] });
 
-    const summary: AvaliacaoSummary[] = formacoes.map(formacao => {
+    const summaryPromises = formacoes.map(async formacao => {
         const allAvals = avaliacoesPorFormacao[formacao.id] || [];
-        const matutinoAvals = allAvals.filter(a => a.periodo === 'MAT');
-        const vespertinoAvals = allAvals.filter(a => a.periodo === 'VESP');
-
-        return {
-            formacao,
-            summaries: {
-                geral: calculateAverages(allAvals),
-                matutino: calculateAverages(matutinoAvals),
-                vespertino: calculateAverages(vespertinoAvals),
-            }
-        };
+        return await calculateSummaryForFormacao(formacao, allAvals);
     });
 
+    const summary = await Promise.all(summaryPromises);
+
     return summary;
+}
+
+export async function getFormacoesForAvaliacao(): Promise<Pick<Formacao, 'id' | 'name'>[]> {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const { data: formacoes, error: formacoesError } = await supabase
+        .from('formacoes')
+        .select('id, name')
+        .order('created_at', { ascending: false });
+
+    if (formacoesError) {
+        console.error('Error fetching formacoes for avaliacao summary:', formacoesError);
+        return [];
+    }
+    return formacoes;
 }
 
 

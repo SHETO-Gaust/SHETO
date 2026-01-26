@@ -22,16 +22,16 @@ function normalizeDateString(dateStr: string): string {
     return dateStr.substring(0, 10); // Fallback
 }
 
-export async function getFormacaoIds(): Promise<Pick<Formacao, 'id'>[]> {
+export async function getFormacoesForRelatorios(): Promise<Pick<Formacao, 'id' | 'name'>[]> {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     const { data, error } = await supabase
         .from('formacoes')
-        .select('id')
+        .select('id, name')
         .order('created_at', { ascending: false });
 
     if (error) {
-        console.error('Error fetching formacao ids:', error);
+        console.error('Error fetching formacao for relatorios:', error);
         return [];
     }
     return data;
