@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Star,
   ListChecks,
+  BarChart3,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -21,6 +22,7 @@ const links = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
   { href: '/formacoes', label: 'Cadastrar Formação', icon: GraduationCap },
   { href: '/gerenciamento', label: 'Gerenciamento', icon: ListChecks },
+  { href: '/metricas-gerais', label: 'Métricas Gerais', icon: BarChart3 },
   { href: '/ensalamentos', label: 'Ensalamentos', icon: School },
   { href: '/relatorios', label: 'Relatório de Frequência', icon: ClipboardList },
   { href: '/avaliacoes-admin', label: 'Avaliações', icon: Star },
