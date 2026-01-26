@@ -29,9 +29,9 @@ const allLinks = [
   { href: '/ensalamentos', label: 'Ensalamentos', icon: School, module: 'ensalamentos' },
   
   // Analysis group
-  { href: '/metricas-gerais', label: 'Métricas Gerais', icon: BarChart3, module: 'metricas', group: 'analysis' },
+  { href: '/metricas-gerais', label: 'Métricas Gerais', icon: BarChart3, module: 'metricas-gerais', group: 'analysis' },
   { href: '/relatorios', label: 'Relatório de Frequência', icon: ClipboardList, module: 'relatorios', group: 'analysis' },
-  { href: '/avaliacoes-admin', label: 'Avaliações', icon: Star, module: 'avaliacoes', group: 'analysis' },
+  { href: '/avaliacoes-admin', label: 'Avaliações', icon: Star, module: 'avaliacoes-admin', group: 'analysis' },
 
   // Management group
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
@@ -48,6 +48,7 @@ export function MainNav({ profile }: { profile: Profile | null }) {
 
   const hasAccess = (module: string) => {
       if (profile?.role === 'admin') return true;
+      if (module === 'dashboard') return true;
       return profile?.modules?.includes(module) || false;
   }
 
