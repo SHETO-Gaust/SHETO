@@ -47,7 +47,7 @@ export function RelatorioPeriodoContent({ periodoSummary, totalInscritos, period
                 </div>
                 <div className="grid grid-cols-2 gap-4 pt-2">
                     <MetricCard title="Total de Participantes (Únicos)" value={total} />
-                    <MetricCard title="Total de Avulsos (Únicos)" value={avulsos} />
+                    <MetricCard title="Total de Avulsos Presentes (Únicos)" value={avulsos} />
                 </div>
             </div>
         )
