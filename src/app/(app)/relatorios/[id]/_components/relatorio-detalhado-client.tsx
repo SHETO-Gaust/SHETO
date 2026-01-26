@@ -326,6 +326,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                 'Nome Completo': participant.nome_completo,
                 'CPF': participant.cpf,
                 'Regional': participant.dados?.regional || 'N/A',
+                'Inscrição Antecipada': participant.fonte !== 'AVULSO' ? 'SIM' : 'NÃO',
                 'Data': format(parseISO(dateStr), "dd/MM/yyyy"),
                 'Presença Manhã': dailyPresence?.matutino ? 'PRESENTE' : 'AUSENTE',
                 'Presença Tarde': dailyPresence?.vespertino ? 'PRESENTE' : 'AUSENTE',
