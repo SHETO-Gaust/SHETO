@@ -41,7 +41,17 @@ export function createAdminClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     {
-      cookies: {}, // Admin client does not need to manage user sessions/cookies
+      cookies: {
+        get(name: string) {
+          return undefined;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          // Server-side admin client doesn't need to set cookies
+        },
+        remove(name: string, options: CookieOptions) {
+          // Server-side admin client doesn't need to remove cookies
+        },
+      },
     }
   );
 }
