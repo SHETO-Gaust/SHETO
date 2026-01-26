@@ -10,6 +10,7 @@ import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { RelatorioCard } from '@/components/relatorios/relatorio-card';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type RelatoriosClientProps = {
     allFormacoes: Pick<Formacao, 'id' | 'name'>[];
