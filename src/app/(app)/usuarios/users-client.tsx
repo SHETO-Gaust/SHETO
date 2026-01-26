@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Edit } from 'lucide-react';
+import { Edit, UserPlus } from 'lucide-react';
 import { EditUserPermissionsSheet } from './edit-permissions-sheet';
+import { CreateUserSheet } from './create-user-sheet';
 
 const allModules = [
   { id: 'dashboard', label: 'Painel' },
@@ -30,7 +31,8 @@ const allModules = [
 export function UsersClient({ initialUsers }: { initialUsers: Profile[] }) {
     const [users, setUsers] = useState(initialUsers);
     const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
-    const [isSheetOpen, setIsSheetOpen] = useState(false);
+    const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+    const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
 
     useEffect(() => {
         setUsers(initialUsers);
@@ -38,7 +40,7 @@ export function UsersClient({ initialUsers }: { initialUsers: Profile[] }) {
     
     const handleEditClick = (user: Profile) => {
         setSelectedUser(user);
-        setIsSheetOpen(true);
+        setIsEditSheetOpen(true);
     };
 
     const handleUpdate = (updatedUser: Profile) => {
@@ -47,6 +49,12 @@ export function UsersClient({ initialUsers }: { initialUsers: Profile[] }) {
 
     return (
         <>
+            <div className="flex justify-end mb-4">
+                <Button onClick={() => setIsCreateSheetOpen(true)}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Criar Usuário
+                </Button>
+            </div>
             <div className="rounded-md border">
                 <Table>
                     <TableHeader>
@@ -93,13 +101,18 @@ export function UsersClient({ initialUsers }: { initialUsers: Profile[] }) {
             </div>
             {selectedUser && (
                 <EditUserPermissionsSheet
-                    isOpen={isSheetOpen}
-                    setIsOpen={setIsSheetOpen}
+                    isOpen={isEditSheetOpen}
+                    setIsOpen={setIsEditSheetOpen}
                     user={selectedUser}
                     allModules={allModules}
                     onUserUpdate={handleUpdate}
                 />
             )}
+             <CreateUserSheet
+                isOpen={isCreateSheetOpen}
+                setIsOpen={setIsCreateSheetOpen}
+                allModules={allModules}
+            />
         </>
     );
 }
