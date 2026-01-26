@@ -53,11 +53,11 @@ const infraQuestionsMap = {
 };
 
 const chartConfigBase = {
-  '1': { label: '1 Estrela', color: 'hsl(var(--destructive))' },
-  '2': { label: '2 Estrelas', color: 'hsl(var(--chart-2))' },
-  '3': { label: '3 Estrelas', color: 'hsl(var(--chart-3))' },
-  '4': { label: '4 Estrelas', color: 'hsl(var(--chart-4))' },
-  '5': { label: '5 Estrelas', color: 'hsl(var(--chart-1))' },
+  '1': { label: '1 Estrela', color: '#D90429' },
+  '2': { label: '2 Estrelas', color: '#FB8500' },
+  '3': { label: '3 Estrelas', color: '#FFB703' },
+  '4': { label: '4 Estrelas', color: '#8ECAE6' },
+  '5': { label: '5 Estrelas', color: '#219EBC' },
 } satisfies ChartConfig;
 
 const ScoreDistributionChart = ({ title, data }: { title: string, data: any[] }) => (
@@ -82,7 +82,7 @@ const ScoreDistributionChart = ({ title, data }: { title: string, data: any[] })
             <LabelList dataKey="2" position="center" fill="black" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
           </Bar>
           <Bar dataKey="3" stackId="a" fill="var(--color-3)">
-            <LabelList dataKey="3" position="center" fill="white" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
+            <LabelList dataKey="3" position="center" fill="black" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
           </Bar>
           <Bar dataKey="4" stackId="a" fill="var(--color-4)">
             <LabelList dataKey="4" position="center" fill="black" formatter={(v: number) => v > 3 ? `${v.toFixed(2)}%` : ''} fontSize={12} />
