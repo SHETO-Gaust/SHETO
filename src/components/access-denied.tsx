@@ -11,7 +11,7 @@ export function AccessDenied() {
             <ShieldAlert className="mx-auto h-12 w-12 text-destructive" />
             <CardTitle className="mt-4">Acesso Negado</CardTitle>
             <CardDescription>
-              Você não tem permissão para visualizar esta página.
+              Você não tem permissão para acessar esta página.
             </CardDescription>
           </CardHeader>
           <CardContent>
