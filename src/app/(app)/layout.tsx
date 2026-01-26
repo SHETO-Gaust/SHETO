@@ -57,7 +57,7 @@ export default async function AppLayout({
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <MainNav />
+          <MainNav profile={userProfile} />
         </SidebarContent>
         <SidebarFooter>
           {/* Can add elements to footer here */}

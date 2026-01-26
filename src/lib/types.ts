@@ -11,6 +11,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -121,6 +122,7 @@ export type Profile = {
   name?: string;
   email: string;
   role?: ProfileRole;
+  modules?: string[];
   created_at: string; // timestamp with time zone
   updated_at: string; // timestamp with time zone
 };
