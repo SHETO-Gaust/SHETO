@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import Image from 'next/image';
 import {
@@ -14,6 +14,18 @@ import {
 import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
 import type { Profile } from '@/lib/types';
+import { AccessDenied } from '@/components/access-denied';
+
+const moduleMap: { [key: string]: string } = {
+    '/formacoes': 'formacoes',
+    '/gerenciamento': 'gerenciamento',
+    '/ensalamentos': 'ensalamentos',
+    '/metricas-gerais': 'metricas-gerais',
+    '/relatorios': 'relatorios',
+    '/avaliacoes-admin': 'avaliacoes-admin',
+    '/usuarios': 'usuarios',
+};
+
 
 export default async function AppLayout({
   children,
@@ -39,6 +51,20 @@ export default async function AppLayout({
         .eq('id', user.id)
         .single();
       userProfile = profileData;
+  }
+  
+  const pathname = headers().get('next-url') || '';
+  const requiredModuleKey = Object.keys(moduleMap).find(key => pathname.startsWith(key));
+  let hasPermission = true;
+
+  if (requiredModuleKey) {
+      const moduleName = moduleMap[requiredModuleKey];
+      const isAdmin = userProfile?.role === 'admin';
+      const hasModuleAccess = userProfile?.modules?.includes(moduleName) || false;
+      
+      if (!isAdmin && !hasModuleAccess) {
+          hasPermission = false;
+      }
   }
 
   return (
@@ -69,7 +95,9 @@ export default async function AppLayout({
             <UserNav user={user} profile={userProfile} />
           </div>
         </header>
-        <div className="flex-1 bg-white p-4 sm:p-6">{children}</div>
+        <div className="flex-1 bg-white p-4 sm:p-6">
+            {hasPermission ? children : <AccessDenied />}
+        </div>
         <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">
           Desenvolvido pela Gerência de Apoio ao Usuário e Suporte Técnico da Seduc Tocantins - Todos os direitos reservados © 2026
         </footer>
