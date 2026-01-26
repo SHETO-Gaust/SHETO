@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 
-export const updatePasswordSchema = z.object({
+const updatePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Senha atual é obrigatória.'),
   newPassword: z.string().min(6, 'A nova senha deve ter no mínimo 6 caracteres.'),
   confirmPassword: z.string().min(6, 'A confirmação da nova senha deve ter no mínimo 6 caracteres.'),

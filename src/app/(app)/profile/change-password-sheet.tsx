@@ -23,13 +23,22 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { updatePassword, updatePasswordSchema } from './actions';
+import { updatePassword } from './actions';
 import { Loader2 } from 'lucide-react';
 
 type ChangePasswordSheetProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
 };
+
+const updatePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Senha atual é obrigatória.'),
+  newPassword: z.string().min(6, 'A nova senha deve ter no mínimo 6 caracteres.'),
+  confirmPassword: z.string().min(6, 'A confirmação da nova senha deve ter no mínimo 6 caracteres.'),
+}).refine(data => data.newPassword === data.confirmPassword, {
+  message: 'As novas senhas não correspondem.',
+  path: ['confirmPassword'],
+});
 
 type ChangePasswordFormValues = z.infer<typeof updatePasswordSchema>;
 
