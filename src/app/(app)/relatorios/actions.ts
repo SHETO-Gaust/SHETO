@@ -82,45 +82,6 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
     const inscricoes = allInscricoes || [];
     const frequencias = allFrequencias || [];
 
-    // Detailed "Avulso" analysis
-    const avulsoInscricoes = inscricoes.filter(i => i.fonte === 'AVULSO');
-    const avulsoIds = new Set(avulsoInscricoes.map(i => i.id));
-    
-    const firstPresenceByAvulso: { [inscricaoId: string]: Frequencia } = {};
-
-    frequencias
-        .filter(f => avulsoIds.has(f.inscricao_id))
-        .sort((a, b) => new Date(a.registered_at).getTime() - new Date(b.registered_at).getTime())
-        .forEach(f => {
-            if (!firstPresenceByAvulso[f.inscricao_id]) {
-                firstPresenceByAvulso[f.inscricao_id] = f;
-            }
-        });
-
-    const avulsosOrigemMatutinoIds = new Set<string>();
-    const avulsosOrigemVespertinoIds = new Set<string>();
-
-    Object.values(firstPresenceByAvulso).forEach(f => {
-        if (f.periodo === 'MAT') {
-            avulsosOrigemMatutinoIds.add(f.inscricao_id);
-        } else if (f.periodo === 'VESP') {
-            avulsosOrigemVespertinoIds.add(f.inscricao_id);
-        }
-    });
-
-    const totalAvulsosOrigemMatutino = avulsosOrigemMatutinoIds.size;
-    const totalAvulsosOrigemVespertino = avulsosOrigemVespertinoIds.size;
-    
-    const avulsosOrigemMatutinoComPresencaVesp = new Set<string>();
-    frequencias.forEach(f => {
-        if (f.periodo === 'VESP' && avulsosOrigemMatutinoIds.has(f.inscricao_id)) {
-            avulsosOrigemMatutinoComPresencaVesp.add(f.inscricao_id);
-        }
-    });
-    const crossoverAvulsos = avulsosOrigemMatutinoComPresencaVesp.size;
-
-
-    // Standard summaries
     const freqMatutino = frequencias.filter(f => f.periodo === 'MAT');
     const freqVespertino = frequencias.filter(f => f.periodo === 'VESP');
 
@@ -128,13 +89,6 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
     const matutinoSummary = processUniqueFrequencies(freqMatutino, inscricoes);
     const vespertinoSummary = processUniqueFrequencies(freqVespertino, inscricoes);
 
-    // Augment summaries with new data
-    geralSummary.totalAvulsosOrigemMatutino = totalAvulsosOrigemMatutino;
-    geralSummary.totalAvulsosOrigemVespertino = totalAvulsosOrigemVespertino;
-    geralSummary.crossoverAvulsos = crossoverAvulsos;
-    matutinoSummary.totalAvulsosOrigemMatutino = totalAvulsosOrigemMatutino;
-    vespertinoSummary.totalAvulsosOrigemVespertino = totalAvulsosOrigemVespertino;
-    
     const summary: ParticipacaoSummary = {
         formacao,
         totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,

@@ -4,6 +4,13 @@
 import { Progress } from "@/components/ui/progress";
 import type { FrequenciaPeriodoSummary } from "@/lib/types";
 
+const MetricCard = ({ title, value }: { title: string, value: number }) => (
+    <div className="p-3 border rounded-md text-center">
+        <p className="text-2xl font-bold">{value}</p>
+        <p className="text-sm text-muted-foreground">{title}</p>
+    </div>
+);
+
 type RelatorioPeriodoContentProps = {
     periodoSummary: FrequenciaPeriodoSummary;
     totalInscritos: number;
@@ -14,9 +21,7 @@ export function RelatorioPeriodoContent({ periodoSummary, totalInscritos, period
     const { 
         total, 
         inscritos,
-        totalAvulsosOrigemMatutino,
-        totalAvulsosOrigemVespertino,
-        crossoverAvulsos,
+        avulsos,
     } = periodoSummary;
 
     const progressValue = totalInscritos > 0 ? (inscritos / totalInscritos) * 100 : 0;
@@ -29,59 +34,30 @@ export function RelatorioPeriodoContent({ periodoSummary, totalInscritos, period
         );
     }
     
-    const renderAvulsosInfo = () => {
-        if (periodo === 'geral') {
-            return (
-                <div className="pt-4 space-y-3">
-                    <h4 className="text-sm font-medium text-muted-foreground">Participantes Avulsos (Inscritos no Ato)</h4>
-                    <div className="p-3 border rounded-md space-y-2 text-sm">
-                        <div className="flex justify-between items-center">
-                            <span>Inscrições no Período da Manhã:</span>
-                            <span className="font-bold">{totalAvulsosOrigemMatutino ?? 0}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span>Inscrições no Período da Tarde:</span>
-                            <span className="font-bold">{totalAvulsosOrigemVespertino ?? 0}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span>Retenção (Manhã → Tarde):</span>
-                            <span className="font-bold">{crossoverAvulsos ?? 0}</span>
-                        </div>
-                    </div>
-                </div>
-            )
-        }
-        
-        const avulsosCount = periodo === 'matutino' 
-            ? totalAvulsosOrigemMatutino 
-            : totalAvulsosOrigemVespertino;
-
+    if (periodo === 'geral') {
         return (
-            <div className="grid grid-cols-2 gap-4 pt-2">
-                 <div className="p-3 border rounded-md text-center">
-                    <p className="text-2xl font-bold">{inscritos}</p>
-                    <p className="text-sm text-muted-foreground">Inscritos Presentes</p>
+            <div className="space-y-4">
+                <div>
+                    <div className="flex justify-between items-baseline mb-1">
+                        <p className="text-sm font-medium text-muted-foreground">Comparecimento dos Inscritos</p>
+                        <p className="text-lg font-bold">{inscritos} <span className="text-sm font-normal text-muted-foreground">de {totalInscritos}</span></p>
+                    </div>
+                    <Progress value={progressValue} aria-label={`${progressValue.toFixed(0)}% de participação dos inscritos`} />
+                    <p className="text-xs text-muted-foreground text-right mt-1">{progressValue.toFixed(1)}% de participação dos inscritos</p>
                 </div>
-                <div className="p-3 border rounded-md text-center">
-                    <p className="text-2xl font-bold">{avulsosCount ?? 0}</p>
-                    <p className="text-sm text-muted-foreground">Inscrições no Ato</p>
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                    <MetricCard title="Total de Participantes (Únicos)" value={total} />
+                    <MetricCard title="Total de Avulsos (Únicos)" value={avulsos} />
                 </div>
             </div>
         )
     }
 
+    // For 'matutino' and 'vespertino'
     return (
-        <div className="space-y-4">
-            <div>
-                <div className="flex justify-between items-baseline mb-1">
-                    <p className="text-sm font-medium text-muted-foreground">Comparecimento dos Inscritos</p>
-                    <p className="text-lg font-bold">{inscritos} <span className="text-sm font-normal text-muted-foreground">de {totalInscritos}</span></p>
-                </div>
-                <Progress value={progressValue} aria-label={`${progressValue.toFixed(0)}% de participação dos inscritos`} />
-                 <p className="text-xs text-muted-foreground text-right mt-1">{progressValue.toFixed(1)}% de participação dos inscritos</p>
-            </div>
-
-            {renderAvulsosInfo()}
+        <div className="grid grid-cols-2 gap-4 pt-2">
+            <MetricCard title="Inscritos Presentes" value={inscritos} />
+            <MetricCard title="Avulsos Presentes" value={avulsos} />
         </div>
-    );
+    )
 }
