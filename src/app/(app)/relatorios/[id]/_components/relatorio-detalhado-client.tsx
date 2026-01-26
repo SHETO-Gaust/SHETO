@@ -310,32 +310,38 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
 
 
   const handleExport = () => {
-    const dataToExport: any[] = [];
-    
     const sortedDates = (formacao.dates || [])
         .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
         .map((d: any) => d.date.substring(0, 10));
 
-    allParticipants.forEach(participant => {
+    if (Object.keys(chartPresenceCache).length === 0 && allParticipants.length > 0) {
+      toast({ title: 'Dados de presença ainda carregando', description: 'Aguarde os gráficos carregarem e tente novamente.', variant: 'destructive'});
+      return;
+    }
+
+    const dataToExport = allParticipants.map(participant => {
+        const rowData: {[key: string]: any} = {
+            'Nome Completo': participant.nome_completo,
+            'CPF': participant.cpf,
+            'Regional': participant.dados?.regional || 'N/A',
+            'Inscrição Antecipada': participant.fonte !== 'AVULSO' ? 'SIM' : 'NÃO',
+        };
+
         const presences = chartPresenceCache[participant.id];
-        
+
         sortedDates.forEach(dateStr => {
             const dailyPresence = presences?.find(p => p.date === dateStr);
+            const dateLabel = format(parseISO(dateStr), "dd/MM/yy");
             
-            dataToExport.push({
-                'Nome Completo': participant.nome_completo,
-                'CPF': participant.cpf,
-                'Regional': participant.dados?.regional || 'N/A',
-                'Inscrição Antecipada': participant.fonte !== 'AVULSO' ? 'SIM' : 'NÃO',
-                'Data': format(parseISO(dateStr), "dd/MM/yyyy"),
-                'Presença Manhã': dailyPresence?.matutino ? 'PRESENTE' : 'AUSENTE',
-                'Presença Tarde': dailyPresence?.vespertino ? 'PRESENTE' : 'AUSENTE',
-            });
+            rowData[`${dateLabel} Manhã`] = dailyPresence?.matutino ? 'PRESENTE' : 'AUSENTE';
+            rowData[`${dateLabel} Tarde`] = dailyPresence?.vespertino ? 'PRESENTE' : 'AUSENTE';
         });
+
+        return rowData;
     });
 
     if (dataToExport.length === 0) {
-      toast({ title: 'Nenhum dado para exportar', description: 'Não há participantes ou dados de presença para gerar o arquivo.', variant: 'destructive'});
+      toast({ title: 'Nenhum dado para exportar', description: 'Não há participantes para gerar o arquivo.', variant: 'destructive'});
       return;
     }
 
@@ -343,7 +349,6 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Frequência");
     
-    // Auto-size columns
     const headers = Object.keys(dataToExport[0]);
     const columnWidths = headers.map(header => ({
         wch: Math.max(
