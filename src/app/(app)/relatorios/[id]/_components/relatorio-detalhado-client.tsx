@@ -36,17 +36,6 @@ import { setManualPresence, getPresenceForParticipants, setBulkPresence } from '
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Bar,
-  BarChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Cell,
-  LabelList,
-} from "recharts";
-import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -66,50 +55,9 @@ type RelatorioDetalhadoClientProps = {
   participants: DetailedParticipant[];
 };
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"];
 const saoPauloTimeZone = 'America/Sao_Paulo';
 const ITEMS_PER_PAGE = 25;
 
-
-const RankingChart = ({ data, dataKey, unit, title, description, showLabel = false }: { data: any[]; dataKey: string; unit: string; title: string; description: string; showLabel?: boolean; }) => (
-  <Card>
-    <CardHeader>
-      <CardTitle className="truncate">{title}</CardTitle>
-      <CardDescription>{description}</CardDescription>
-    </CardHeader>
-    <CardContent>
-      {data.length > 0 ? (
-        <ChartContainer config={{}} className="h-80 w-full">
-          <ResponsiveContainer>
-            <BarChart data={data} layout="vertical" margin={{ left: 120, right: 60 }}>
-              <XAxis type="number" dataKey={dataKey} unit={unit} tick={{ fontSize: 12 }} />
-              <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} interval={0} />
-              <Tooltip cursor={{ fill: 'hsl(var(--secondary))' }} content={<ChartTooltipContent />} />
-              <Bar dataKey={dataKey} radius={[0, 4, 4, 0]}>
-                {showLabel &&
-                  <LabelList 
-                    dataKey={dataKey} 
-                    position="right" 
-                    offset={5} 
-                    formatter={(value: number) => value > 0 ? `${value.toFixed(2)}${unit}` : ''}
-                    style={{ fill: 'hsl(var(--foreground))', fontSize: 12 }} 
-                  />
-                }
-                {data.map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartContainer>
-      ) : (
-        <div className="flex h-80 items-center justify-center">
-          <p className="text-sm text-muted-foreground">Nenhum dado para exibir.</p>
-        </div>
-      )}
-    </CardContent>
-  </Card>
-);
 
 export function RelatorioDetalhadoClient({ formacao, participants: initialParticipants }: RelatorioDetalhadoClientProps) {
   const { toast } = useToast();
@@ -273,41 +221,6 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
           toast({ title: 'Erro', description: 'Não foi possível atualizar as presenças.', variant: 'destructive' });
       }
   }
-
-
-  const regionalStats = useMemo(() => {
-    const stats: { [key: string]: { inscritos: number; presentes: number; avulsos: number } } = {};
-    
-    allParticipants.forEach(p => {
-      let regional = p.dados?.regional || 'N/A';
-      if (regional === 'PARAÍSO DO TOCANTINS') regional = 'PARAÍSO';
-      
-      if (!stats[regional]) {
-        stats[regional] = { inscritos: 0, presentes: 0, avulsos: 0 };
-      }
-
-      const presences = chartPresenceCache[p.id];
-      if (!presences) {
-        return;
-      }
-
-      const daily = presences.find(pr => pr.date === dateFilter);
-      const isPresente = !!daily?.matutino || !!daily?.vespertino;
-
-      if (p.fonte === 'AVULSO') {
-        if (isPresente) stats[regional].avulsos++;
-      } else {
-        stats[regional].inscritos++;
-        if (isPresente) stats[regional].presentes++;
-      }
-    });
-
-    const comparecimentoData = Object.entries(stats).map(([name, data]) => ({ name, taxaComparecimento: data.inscritos > 0 ? (data.presentes / data.inscritos) * 100 : 0 })).sort((a, b) => b.taxaComparecimento - a.taxaComparecimento).slice(0, 10);
-    const avulsosData = Object.entries(stats).map(([name, data]) => ({ name, avulsos: data.avulsos })).filter(item => item.avulsos > 0).sort((a, b) => b.avulsos - a.avulsos).slice(0, 10);
-      
-    return { comparecimentoData, avulsosData };
-  }, [allParticipants, dateFilter, chartPresenceCache]);
-
 
   const handleExport = () => {
     const sortedDates = (formacao.dates || [])
@@ -555,24 +468,6 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                     </div>
                 </div>
             </CardFooter>
-        </Card>
-        
-        <Card className="mt-6">
-            <CardHeader>
-                <CardTitle>Análise de Dados</CardTitle>
-                <CardDescription>Gráficos baseados no total de {allParticipants.length} participantes da formação.</CardDescription>
-            </CardHeader>
-             {loadingCharts ? (
-              <CardContent className="grid md:grid-cols-1 lg:grid-cols-2 gap-6 h-96">
-                <div className="flex items-center justify-center text-muted-foreground border rounded-lg"><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Carregando gráficos...</div>
-                <div className="flex items-center justify-center text-muted-foreground border rounded-lg"><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Carregando gráficos...</div>
-              </CardContent>
-            ) : (
-              <CardContent className="grid md:grid-cols-1 lg:grid-cols-2 gap-6">
-                  <RankingChart data={regionalStats.comparecimentoData} dataKey="taxaComparecimento" unit="%" title="Taxa de Comparecimento (Inscritos)" description="Percentual de inscritos que registraram presença, por regional." showLabel={true}/>
-                  <RankingChart data={regionalStats.avulsosData} dataKey="avulsos" unit="" title="Participantes Avulsos" description="Total de participantes não inscritos que registraram presença, por regional."/>
-              </CardContent>
-            )}
         </Card>
     </div>
   );
