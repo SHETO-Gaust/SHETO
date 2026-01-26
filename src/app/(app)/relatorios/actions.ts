@@ -1,10 +1,26 @@
-
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import type { Formacao, Inscricao, Frequencia, ParticipacaoSummary, FrequenciaPeriodoSummary } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
+
+// --- FUNÇÃO AUXILIAR PARA NORMALIZAR DATAS ---
+function normalizeDateString(dateStr: string): string {
+    if (!dateStr) return '';
+    // Se já estiver em formato YYYY-MM-DD (ex: 2024-02-25...)
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+        return dateStr.substring(0, 10);
+    }
+    // Tenta converter se for algo diferente ou timestamp
+    try {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+            return d.toISOString().substring(0, 10);
+        }
+    } catch (e) { }
+    return dateStr.substring(0, 10); // Fallback
+}
 
 export async function getFormacaoIds(): Promise<Pick<Formacao, 'id'>[]> {
     const cookieStore = cookies();
@@ -27,10 +43,12 @@ const processUniqueFrequencies = (frequencias: Pick<Frequencia, 'inscricao_id' |
     const uniqueAvulsos = new Set<string>();
 
     frequencias.forEach(freq => {
-        if (inscricaoMap.get(freq.inscricao_id) === 'AVULSO') {
-            uniqueAvulsos.add(freq.inscricao_id);
-        } else {
-            uniqueInscritos.add(freq.inscricao_id);
+        if (inscricaoMap.has(freq.inscricao_id)) {
+             if (inscricaoMap.get(freq.inscricao_id) === 'AVULSO') {
+                uniqueAvulsos.add(freq.inscricao_id);
+            } else {
+                uniqueInscritos.add(freq.inscricao_id);
+            }
         }
     });
 
@@ -64,7 +82,8 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
     const { data: allFrequencias, error: frequenciasError } = await supabase
         .from('frequencia')
         .select('id, inscricao_id, formacao_id, periodo, registered_at')
-        .eq('formacao_id', formacaoId);
+        .eq('formacao_id', formacaoId)
+        .limit(50000); // Aumentado limite
 
     if (inscricoesError || frequenciasError) {
         console.error(`Error fetching details for summary (${formacaoId}):`, inscricoesError || frequenciasError);
@@ -88,10 +107,12 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
     const geralSummary = processUniqueFrequencies(frequencias, inscricoes);
     const matutinoSummary = processUniqueFrequencies(freqMatutino, inscricoes);
     const vespertinoSummary = processUniqueFrequencies(freqVespertino, inscricoes);
+    
+    const totalInscritosPrevistos = inscricoes.filter(i => i.fonte !== 'AVULSO').length;
 
     const summary: ParticipacaoSummary = {
         formacao,
-        totalInscritos: inscricoes.filter(i => i.fonte !== 'AVULSO').length,
+        totalInscritos: totalInscritosPrevistos,
         frequencia: {
             geral: geralSummary,
             matutino: matutinoSummary,
@@ -125,18 +146,16 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
         }
 
         if (existingRecords && existingRecords.length > 0) {
-            // Presence exists, check if it's manual before allowing toggle off
-            if (existingRecords[0].source === false) { // It's manual, so remove it
+            if (existingRecords[0].source === false) { 
                 const { error: deleteError } = await supabase.from('frequencia').delete().eq('id', existingRecords[0].id);
                 if (deleteError) {
                     console.error('[SERVER_ACTION_ERROR] setManualPresence/deleteError:', deleteError);
                     return { error: `Erro ao remover presença: ${deleteError.message}` };
                 }
-            } else { // It's automatic, do not remove
+            } else { 
                 return { error: 'Não é possível remover uma frequência registrada automaticamente.' };
             }
         } else {
-            // Presence does not exist, add it (toggle on)
             const { data: inscricao } = await supabase.from('inscricoes').select('cpf').eq('id', inscricaoId).single();
             if (!inscricao) {
                 return { error: 'Inscrição não encontrada.' };
@@ -151,7 +170,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
                 cpf: inscricao.cpf,
                 periodo: periodo,
                 registered_at: registrationTimestamp.toISOString(),
-                source: false, // manual
+                source: false, 
             });
 
             if (insertError) {
@@ -164,6 +183,7 @@ export async function setManualPresence(inscricaoId: string, formacaoId: string,
         return { error: 'Ocorreu um erro inesperado ao processar a data.' };
     }
     
+    revalidatePath(`/relatorios/${formacaoId}`);
     revalidatePath('/relatorios');
     const updatedPresence = await getPresenceForParticipants(formacaoId, [inscricaoId]);
     return { success: true, updatedPresence };
@@ -225,7 +245,7 @@ export async function setBulkPresence(
                     cpf: insc.cpf,
                     periodo: periodo,
                     registered_at: registrationTimestamp,
-                    source: false, // manual
+                    source: false,
                 }));
             
             if (recordsToInsert.length > 0) {
@@ -243,7 +263,7 @@ export async function setBulkPresence(
                 .in('inscricao_id', inscricaoIds)
                 .eq('formacao_id', formacaoId)
                 .eq('periodo', periodo)
-                .eq('source', false) // Only delete manual entries
+                .eq('source', false) 
                 .gte('registered_at', startOfTargetDay.toISOString())
                 .lte('registered_at', endOfTargetDay.toISOString());
             
@@ -258,6 +278,7 @@ export async function setBulkPresence(
         return { error: 'Ocorreu um erro inesperado.' };
     }
 
+    revalidatePath(`/relatorios/${formacaoId}`);
     revalidatePath('/relatorios');
     const updatedPresence = await getPresenceForParticipants(formacaoId, inscricaoIds);
     return { success: true, updatedPresence };
@@ -283,7 +304,8 @@ export async function getDetailedParticipationReport(formacaoId: string): Promis
     const supabase = createClient(cookieStore);
 
     const formacaoPromise = supabase.from('formacoes').select('*').eq('id', formacaoId).single();
-    const inscricoesPromise = supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId).limit(10000);
+    // Aumentando limite aqui também
+    const inscricoesPromise = supabase.from('inscricoes').select('*').eq('formacao_id', formacaoId).limit(50000);
     
     const [formacaoResult, inscricoesResult] = await Promise.all([
         formacaoPromise,
@@ -321,34 +343,58 @@ export async function getPresenceForParticipants(
         return {};
     }
 
+    console.log(`[DEBUG] Buscando presenças para ${participantIds.length} participantes...`);
+
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     
     const { data: formacao } = await supabase.from('formacoes').select('dates').eq('id', formacaoId).single();
-    const allFormacaoDates = (formacao?.dates as any[] | undefined)?.map((d: any) => d.date.substring(0, 10)) || [];
+    // Normalização das datas da formação
+    const allFormacaoDates = (formacao?.dates as any[] | undefined)?.map((d: any) => normalizeDateString(d.date)) || [];
 
-    const { data: frequencias, error } = await supabase
-        .from('frequencia')
-        .select('inscricao_id, registered_at, periodo, source')
-        .eq('formacao_id', formacaoId)
-        .in('inscricao_id', participantIds);
+    // BATCH FETCHING:
+    // Mesmo com limit alto, URL longa pode falhar. Vamos dividir em lotes de 200 IDs por vez.
+    const BATCH_SIZE = 200;
+    let allFrequencias: any[] = [];
+    
+    for (let i = 0; i < participantIds.length; i += BATCH_SIZE) {
+        const batchIds = participantIds.slice(i, i + BATCH_SIZE);
+        const { data: batchFrequencies, error } = await supabase
+            .from('frequencia')
+            .select('inscricao_id, registered_at, periodo, source')
+            .eq('formacao_id', formacaoId)
+            .in('inscricao_id', batchIds)
+            .limit(50000); // Limite alto por lote
 
-    if (error) {
-        console.error('[SERVER-ACTION-ERROR] getPresenceForParticipants:', error);
-        return {};
+        if (error) {
+            console.error('[SERVER-ACTION-ERROR] Batch fetch error:', error);
+            continue; // Tenta o próximo lote
+        }
+        if (batchFrequencies) {
+            allFrequencias = [...allFrequencias, ...batchFrequencies];
+        }
     }
+
+    console.log(`[DEBUG] Total de frequências encontradas no DB: ${allFrequencias.length}`);
 
     type PresenceInfo = { registered_at: string; source: boolean; } | null;
     const frequenciaMap = new Map<string, { [date: string]: { matutino: PresenceInfo, vespertino: PresenceInfo } }>();
 
-    for (const freq of frequencias) {
-        const dateKey = freq.registered_at.substring(0, 10);
+    let matchedCount = 0;
+
+    for (const freq of allFrequencias) {
+        // CORREÇÃO DE FUSO -3h (Para pegar o dia "brasileiro" da aula)
+        const dateObj = new Date(freq.registered_at);
+        const brazilDate = new Date(dateObj.getTime() - 3 * 60 * 60 * 1000); 
+        const dateKey = brazilDate.toISOString().substring(0, 10);
         
         if (!frequenciaMap.has(freq.inscricao_id)) {
             frequenciaMap.set(freq.inscricao_id, {});
         }
         const participantData = frequenciaMap.get(freq.inscricao_id)!;
 
+        // Se a data calculada (dateKey) não estiver na lista de datas oficiais da formação,
+        // pode ser que a data oficial esteja formatada diferente. Vamos confiar no dateKey calculado.
         if (!participantData[dateKey]) {
             participantData[dateKey] = { matutino: null, vespertino: null };
         }
@@ -358,10 +404,14 @@ export async function getPresenceForParticipants(
 
         if (cleanPeriodo === 'MAT') {
             participantData[dateKey].matutino = presenceInfo;
+            matchedCount++;
         } else if (cleanPeriodo === 'VESP') {
             participantData[dateKey].vespertino = presenceInfo;
+            matchedCount++;
         }
     }
+
+    console.log(`[DEBUG] Presenças processadas/mapeadas com sucesso: ${matchedCount}`);
     
     const result: Record<string, DetailedParticipant['presencas']> = {};
 
@@ -369,6 +419,7 @@ export async function getPresenceForParticipants(
         const participantFrequencias = frequenciaMap.get(participantId) || {};
         result[participantId] = allFormacaoDates.map(date => ({
             date: date,
+            // Acessa direto pela data normalizada
             matutino: participantFrequencias[date]?.matutino || null,
             vespertino: participantFrequencias[date]?.vespertino || null,
         }));

@@ -10,6 +10,13 @@ import {
   CardTitle,
   CardFooter
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -66,9 +73,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   const [presenceCache, setPresenceCache] = useState<Record<string, DetailedParticipant['presencas']>>({});
   const [loadingPresence, setLoadingPresence] = useState(false);
   const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
-
-  const [fullPresenceCache, setFullPresenceCache] = useState<Record<string, DetailedParticipant['presencas']>>({});
-  const [loadingFullPresence, setLoadingFullPresence] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
@@ -90,32 +95,6 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
-
-  const fetchAllPresenceData = useCallback(async () => {
-    setLoadingFullPresence(true);
-    const allParticipantIds = initialParticipants.map(p => p.id);
-    const CHUNK_SIZE = 400; // A safe chunk size to avoid limits
-    let newFullCache = {};
-
-    try {
-        for (let i = 0; i < allParticipantIds.length; i += CHUNK_SIZE) {
-            const chunk = allParticipantIds.slice(i, i + CHUNK_SIZE);
-            if (chunk.length > 0) {
-              const chunkPresenceData = await getPresenceForParticipants(formacao.id, chunk);
-              newFullCache = { ...newFullCache, ...chunkPresenceData };
-            }
-        }
-        setFullPresenceCache(newFullCache);
-    } catch (error) {
-        toast({ title: "Erro ao carregar todos os dados de presença.", description: "Tente atualizar a página.", variant: "destructive" });
-    } finally {
-        setLoadingFullPresence(false);
-    }
-  }, [formacao.id, initialParticipants, toast]);
-
-  useEffect(() => {
-    fetchAllPresenceData();
-  }, [fetchAllPresenceData]);
   
   const filteredParticipants = useMemo(() => {
     return allParticipants.filter(p => {
@@ -214,8 +193,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
       }
       setBulkActionLoading(true);
       const result = await setBulkPresence(formacao.id, selectedIds, dateFilter, periodo, action);
-      setBulkActionLoading(false);
-
+      
       if (result.error) {
           toast({ title: 'Erro na ação em lote', description: result.error, variant: 'destructive' });
       } else if (result.success && result.updatedPresence) {
@@ -224,63 +202,79 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
               description: `Ação em lote concluída. A tabela foi atualizada.`,
           });
           setPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
-          setFullPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
           setSelectedIds([]);
       } else {
           toast({ title: 'Erro', description: 'Não foi possível atualizar as presenças.', variant: 'destructive' });
       }
+      setBulkActionLoading(false);
   }
 
-  const handleExport = () => {
-    const sortedDates = (formacao.dates || [])
-        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .map((d: any) => d.date.substring(0, 10));
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+        const sortedDates = (formacao.dates || [])
+            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            .map((d: any) => d.date.substring(0, 10));
 
-    if (loadingFullPresence) {
-      toast({ title: 'Dados de presença ainda carregando', description: 'Aguarde o carregamento de todos os dados de presença antes de exportar.', variant: 'destructive'});
-      return;
-    }
+        // Fetch all presence data in chunks on demand
+        const allParticipantIds = allParticipants.map(p => p.id);
+        const CHUNK_SIZE = 400;
+        let completePresenceCache: Record<string, DetailedParticipant['presencas']> = {};
 
-    const dataToExport = allParticipants.map(participant => {
-        const rowData: {[key: string]: any} = {
-            'Nome Completo': participant.nome_completo,
-            'CPF': participant.cpf,
-            'Regional': participant.dados?.regional || 'N/A',
-            'Inscrição Antecipada': participant.fonte !== 'AVULSO' ? 'SIM' : 'NÃO',
-        };
+        for (let i = 0; i < allParticipantIds.length; i += CHUNK_SIZE) {
+            const chunk = allParticipantIds.slice(i, i + CHUNK_SIZE);
+            if (chunk.length > 0) {
+                const chunkPresenceData = await getPresenceForParticipants(formacao.id, chunk);
+                completePresenceCache = { ...completePresenceCache, ...chunkPresenceData };
+            }
+        }
+        
+        const dataToExport = allParticipants.map(participant => {
+            const rowData: {[key: string]: any} = {
+                'Nome Completo': participant.nome_completo,
+                'CPF': participant.cpf,
+                'Regional': participant.dados?.regional || 'N/A',
+                'Inscrição Antecipada': participant.fonte !== 'AVULSO' ? 'SIM' : 'NÃO',
+            };
 
-        const presences = fullPresenceCache[participant.id];
+            const presences = completePresenceCache[participant.id];
 
-        sortedDates.forEach(dateStr => {
-            const dailyPresence = presences?.find(p => p.date === dateStr);
-            const dateLabel = format(parseISO(dateStr), "dd/MM/yy");
-            
-            rowData[`${dateLabel} Manhã`] = dailyPresence?.matutino ? 'PRESENTE' : 'AUSENTE';
-            rowData[`${dateLabel} Tarde`] = dailyPresence?.vespertino ? 'PRESENTE' : 'AUSENTE';
+            sortedDates.forEach(dateStr => {
+                const dailyPresence = presences?.find(p => p.date === dateStr);
+                const dateLabel = format(parseISO(dateStr), "dd/MM/yy");
+                
+                rowData[`${dateLabel} Manhã`] = dailyPresence?.matutino ? 'PRESENTE' : 'AUSENTE';
+                rowData[`${dateLabel} Tarde`] = dailyPresence?.vespertino ? 'PRESENTE' : 'AUSENTE';
+            });
+
+            return rowData;
         });
 
-        return rowData;
-    });
+        if (dataToExport.length === 0) {
+          toast({ title: 'Nenhum dado para exportar', description: 'Não há participantes para gerar o arquivo.', variant: 'destructive'});
+          return;
+        }
 
-    if (dataToExport.length === 0) {
-      toast({ title: 'Nenhum dado para exportar', description: 'Não há participantes para gerar o arquivo.', variant: 'destructive'});
-      return;
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Frequência");
+        
+        const headers = Object.keys(dataToExport[0]);
+        const columnWidths = headers.map(header => ({
+            wch: Math.max(
+                header.length,
+                ...dataToExport.map(row => (row[header] || '').toString().length)
+            ) + 2
+        }));
+        worksheet["!cols"] = columnWidths;
+
+        XLSX.writeFile(workbook, `relatorio_frequencia_${formacao.name.replace(/ /g, '_')}.xlsx`);
+
+    } catch (error: any) {
+        toast({ title: 'Erro ao exportar', description: error.message || 'Não foi possível gerar o arquivo.', variant: 'destructive'});
+    } finally {
+        setIsExporting(false);
     }
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Frequência");
-    
-    const headers = Object.keys(dataToExport[0]);
-    const columnWidths = headers.map(header => ({
-        wch: Math.max(
-            header.length,
-            ...dataToExport.map(row => (row[header] || '').toString().length)
-        ) + 2
-    }));
-    worksheet["!cols"] = columnWidths;
-
-    XLSX.writeFile(workbook, `relatorio_frequencia_${formacao.name.replace(/ /g, '_')}.xlsx`);
   };
 
 
@@ -305,10 +299,6 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
         toast({ title: 'Sucesso', description: presence ? 'Presença removida.' : 'Presença adicionada.' });
         
         setPresenceCache(prevCache => ({
-            ...prevCache,
-            ...result.updatedPresence,
-        }));
-        setFullPresenceCache(prevCache => ({
             ...prevCache,
             ...result.updatedPresence,
         }));
@@ -388,6 +378,20 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
 
   return (
     <div className="space-y-6">
+        <Dialog open={isExporting}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                <DialogTitle>Exportando Relatório</DialogTitle>
+                <DialogDescription>
+                    Estamos preparando seu arquivo XLSX. Isso pode levar alguns instantes.
+                </DialogDescription>
+                </DialogHeader>
+                <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                </div>
+            </DialogContent>
+        </Dialog>
+
         <Card>
             <CardHeader>
                 <CardTitle>Relatório Detalhado de Participação</CardTitle>
@@ -414,11 +418,11 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={handleExport} disabled={loadingFullPresence}>
-                    <FileDown className="mr-2 h-4 w-4" />
+                <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting}>
+                    {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileDown className="mr-2 h-4 w-4" />}
                     Exportar XLSX
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => { setPresenceCache({}); fetchAllPresenceData(); }} disabled={loadingPresence || loadingFullPresence}><RefreshCw className={`h-4 w-4 ${(loadingPresence || loadingFullPresence) ? 'animate-spin' : ''}`} /></Button>
+                <Button variant="ghost" size="icon" onClick={() => setPresenceCache({})} disabled={loadingPresence || isExporting}><RefreshCw className={`h-4 w-4 ${loadingPresence ? 'animate-spin' : ''}`} /></Button>
               </div>
             </CardHeader>
             <CardContent>
