@@ -37,7 +37,7 @@ export async function getFormacaoIds(): Promise<Pick<Formacao, 'id'>[]> {
     return data;
 }
 
-const processUniqueFrequencies = (frequencias: Pick<Frequencia, 'inscricao_id' | 'periodo'>[], inscricoes: Pick<Inscricao, 'id' | 'fonte'>[]): FrequenciaPeriodoSummary => {
+const processUniqueFrequencies = (frequencias: Pick<Frequencia, 'inscricao_id'>[], inscricoes: Pick<Inscricao, 'id' | 'fonte'>[]): FrequenciaPeriodoSummary => {
     const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
     const uniqueInscritos = new Set<string>();
     const uniqueAvulsos = new Set<string>();
@@ -101,8 +101,8 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
     const inscricoes = allInscricoes || [];
     const frequencias = allFrequencias || [];
 
-    const freqMatutino = frequencias.filter(f => f.periodo === 'MAT');
-    const freqVespertino = frequencias.filter(f => f.periodo === 'VESP');
+    const freqMatutino = frequencias.filter(f => f.periodo?.trim().toUpperCase() === 'MAT');
+    const freqVespertino = frequencias.filter(f => f.periodo?.trim().toUpperCase() === 'VESP');
 
     const geralSummary = processUniqueFrequencies(frequencias, inscricoes);
     const matutinoSummary = processUniqueFrequencies(freqMatutino, inscricoes);
