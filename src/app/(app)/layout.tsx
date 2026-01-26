@@ -17,6 +17,7 @@ import type { Profile } from '@/lib/types';
 import { AccessDenied } from '@/components/access-denied';
 
 const moduleMap: { [key: string]: string } = {
+    '/dashboard': 'dashboard',
     '/formacoes': 'formacoes',
     '/gerenciamento': 'gerenciamento',
     '/ensalamentos': 'ensalamentos',
@@ -60,10 +61,13 @@ export default async function AppLayout({
   if (requiredModuleKey) {
       const moduleName = moduleMap[requiredModuleKey];
       const isAdmin = userProfile?.role === 'admin';
-      const hasModuleAccess = userProfile?.modules?.includes(moduleName) || false;
-      
-      if (!isAdmin && !hasModuleAccess) {
-          hasPermission = false;
+
+      if (isAdmin) {
+        hasPermission = true;
+      } else if (moduleName === 'dashboard') {
+        hasPermission = true;
+      } else {
+        hasPermission = userProfile?.modules?.includes(moduleName) || false;
       }
   }
 
