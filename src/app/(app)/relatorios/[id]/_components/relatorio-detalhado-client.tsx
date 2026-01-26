@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import {
   Card,
   CardContent,
@@ -25,7 +26,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { CheckCircle, XCircle, Loader2, RefreshCw, Sun, Sunset, Trash2 } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, RefreshCw, Sun, Sunset, Trash2, FileDown } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { ptBR } from 'date-fns/locale';
@@ -308,6 +309,53 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   }, [allParticipants, dateFilter, chartPresenceCache]);
 
 
+  const handleExport = () => {
+    const dataToExport: any[] = [];
+    
+    const sortedDates = (formacao.dates || [])
+        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .map((d: any) => d.date.substring(0, 10));
+
+    allParticipants.forEach(participant => {
+        const presences = chartPresenceCache[participant.id];
+        
+        sortedDates.forEach(dateStr => {
+            const dailyPresence = presences?.find(p => p.date === dateStr);
+            
+            dataToExport.push({
+                'Nome Completo': participant.nome_completo,
+                'CPF': participant.cpf,
+                'Regional': participant.dados?.regional || 'N/A',
+                'Data': format(parseISO(dateStr), "dd/MM/yyyy"),
+                'Presença Manhã': dailyPresence?.matutino ? 'PRESENTE' : 'AUSENTE',
+                'Presença Tarde': dailyPresence?.vespertino ? 'PRESENTE' : 'AUSENTE',
+            });
+        });
+    });
+
+    if (dataToExport.length === 0) {
+      toast({ title: 'Nenhum dado para exportar', description: 'Não há participantes ou dados de presença para gerar o arquivo.', variant: 'destructive'});
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Frequência");
+    
+    // Auto-size columns
+    const headers = Object.keys(dataToExport[0]);
+    const columnWidths = headers.map(header => ({
+        wch: Math.max(
+            header.length,
+            ...dataToExport.map(row => (row[header] || '').toString().length)
+        ) + 2
+    }));
+    worksheet["!cols"] = columnWidths;
+
+    XLSX.writeFile(workbook, `relatorio_frequencia_${formacao.name.replace(/ /g, '_')}.xlsx`);
+  };
+
+
   const PresenceStatus = ({ participantId, periodo, presence }: { participantId: string; periodo: 'MAT' | 'VESP'; presence: PresenceData | null; }) => {
     const loadingKey = `${participantId}-${periodo}-${dateFilter}`;
     const isLoading = togglingPresence === loadingKey;
@@ -437,7 +485,13 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                   Lista de todos os {initialParticipants.length} participantes inscritos. Use os filtros para analisar a presença.
                 </CardDescription>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => { setPresenceCache({}); fetchAllPresenceData(); }} disabled={loadingPresence || loadingCharts}><RefreshCw className={`h-4 w-4 ${(loadingPresence || loadingCharts) ? 'animate-spin' : ''}`} /></Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleExport} disabled={loadingPresence || loadingCharts}>
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Exportar XLSX
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => { setPresenceCache({}); fetchAllPresenceData(); }} disabled={loadingPresence || loadingCharts}><RefreshCw className={`h-4 w-4 ${(loadingPresence || loadingCharts) ? 'animate-spin' : ''}`} /></Button>
+              </div>
             </CardHeader>
             <CardContent>
                 <div className="rounded-md border">
