@@ -67,8 +67,8 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   const [loadingPresence, setLoadingPresence] = useState(false);
   const [togglingPresence, setTogglingPresence] = useState<string | null>(null);
 
-  const [chartPresenceCache, setChartPresenceCache] = useState<Record<string, DetailedParticipant['presencas']>>({});
-  const [loadingCharts, setLoadingCharts] = useState(true);
+  const [fullPresenceCache, setFullPresenceCache] = useState<Record<string, DetailedParticipant['presencas']>>({});
+  const [loadingFullPresence, setLoadingFullPresence] = useState(true);
 
   const dateOptions = useMemo(() =>
     (formacao.dates || [])
@@ -92,15 +92,15 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   const fetchAllPresenceData = useCallback(async () => {
-    setLoadingCharts(true);
+    setLoadingFullPresence(true);
     const allParticipantIds = initialParticipants.map(p => p.id);
     try {
         const allPresenceData = await getPresenceForParticipants(formacao.id, allParticipantIds);
-        setChartPresenceCache(allPresenceData);
+        setFullPresenceCache(allPresenceData);
     } catch (error) {
-        toast({ title: "Erro ao carregar dados para os gráficos.", variant: "destructive" });
+        toast({ title: "Erro ao carregar todos os dados de presença.", variant: "destructive" });
     } finally {
-        setLoadingCharts(false);
+        setLoadingFullPresence(false);
     }
   }, [formacao.id, initialParticipants, toast]);
 
@@ -215,7 +215,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
               description: `Ação em lote concluída. A tabela foi atualizada.`,
           });
           setPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
-          setChartPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
+          setFullPresenceCache(prev => ({ ...prev, ...result.updatedPresence }));
           setSelectedIds([]);
       } else {
           toast({ title: 'Erro', description: 'Não foi possível atualizar as presenças.', variant: 'destructive' });
@@ -227,8 +227,8 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
         .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
         .map((d: any) => d.date.substring(0, 10));
 
-    if (Object.keys(chartPresenceCache).length === 0 && allParticipants.length > 0) {
-      toast({ title: 'Dados de presença ainda carregando', description: 'Aguarde os gráficos carregarem e tente novamente.', variant: 'destructive'});
+    if (Object.keys(fullPresenceCache).length === 0 && allParticipants.length > 0) {
+      toast({ title: 'Dados de presença ainda carregando', description: 'Aguarde o carregamento de todos os dados de presença antes de exportar.', variant: 'destructive'});
       return;
     }
 
@@ -240,7 +240,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
             'Inscrição Antecipada': participant.fonte !== 'AVULSO' ? 'SIM' : 'NÃO',
         };
 
-        const presences = chartPresenceCache[participant.id];
+        const presences = fullPresenceCache[participant.id];
 
         sortedDates.forEach(dateStr => {
             const dailyPresence = presences?.find(p => p.date === dateStr);
@@ -299,7 +299,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
             ...prevCache,
             ...result.updatedPresence,
         }));
-        setChartPresenceCache(prevCache => ({
+        setFullPresenceCache(prevCache => ({
             ...prevCache,
             ...result.updatedPresence,
         }));
@@ -405,11 +405,11 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={handleExport} disabled={loadingPresence || loadingCharts}>
+                <Button variant="outline" size="sm" onClick={handleExport} disabled={loadingPresence || loadingFullPresence}>
                     <FileDown className="mr-2 h-4 w-4" />
                     Exportar XLSX
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => { setPresenceCache({}); fetchAllPresenceData(); }} disabled={loadingPresence || loadingCharts}><RefreshCw className={`h-4 w-4 ${(loadingPresence || loadingCharts) ? 'animate-spin' : ''}`} /></Button>
+                <Button variant="ghost" size="icon" onClick={() => { setPresenceCache({}); fetchAllPresenceData(); }} disabled={loadingPresence || loadingFullPresence}><RefreshCw className={`h-4 w-4 ${(loadingPresence || loadingFullPresence) ? 'animate-spin' : ''}`} /></Button>
               </div>
             </CardHeader>
             <CardContent>
