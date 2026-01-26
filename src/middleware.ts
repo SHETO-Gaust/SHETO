@@ -8,6 +8,9 @@ export async function middleware(request: NextRequest) {
   // https://supabase.com/docs/guides/auth/auth-helpers/nextjs#managing-session-with-middleware
   await supabase.auth.getSession();
 
+  // Set a custom header on the response so that the layout can read the path
+  response.headers.set('x-next-url', request.nextUrl.pathname);
+
   return response;
 }
 

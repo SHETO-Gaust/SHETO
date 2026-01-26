@@ -53,7 +53,7 @@ export default async function AppLayout({
       userProfile = profileData;
   }
   
-  const pathname = headers().get('next-url') || '';
+  const pathname = headers().get('x-next-url') || '';
   const requiredModuleKey = Object.keys(moduleMap).find(key => pathname.startsWith(key));
   let hasPermission = true;
 
