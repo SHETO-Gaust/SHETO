@@ -433,7 +433,9 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Participantes</CardTitle>
-                <CardDescription>Lista de participantes com detalhes de presença.</CardDescription>
+                <CardDescription>
+                  Lista de todos os {initialParticipants.length} participantes inscritos. Use os filtros para analisar a presença.
+                </CardDescription>
               </div>
               <Button variant="ghost" size="icon" onClick={() => { setPresenceCache({}); fetchAllPresenceData(); }} disabled={loadingPresence || loadingCharts}><RefreshCw className={`h-4 w-4 ${(loadingPresence || loadingCharts) ? 'animate-spin' : ''}`} /></Button>
             </CardHeader>
