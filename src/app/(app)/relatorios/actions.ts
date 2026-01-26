@@ -37,6 +37,38 @@ export async function getFormacaoIds(): Promise<Pick<Formacao, 'id'>[]> {
     return data;
 }
 
+// Helper function to handle paginated fetching from Supabase
+async function paginatedFetch(queryBuilder: any) {
+    const BATCH_SIZE = 1000;
+    let allData: any[] = [];
+    let currentPage = 0;
+    let keepFetching = true;
+
+    while (keepFetching) {
+        const { data, error } = await queryBuilder.range(
+            currentPage * BATCH_SIZE,
+            (currentPage + 1) * BATCH_SIZE - 1
+        );
+
+        if (error) {
+            console.error("Supabase paginated fetch error:", error);
+            throw error;
+        }
+        
+        if (data && data.length > 0) {
+            allData = allData.concat(data);
+            currentPage++;
+            if (data.length < BATCH_SIZE) {
+                keepFetching = false;
+            }
+        } else {
+            keepFetching = false;
+        }
+    }
+    return allData;
+}
+
+
 export async function getParticipationSummary(formacaoId: string): Promise<ParticipacaoSummary | null> {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
@@ -52,19 +84,18 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
         return null;
     }
 
-    const { data: allInscricoes, error: inscricoesError } = await supabase
-        .from('inscricoes')
-        .select('id, formacao_id, fonte')
-        .eq('formacao_id', formacaoId);
-    
-    const { data: allFrequencias, error: frequenciasError } = await supabase
-        .from('frequencia')
-        .select('id, inscricao_id, formacao_id, periodo, registered_at')
-        .eq('formacao_id', formacaoId)
-        .limit(50000);
-
-    if (inscricoesError || frequenciasError) {
-        console.error(`Error fetching details for summary (${formacaoId}):`, inscricoesError || frequenciasError);
+    let allInscricoes, allFrequencias;
+    try {
+        const inscricoesQuery = supabase.from('inscricoes').select('id, formacao_id, fonte').eq('formacao_id', formacaoId);
+        const frequenciasQuery = supabase.from('frequencia').select('id, inscricao_id, formacao_id, periodo, registered_at').eq('formacao_id', formacaoId);
+        
+        [allInscricoes, allFrequencias] = await Promise.all([
+            paginatedFetch(inscricoesQuery),
+            paginatedFetch(frequenciasQuery)
+        ]);
+        
+    } catch(error) {
+        console.error(`Error fetching paginated details for summary (${formacaoId}):`, error);
         return {
             formacao,
             totalInscritos: 0,
@@ -78,7 +109,7 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
     
     const inscricoes = allInscricoes || [];
     const frequencias = allFrequencias || [];
-    const inscricaoMap = new Map(inscricoes.map(i => [i.id, i.fonte]));
+    const inscricaoMap = new Map(inscricoes.map((i: any) => [i.id, i.fonte]));
 
     const matutinoInscritos = new Set<string>();
     const matutinoAvulsos = new Set<string>();
@@ -127,7 +158,7 @@ export async function getParticipationSummary(formacaoId: string): Promise<Parti
         total: geralInscritos.size + geralAvulsos.size,
     };
     
-    const totalInscritosPrevistos = inscricoes.filter(i => i.fonte !== 'AVULSO').length;
+    const totalInscritosPrevistos = inscricoes.filter((i: any) => i.fonte !== 'AVULSO').length;
 
     const summary: ParticipacaoSummary = {
         formacao,
