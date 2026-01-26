@@ -8,20 +8,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Users, Star, UserX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, Cell } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
 
-type MetricasClientProps = {
-    finishedFormacoes: Pick<Formacao, 'id' | 'name'>[];
-};
+
+const CHART_COLORS = ['#219EBC', '#8ECAE6', '#FFB703', '#FB8500', '#D90429', '#EF476F', '#FFD166', '#06D6A0', '#118AB2', '#073B4C'];
 
 const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueFormatter }: { data: any[], title: string, description: string, dataKey: string, nameKey: string, unit: string, valueFormatter: (value: any) => string }) => {
     
-    const chartData = useMemo(() => data.slice(0, 10).reverse(), [data]);
+    const chartData = useMemo(() => data.slice(0, 10), [data]);
 
     return (
         <Card>
@@ -32,13 +31,16 @@ const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueF
             <CardContent>
                 {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={400}>
-                        <BarChart data={chartData} layout="vertical" margin={{ left: 120, right: 30 }}>
+                        <BarChart data={chartData} layout="vertical" margin={{ left: 120, right: 40 }}>
                             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                             <XAxis type="number" domain={[0, 'dataMax + 10']} />
-                            <YAxis dataKey={nameKey} type="category" width={120} interval={0} />
-                            <Tooltip formatter={(value) => `${valueFormatter(value)}${unit}`} />
-                            <Bar dataKey={dataKey} fill="var(--chart-1)" barSize={30}>
-                               <LabelList dataKey={dataKey} position="right" formatter={(value: number) => `${valueFormatter(value)}${unit}`} />
+                            <YAxis dataKey={nameKey} type="category" width={120} interval={0} axisLine={false} tickLine={false} />
+                            <Tooltip formatter={(value) => `${valueFormatter(value)}${unit}`} cursor={{ fill: 'hsl(var(--muted))' }}/>
+                            <Bar dataKey={dataKey} barSize={30} radius={[0, 4, 4, 0]}>
+                               {chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                ))}
+                               <LabelList dataKey={dataKey} position="right" formatter={(value: number) => `${valueFormatter(value)}${unit}`} className="font-semibold" />
                             </Bar>
                         </BarChart>
                     </ResponsiveContainer>
@@ -51,6 +53,41 @@ const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueF
         </Card>
     );
 };
+
+const MetricasSummary = ({ summary }: { summary: Pick<MetricasData, 'totalInscritos' | 'totalAvaliacoes' | 'totalNaoInscritos'>}) => (
+    <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Inscrições Totais</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{summary.totalInscritos}</div>
+                <p className="text-xs text-muted-foreground">nas formações selecionadas</p>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Avaliações Recebidas</CardTitle>
+                <Star className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{summary.totalAvaliacoes}</div>
+                <p className="text-xs text-muted-foreground">contabilizadas para o ranking</p>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Inscritos não Previstos</CardTitle>
+                <UserX className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{summary.totalNaoInscritos}</div>
+                <p className="text-xs text-muted-foreground">registrados no local</p>
+            </CardContent>
+        </Card>
+    </div>
+);
 
 
 export function MetricasClient({ finishedFormacoes }: MetricasClientProps) {
@@ -137,7 +174,12 @@ export function MetricasClient({ finishedFormacoes }: MetricasClientProps) {
             </Card>
 
             {loading && (
-                 <div className="grid gap-6 md:grid-cols-1">
+                 <div className="space-y-6">
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <Skeleton className="h-[108px] w-full" />
+                        <Skeleton className="h-[108px] w-full" />
+                        <Skeleton className="h-[108px] w-full" />
+                    </div>
                     <Skeleton className="h-[30rem] w-full" />
                     <Skeleton className="h-[30rem] w-full" />
                     <Skeleton className="h-[30rem] w-full" />
@@ -145,7 +187,9 @@ export function MetricasClient({ finishedFormacoes }: MetricasClientProps) {
             )}
             
             {metricas && (
-                <div className="grid gap-6">
+                <div className="space-y-6">
+                     <MetricasSummary summary={metricas} />
+
                     <RankingChart
                         data={metricas.topFormadores}
                         title="Top Formadores"

@@ -37,6 +37,9 @@ export async function getFinishedFormacoes(): Promise<Pick<Formacao, 'id' | 'nam
 }
 
 export type MetricasData = {
+    totalInscritos: number;
+    totalAvaliacoes: number;
+    totalNaoInscritos: number;
     topFormadores: { name: string; average: number; count: number }[];
     comparecimentoRegional: { regional: string; taxa: number; presentes: number; inscritos: number }[];
     naoInscritosRegional: { regional: string; total: number }[];
@@ -52,8 +55,8 @@ export async function getMetricasGerais(formacaoIds: string[]): Promise<Metricas
 
     // Fetch all data in parallel
     const [inscricoesRes, avaliacoesRes, frequenciaRes] = await Promise.all([
-        supabase.from('inscricoes').select('id, formacao_id, fonte, dados').in('formacao_id', formacaoIds),
-        supabase.from('avaliacoes').select('feedback_formadores').in('formacao_id', formacaoIds),
+        supabase.from('inscricoes').select('id, formacao_id, fonte, dados', { count: 'exact' }).in('formacao_id', formacaoIds),
+        supabase.from('avaliacoes').select('feedback_formadores', { count: 'exact' }).in('formacao_id', formacaoIds),
         supabase.from('frequencia').select('inscricao_id').in('formacao_id', formacaoIds)
     ]);
 
@@ -62,14 +65,17 @@ export async function getMetricasGerais(formacaoIds: string[]): Promise<Metricas
         return { error: "Falha ao buscar dados para as métricas." };
     }
 
-    const inscricoes = inscricoesRes.data as (Pick<Inscricao, 'id' | 'formacao_id' | 'fonte' | 'dados'>)[];
-    const avaliacoes = avaliacoesRes.data as (Pick<Avaliacao, 'feedback_formadores'>)[];
-    const frequencias = frequenciaRes.data;
+    const inscricoes = inscricoesRes.data as (Pick<Inscricao, 'id' | 'formacao_id' | 'fonte' | 'dados'>)[] || [];
+    const totalInscritos = inscricoesRes.count || 0;
+    const avaliacoes = avaliacoesRes.data as (Pick<Avaliacao, 'feedback_formadores'>)[] || [];
+    const totalAvaliacoes = avaliacoesRes.count || 0;
+    const frequencias = frequenciaRes.data || [];
 
     // 1. Process Top Formadores
     const formadorScores = new Map<string, { totalScore: number; count: number; name: string }>();
     avaliacoes.forEach(aval => {
         aval.feedback_formadores?.forEach((fb: any) => {
+            if (!fb.formador_id || !fb.formador_name) return;
             const avgScore = (fb.dominio_tema + fb.relevancia_profissional + fb.contribuicao_tema + fb.metodologia_adequada) / 4;
             if (!isNaN(avgScore)) {
                 const existing = formadorScores.get(fb.formador_id);
@@ -88,8 +94,7 @@ export async function getMetricasGerais(formacaoIds: string[]): Promise<Metricas
     });
     const topFormadores = Array.from(formadorScores.values())
         .map(f => ({ name: f.name, average: f.totalScore / f.count, count: f.count }))
-        .sort((a, b) => b.average - a.average)
-        .slice(0, 10);
+        .sort((a, b) => b.average - a.average);
 
     // 2. Process Comparecimento por Regional & Nao Inscritos
     const regionaisData = new Map<string, { inscritos: number; presentes: Set<string>; naoInscritos: number }>();
@@ -139,5 +144,7 @@ export async function getMetricasGerais(formacaoIds: string[]): Promise<Metricas
         .filter(item => item.total > 0)
         .sort((a, b) => b.total - a.total);
 
-    return { topFormadores, comparecimentoRegional, naoInscritosRegional };
+    const totalNaoInscritos = naoInscritosRegional.reduce((sum, item) => sum + item.total, 0);
+
+    return { totalInscritos, totalAvaliacoes, totalNaoInscritos, topFormadores, comparecimentoRegional, naoInscritosRegional };
 }
