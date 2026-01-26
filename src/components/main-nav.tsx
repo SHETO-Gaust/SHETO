@@ -18,12 +18,15 @@ import {
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
-const links = [
+const mainLinks = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard },
   { href: '/formacoes', label: 'Cadastrar Formação', icon: GraduationCap },
   { href: '/gerenciamento', label: 'Gerenciamento', icon: ListChecks },
-  { href: '/metricas-gerais', label: 'Métricas Gerais', icon: BarChart3 },
   { href: '/ensalamentos', label: 'Ensalamentos', icon: School },
+];
+
+const analysisLinks = [
+  { href: '/metricas-gerais', label: 'Métricas Gerais', icon: BarChart3 },
   { href: '/relatorios', label: 'Relatório de Frequência', icon: ClipboardList },
   { href: '/avaliacoes-admin', label: 'Avaliações', icon: Star },
 ];
@@ -34,7 +37,7 @@ export function MainNav() {
   return (
     <nav className="p-2">
       <SidebarMenu>
-        {links.map((link) => (
+        {mainLinks.map((link) => (
           <SidebarMenuItem key={link.href}>
             <Link href={link.href} passHref>
               <SidebarMenuButton
@@ -49,6 +52,28 @@ export function MainNav() {
           </SidebarMenuItem>
         ))}
       </SidebarMenu>
+      
+      <div className="pt-5">
+        <p className="px-3 mb-2 text-xs font-semibold uppercase text-sidebar-foreground/60 tracking-wider">
+          Análise de Dados
+        </p>
+        <SidebarMenu>
+          {analysisLinks.map((link) => (
+            <SidebarMenuItem key={link.href}>
+              <Link href={link.href} passHref>
+                <SidebarMenuButton
+                  className={cn('justify-start')}
+                  isActive={pathname.startsWith(link.href)}
+                  tooltip={link.label}
+                >
+                  <link.icon className="h-5 w-5" />
+                  <span className="text-base">{link.label}</span>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </div>
     </nav>
   );
 }
