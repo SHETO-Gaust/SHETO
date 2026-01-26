@@ -22,7 +22,7 @@ const links = [
   { href: '/formacoes', label: 'Cadastrar Formação', icon: GraduationCap },
   { href: '/gerenciamento', label: 'Gerenciamento', icon: ListChecks },
   { href: '/ensalamentos', label: 'Ensalamentos', icon: School },
-  { href: '/relatorios', label: 'Relatórios', icon: ClipboardList },
+  { href: '/relatorios', label: 'Relatório de Frequência', icon: ClipboardList },
   { href: '/avaliacoes-admin', label: 'Avaliações', icon: Star },
 ];
 
