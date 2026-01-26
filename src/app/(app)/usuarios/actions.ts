@@ -83,18 +83,19 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         return { error: 'Não foi possível criar o usuário, tente novamente.' };
     }
 
+    // UPDATE a profile ao invés de INSERT, pois um trigger no Supabase já deve ter criado um.
     const { error: profileError } = await supabaseAdmin
         .from('profiles')
-        .insert({
-            id: authData.user.id,
-            email: email,
+        .update({
             name: name,
             role: role,
             modules: modules,
-        });
+            email: email, // Garante que o email esteja na tabela de perfis também
+        })
+        .eq('id', authData.user.id);
 
     if (profileError) {
-        console.error('Error creating profile:', profileError);
+        console.error('Error updating profile:', profileError);
         // Desfaz a criação do usuário na autenticação para evitar usuários órfãos
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         return { error: `Ocorreu um erro ao criar o perfil do usuário: ${profileError.message}` };
