@@ -32,7 +32,7 @@ const RankingChart = ({ data, title, description, dataKey, nameKey, unit, valueF
             <CardContent>
                 {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={chartHeight}>
-                        <BarChart data={chartData} layout="vertical" margin={{ left: 200, right: 80 }}>
+                        <BarChart data={chartData} layout="vertical" margin={{ left: 200, right: 100 }}>
                             <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                             <XAxis type="number" domain={domainMax ? [0, domainMax] : undefined} />
                             <YAxis dataKey={nameKey} type="category" width={200} interval={0} axisLine={false} tickLine={false} />
@@ -192,7 +192,7 @@ export function MetricasClient({ finishedFormacoes }: MetricasClientProps) {
                      <MetricasSummary summary={metricas} />
 
                     <RankingChart
-                        data={metricas.topFormadores}
+                        data={metricas.topFormadores.slice(0, 10)}
                         title="Top Formadores"
                         description="Ranking dos formadores com as melhores médias de avaliação, com base nas formações selecionadas."
                         dataKey="average"
@@ -225,4 +225,5 @@ export function MetricasClient({ finishedFormacoes }: MetricasClientProps) {
         </div>
     );
 }
+
 
