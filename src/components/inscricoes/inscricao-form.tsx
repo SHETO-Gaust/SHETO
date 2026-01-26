@@ -108,12 +108,6 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
   const selectedLotacao = form.watch('lotacao');
   const cpfValue = form.watch('cpf');
 
-  const regionalApiMap = useMemo(() => ({
-    'PALMAS_SEDE': 'PALMAS',
-    'IMPERATRIZ': 'Imperatriz',
-    // Adicione outros mapeamentos conforme necessário. A chave é o valor da API, o valor é o que aparece no select.
-  }), []);
-
   // Efeito para buscar dados do Ergon via CPF
   useEffect(() => {
     const rawCpf = cpfValue?.replace(/\D/g, '') || '';
@@ -165,35 +159,59 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
   
   // Efeito para preencher o formulário após a busca no Ergon
   useEffect(() => {
-    if (ergonData) {
-        form.setValue('nomeCompleto', ergonData.nome || '', { shouldValidate: true });
-        form.setValue('email', ergonData.email || '', { shouldValidate: true });
+    if (ergonData && regionais.length > 0) {
+      form.setValue('nomeCompleto', ergonData.nome || '', {
+        shouldValidate: true,
+      });
+      form.setValue('email', ergonData.email || '', { shouldValidate: true });
 
-        const vinculo = ergonData.vinculos?.[0];
-        if (vinculo) {
-            const apiRegional = vinculo.regional;
-            const setorNome = vinculo.setorNome;
-            
-            // @ts-ignore
-            const mappedRegional = regionalApiMap[apiRegional] || Object.keys(regionalApiMap).find(key => apiRegional.includes(key));
-            
-            if (mappedRegional) {
-                 // @ts-ignore
-                 form.setValue('regional', regionalApiMap[mappedRegional], { shouldValidate: true });
-            }
+      const vinculo = ergonData.vinculos?.[0];
+      if (vinculo) {
+        const apiRegional = vinculo.regional;
+        const setorNome = vinculo.setorNome;
 
-            if (apiRegional === 'PALMAS_SEDE') {
-                form.setValue('lotacao', 'sede', { shouldValidate: true });
-                form.setValue('lotacao_especifica', setorNome, { shouldValidate: true });
-            } else if (setorNome.toLowerCase().includes('superintendência regional')) {
-                form.setValue('lotacao', 'sre', { shouldValidate: true });
-                form.setValue('lotacao_especifica', setorNome, { shouldValidate: true });
-            } else {
-                form.setValue('lotacao', 'ue', { shouldValidate: true });
-            }
+        let regionalToSet: string | undefined = undefined;
+
+        if (apiRegional === 'PALMAS_SEDE') {
+          regionalToSet = regionais.find(
+            (r) => r.toLowerCase() === 'palmas'
+          );
+          form.setValue('lotacao', 'sede', { shouldValidate: true });
+          form.setValue('lotacao_especifica', setorNome, {
+            shouldValidate: true,
+          });
+        } else if (setorNome.toLowerCase().includes('superintendência regional')) {
+          form.setValue('lotacao', 'sre', { shouldValidate: true });
+          form.setValue('lotacao_especifica', setorNome, {
+            shouldValidate: true,
+          });
+
+          const match = setorNome.match(/de\s(.*)$/i);
+          if (match && match[1]) {
+            const extractedRegional = match[1];
+            regionalToSet = regionais.find(
+              (r) => r.toLowerCase() === extractedRegional.toLowerCase()
+            );
+          }
+
+          if (!regionalToSet) {
+            regionalToSet = regionais.find(
+              (r) => r.toLowerCase() === apiRegional.toLowerCase()
+            );
+          }
+        } else {
+          form.setValue('lotacao', 'ue', { shouldValidate: true });
+          regionalToSet = regionais.find(
+            (r) => r.toLowerCase() === apiRegional.toLowerCase()
+          );
         }
+
+        if (regionalToSet) {
+          form.setValue('regional', regionalToSet, { shouldValidate: true });
+        }
+      }
     }
-  }, [ergonData, form, regionalApiMap]);
+  }, [ergonData, form, regionais]);
 
   useEffect(() => {
     const fetchRegionais = async () => {
