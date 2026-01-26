@@ -94,11 +94,20 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
   const fetchAllPresenceData = useCallback(async () => {
     setLoadingFullPresence(true);
     const allParticipantIds = initialParticipants.map(p => p.id);
+    const CHUNK_SIZE = 400; // A safe chunk size to avoid limits
+    let newFullCache = {};
+
     try {
-        const allPresenceData = await getPresenceForParticipants(formacao.id, allParticipantIds);
-        setFullPresenceCache(allPresenceData);
+        for (let i = 0; i < allParticipantIds.length; i += CHUNK_SIZE) {
+            const chunk = allParticipantIds.slice(i, i + CHUNK_SIZE);
+            if (chunk.length > 0) {
+              const chunkPresenceData = await getPresenceForParticipants(formacao.id, chunk);
+              newFullCache = { ...newFullCache, ...chunkPresenceData };
+            }
+        }
+        setFullPresenceCache(newFullCache);
     } catch (error) {
-        toast({ title: "Erro ao carregar todos os dados de presença.", variant: "destructive" });
+        toast({ title: "Erro ao carregar todos os dados de presença.", description: "Tente atualizar a página.", variant: "destructive" });
     } finally {
         setLoadingFullPresence(false);
     }
@@ -227,7 +236,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
         .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
         .map((d: any) => d.date.substring(0, 10));
 
-    if (Object.keys(fullPresenceCache).length === 0 && allParticipants.length > 0) {
+    if (loadingFullPresence) {
       toast({ title: 'Dados de presença ainda carregando', description: 'Aguarde o carregamento de todos os dados de presença antes de exportar.', variant: 'destructive'});
       return;
     }
@@ -405,7 +414,7 @@ export function RelatorioDetalhadoClient({ formacao, participants: initialPartic
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={handleExport} disabled={loadingPresence || loadingFullPresence}>
+                <Button variant="outline" size="sm" onClick={handleExport} disabled={loadingFullPresence}>
                     <FileDown className="mr-2 h-4 w-4" />
                     Exportar XLSX
                 </Button>
