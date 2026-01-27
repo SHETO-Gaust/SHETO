@@ -52,6 +52,10 @@ export function EnsalamentoSetup({ formations, onProcess, isLoading }: Ensalamen
 
   const form = useForm<SetupData>({
     resolver: zodResolver(setupSchema),
+    defaultValues: {
+      roomCount: undefined,
+      participantsPerRoom: undefined,
+    }
   });
 
   const dataSource = form.watch('source');
@@ -87,14 +91,26 @@ export function EnsalamentoSetup({ formations, onProcess, isLoading }: Ensalamen
                         const worksheet = workbook.Sheets[sheetName];
                         const json = XLSX.utils.sheet_to_json<any>(worksheet);
                         
-                        const mappedParticipants = json.map((row, index) => ({
-                            id: `sheet-${index}`,
-                            formacao_id: data.formationId,
-                            nome_completo: row['Nome Completo'] || row['nome_completo'] || '',
-                            cpf: row['CPF'] || row['cpf'] || '',
-                            email: row['Email'] || row['email'] || '',
-                            dados: row,
-                        }));
+                        const mappedParticipants = json.map((row, index) => {
+                            const {
+                                'Nome Completo': nome_completo,
+                                'nome_completo': nome_completo_alt,
+                                'CPF': cpf,
+                                'cpf': cpf_alt,
+                                'Email': email,
+                                'email': email_alt,
+                                ...dados
+                            } = row;
+
+                            return {
+                                id: `sheet-${index}`,
+                                formacao_id: data.formationId,
+                                nome_completo: nome_completo || nome_completo_alt || '',
+                                cpf: String(cpf || cpf_alt || ''),
+                                email: email || email_alt || '',
+                                dados: dados,
+                            };
+                        });
 
                         resolve(mappedParticipants as Inscricao[]);
 
