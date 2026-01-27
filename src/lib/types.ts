@@ -13,6 +13,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -164,4 +165,21 @@ export type ParticipacaoSummary = {
         matutino: FrequenciaPeriodoSummary;
         vespertino: FrequenciaPeriodoSummary;
     };
+};
+
+export type Sala = {
+  name: string;
+  participants: Inscricao[];
+  criterionValue: string;
+};
+
+export type EnsalamentoResult = {
+  salas: Sala[];
+  naoAlocados: Inscricao[];
+  stats: {
+    totalSalas: number;
+    totalParticipantes: number;
+    totalAlocados: number;
+    totalNaoAlocados: number;
+  };
 };

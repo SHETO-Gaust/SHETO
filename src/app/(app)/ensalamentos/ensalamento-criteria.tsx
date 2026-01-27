@@ -33,11 +33,12 @@ const criteriaSchema = z.object({
   }),
 });
 
-type CriteriaFormValues = z.infer<typeof criteriaSchema>;
+export type CriteriaFormValues = z.infer<typeof criteriaSchema>;
 
 type EnsalamentoCriteriaProps = {
   participants: Inscricao[];
   onGenerate: (data: CriteriaFormValues) => void;
+  isLoading: boolean;
 };
 
 const formatLabel = (key: string) => {
@@ -48,19 +49,20 @@ const formatLabel = (key: string) => {
         .trim();
 }
 
-export function EnsalamentoCriteria({ participants, onGenerate }: EnsalamentoCriteriaProps) {
-  const [loading, setLoading] = React.useState(false);
+export function EnsalamentoCriteria({ participants, onGenerate, isLoading }: EnsalamentoCriteriaProps) {
   const [criteriaOptions, setCriteriaOptions] = React.useState<string[]>([]);
   
   React.useEffect(() => {
     if (participants.length > 0) {
         const allKeys = new Set<string>();
         participants.forEach(p => {
+            // Add top-level keys, ignoring some default ones
             Object.keys(p).forEach(k => {
-                if (!['id', 'formacao_id', 'created_at', 'dados', 'fonte'].includes(k)) {
+                if (!['id', 'formacao_id', 'created_at', 'dados', 'fonte', 'nome_completo', 'cpf', 'email'].includes(k)) {
                     allKeys.add(k);
                 }
             });
+            // Add keys from the 'dados' object
             if (p.dados) {
                 Object.keys(p.dados).forEach(k => allKeys.add(k));
             }
@@ -74,11 +76,7 @@ export function EnsalamentoCriteria({ participants, onGenerate }: EnsalamentoCri
   });
 
   const onSubmit = (data: CriteriaFormValues) => {
-    setLoading(true);
-    setTimeout(() => {
-      onGenerate(data);
-      setLoading(false);
-    }, 1000);
+    onGenerate(data);
   };
 
   return (
@@ -159,8 +157,8 @@ export function EnsalamentoCriteria({ participants, onGenerate }: EnsalamentoCri
             />
 
             <div className="flex justify-end">
-              <Button type="submit" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Gerar Ensalamento
               </Button>
             </div>
