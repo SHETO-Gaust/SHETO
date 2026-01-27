@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Info } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { createInscricao, fetchErgonDataByCpf } from '@/app/(public)/inscricoes/actions';
 import { getRegionais, getEscolasPorRegional } from '@/lib/escolas';
@@ -26,6 +26,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { useRouter } from 'next/navigation';
 import { validateCPF } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 const generateSchema = (formConfig: any) => {
@@ -350,6 +351,16 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                         </FormItem>
                     )}
                 />
+
+                {ergonData && (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>Dados Localizados</AlertTitle>
+                    <AlertDescription>
+                      Seus dados foram encontrados no sistema. Caso haja alguma divergência, entre em contato pelo e-mail <a href="mailto:gforms@seduc.to.gov.br" className="font-semibold underline">gforms@seduc.to.gov.br</a> ou pelo telefone (63) 3027-3657 (ligação e WhatsApp).
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 <fieldset disabled={formFieldsDisabled} className="space-y-8 disabled:opacity-50">
                     {formConfig.fields.map((field: any) => {
