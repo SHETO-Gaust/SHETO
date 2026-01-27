@@ -19,7 +19,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Users, Users2, UserCheck, UserX, Move, Trash2, ArrowLeft } from 'lucide-react';
+import { Users, Users2, UserCheck, UserX, Move, Trash2, ArrowLeft, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -29,6 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SaveEnsalamentoDialog } from './save-ensalamento-dialog';
+import type { SetupData } from './ensalamento-setup';
 
 const StatCard = ({ title, value, icon: Icon }: { title: string; value: number | string; icon: React.ElementType }) => (
   <Card>
@@ -143,12 +145,14 @@ type EnsalamentoResultsProps = {
   onMoveToRoom: (targetRoomName: string) => void;
   onOpenForceDistribute: () => void;
   onBack: () => void;
+  setupData: SetupData;
 };
 
 
-export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute, onBack }: EnsalamentoResultsProps) {
+export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute, onBack, setupData }: EnsalamentoResultsProps) {
   const { salas, naoAlocados, stats } = result;
   const criterionLabel = formatLabel(criterion);
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = React.useState(false);
   
   const unassignedParticipants = naoAlocados;
 
@@ -178,10 +182,16 @@ export function EnsalamentoResults({ result, criterion, selectedIds, setSelected
                     Abaixo estão os resultados da distribuição dos participantes nas salas.
                   </CardDescription>
                 </div>
-                <Button variant="outline" onClick={onBack}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Voltar
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={onBack}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Voltar
+                    </Button>
+                    <Button onClick={() => setIsSaveDialogOpen(true)}>
+                        <Save className="mr-2 h-4 w-4" />
+                        Salvar
+                    </Button>
+                </div>
             </div>
         </CardHeader>
         <CardContent>
@@ -272,6 +282,13 @@ export function EnsalamentoResults({ result, criterion, selectedIds, setSelected
            </Card>
         </TabsContent>
       </Tabs>
+
+      <SaveEnsalamentoDialog
+          isOpen={isSaveDialogOpen}
+          setIsOpen={setIsSaveDialogOpen}
+          result={result}
+          formacaoId={setupData.formationId}
+      />
     </div>
   );
 }

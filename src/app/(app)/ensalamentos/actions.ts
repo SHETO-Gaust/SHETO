@@ -2,8 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import type { Formacao, Inscricao } from '@/lib/types';
+import type { Formacao, Inscricao, Ensalamento, EnsalamentoResult } from '@/lib/types';
 import { isPast, isToday } from "date-fns";
+import { revalidatePath } from 'next/cache';
 
 const isConcluida = (formacao: Formacao): boolean => {
     const { dates } = formacao;
@@ -67,4 +68,78 @@ export async function getInscritosForEnsalamento(formacaoId: string): Promise<In
     }
 
     return data;
+}
+
+
+// --- New Actions for Saving/Managing Ensalamentos ---
+
+export type SavedEnsalamento = Ensalamento & {
+  formacoes: {
+    name: string;
+  } | null;
+};
+
+export async function getSavedEnsalamentos(): Promise<SavedEnsalamento[]> {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const { data, error } = await supabase
+        .from('ensalamentos')
+        .select(`
+            *,
+            formacoes (name)
+        `)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching saved ensalamentos:', error);
+        return [];
+    }
+
+    return data as SavedEnsalamento[];
+}
+
+export async function saveEnsalamento(name: string, result: EnsalamentoResult, formacaoId: string) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return { error: 'Usuário não autenticado.' };
+    }
+
+    const { salas, naoAlocados, stats } = result;
+
+    const { error } = await supabase.from('ensalamentos').insert({
+        name,
+        formacao_id: formacaoId,
+        user_id: user.id,
+        salas,
+        nao_alocados: naoAlocados,
+        stats,
+    });
+
+    if (error) {
+        console.error('Error saving ensalamento:', error);
+        return { error: 'Ocorreu um erro ao salvar o ensalamento.' };
+    }
+    
+    revalidatePath('/ensalamentos');
+    return { success: true };
+}
+
+export async function deleteEnsalamento(id: string) {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const { error } = await supabase.from('ensalamentos').delete().eq('id', id);
+
+    if (error) {
+        console.error('Error deleting ensalamento:', error);
+        return { error: 'Ocorreu um erro ao deletar o ensalamento.' };
+    }
+    
+    revalidatePath('/ensalamentos');
+    return { success: true };
 }

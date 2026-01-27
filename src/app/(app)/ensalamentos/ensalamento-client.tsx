@@ -275,6 +275,7 @@ export function EnsalamentoClient({ formations }: { formations: FormacaoWithCoun
                         onMoveToRoom={handleMoveSelectedToRoom}
                         onOpenForceDistribute={() => setIsForceDistributeModalOpen(true)}
                         onBack={handleBack}
+                        setupData={setupData}
                     />
                      <ForceDistributionDialog
                         isOpen={isForceDistributeModalOpen}
