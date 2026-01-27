@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, FileImage, FileText, Lock, Save, Info } from 'lucide-react';
 import { saveCertificateConfig } from '../../actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { RichTextEditor } from '@/components/rich-text-editor';
 
 export function CertificateConfigClient({ formacao }: { formacao: Formacao }) {
     const { toast } = useToast();
@@ -79,7 +79,7 @@ export function CertificateConfigClient({ formacao }: { formacao: Formacao }) {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="capa-text">Texto do Certificado</Label>
-                                <Textarea id="capa-text" rows={8} value={config.capa.text} onChange={e => handleCapaChange('text', e.target.value)} />
+                                <RichTextEditor value={config.capa.text} onChange={html => handleCapaChange('text', html)} />
                             </div>
 
                              <Alert>
@@ -129,7 +129,7 @@ export function CertificateConfigClient({ formacao }: { formacao: Formacao }) {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="verso-text">Texto do Verso</Label>
-                                <Textarea id="verso-text" rows={8} value={config.verso.text} onChange={e => handleVersoChange('text', e.target.value)} />
+                                <RichTextEditor value={config.verso.text} onChange={html => handleVersoChange('text', html)} />
                                 <p className="text-xs text-muted-foreground">Este texto aparecerá no verso. Você pode usar as mesmas variáveis da capa aqui.</p>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
