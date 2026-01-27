@@ -26,6 +26,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2 } from 'lucide-react';
 import type { Formacao } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { Label } from '@/components/ui/label';
 
 const setupSchema = z.object({
   formationId: z.string({ required_error: 'Selecione uma formação.' }),
