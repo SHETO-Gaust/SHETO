@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -24,9 +26,10 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2 } from 'lucide-react';
-import type { Formacao } from '@/lib/types';
+import type { Formacao, Inscricao } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
+import type { FormacaoWithCount } from './actions';
 
 const setupSchema = z.object({
   formationId: z.string({ required_error: 'Selecione uma formação.' }),
@@ -35,23 +38,26 @@ const setupSchema = z.object({
   source: z.enum(['system', 'sheet'], { required_error: 'Selecione a fonte dos participantes.' }),
 });
 
-type SetupFormValues = z.infer<typeof setupSchema>;
+export type SetupData = z.infer<typeof setupSchema>;
 
 type EnsalamentoSetupProps = {
-  formations: Pick<Formacao, 'id' | 'name'>[];
-  onProcess: (data: SetupFormValues & { file?: File | null }) => void;
+  formations: FormacaoWithCount[];
+  onProcess: (data: SetupData, participants?: Inscricao[]) => void;
+  isLoading: boolean;
 };
 
-export function EnsalamentoSetup({ formations, onProcess }: EnsalamentoSetupProps) {
+export function EnsalamentoSetup({ formations, onProcess, isLoading }: EnsalamentoSetupProps) {
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
 
-  const form = useForm<SetupFormValues>({
+  const form = useForm<SetupData>({
     resolver: zodResolver(setupSchema),
   });
 
   const dataSource = form.watch('source');
+  const formationId = form.watch('formationId');
+  const selectedFormation = formations.find(f => f.id === formationId);
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -59,7 +65,7 @@ export function EnsalamentoSetup({ formations, onProcess }: EnsalamentoSetupProp
     }
   };
 
-  const onSubmit = (data: SetupFormValues) => {
+  const onSubmit = async (data: SetupData) => {
     if (data.source === 'sheet' && !file) {
       toast({
         title: 'Arquivo não selecionado',
@@ -68,12 +74,45 @@ export function EnsalamentoSetup({ formations, onProcess }: EnsalamentoSetupProp
       });
       return;
     }
-    setLoading(true);
-    // Simulate processing
-    setTimeout(() => {
-      onProcess({ ...data, file });
-      setLoading(false);
-    }, 1000);
+
+    if (data.source === 'sheet' && file) {
+        try {
+            const parsedParticipants = await new Promise<Inscricao[]>((resolve, reject) => {
+                 const reader = new FileReader();
+                 reader.onload = (e) => {
+                    try {
+                        const fileData = new Uint8Array(e.target?.result as ArrayBuffer);
+                        const workbook = XLSX.read(fileData, { type: 'array' });
+                        const sheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[sheetName];
+                        const json = XLSX.utils.sheet_to_json<any>(worksheet);
+                        
+                        const mappedParticipants = json.map((row, index) => ({
+                            id: `sheet-${index}`,
+                            formacao_id: data.formationId,
+                            nome_completo: row['Nome Completo'] || row['nome_completo'] || '',
+                            cpf: row['CPF'] || row['cpf'] || '',
+                            email: row['Email'] || row['email'] || '',
+                            dados: row,
+                        }));
+
+                        resolve(mappedParticipants as Inscricao[]);
+
+                    } catch (parseError) {
+                        reject(new Error("Falha ao ler o arquivo da planilha."));
+                    }
+                 };
+                 reader.onerror = (err) => reject(new Error("Falha ao ler o arquivo."));
+                 reader.readAsArrayBuffer(file);
+            });
+            onProcess(data, parsedParticipants);
+        } catch (error: any) {
+            toast({ title: 'Erro ao processar planilha', description: error.message, variant: 'destructive'});
+            return;
+        }
+    } else {
+        onProcess(data);
+    }
   };
 
   return (
@@ -101,12 +140,21 @@ export function EnsalamentoSetup({ formations, onProcess }: EnsalamentoSetupProp
                     </FormControl>
                     <SelectContent>
                       {formations.length > 0 ? (
-                        formations.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)
+                        formations.map(f => 
+                            <SelectItem key={f.id} value={f.id}>
+                                {f.name} ({f.inscritosCount} {f.inscritosCount === 1 ? 'inscrito' : 'inscritos'})
+                            </SelectItem>
+                        )
                       ) : (
                         <SelectItem value="none" disabled>Nenhuma formação ativa encontrada</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
+                   {selectedFormation && (
+                        <FormDescription>
+                           Total de {selectedFormation.inscritosCount} participantes no sistema.
+                        </FormDescription>
+                    )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -193,8 +241,8 @@ export function EnsalamentoSetup({ formations, onProcess }: EnsalamentoSetupProp
             )}
 
             <div className="flex justify-end">
-              <Button type="submit" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Processar e Continuar
               </Button>
             </div>

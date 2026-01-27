@@ -1,9 +1,9 @@
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getActiveFormations } from './actions';
+import { getActiveFormationsWithCount } from './actions';
 import { EnsalamentoClient } from './ensalamento-client';
 
 export default async function EnsalamentosPage() {
-    const activeFormations = await getActiveFormations();
+    const activeFormations = await getActiveFormationsWithCount();
 
     return (
         <div className="space-y-6">
