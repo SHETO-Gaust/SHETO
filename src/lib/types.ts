@@ -14,6 +14,7 @@
 
 
 
+
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
 export type Period = {
@@ -183,3 +184,15 @@ export type EnsalamentoResult = {
     totalNaoAlocados: number;
   };
 };
+
+export type Ensalamento = {
+    id: string;
+    formacao_id: string;
+    user_id: string;
+    name: string;
+    salas: Sala[];
+    nao_alocados: Inscricao[];
+    stats: EnsalamentoResult['stats'];
+    created_at: string;
+    updated_at: string;
+}
