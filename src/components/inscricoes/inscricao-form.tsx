@@ -168,12 +168,12 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
 
       const vinculo = ergonData.vinculos?.[0];
       if (vinculo) {
-        const apiRegional = vinculo.regional;
+        const apiRegional = vinculo.regional?.trim().toLowerCase();
         const setorNome = vinculo.setorNome?.trim().toLowerCase();
 
         let regionalToSet: string | undefined = undefined;
 
-        if (apiRegional === 'PALMAS_SEDE') {
+        if (apiRegional === 'palmas_sede') {
           regionalToSet = regionais.find(
             (r) => r.toLowerCase() === 'palmas'
           );
@@ -188,7 +188,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
           });
 
           // Tenta extrair a regional do nome do setor
-          const match = vinculo.setorNome.match(/de\s(.*)$/i);
+          const match = setorNome.match(/de\s(.*)$/i);
           if (match && match[1]) {
             const extractedRegional = match[1].trim().toLowerCase();
             regionalToSet = regionais.find(
@@ -199,14 +199,14 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
           // Fallback para a regional principal se a extração falhar
           if (!regionalToSet) {
             regionalToSet = regionais.find(
-              (r) => r.toLowerCase() === apiRegional.toLowerCase()
+              (r) => r.toLowerCase() === apiRegional
             );
           }
         } else {
           // Assume que é uma unidade escolar
           form.setValue('lotacao', 'ue', { shouldValidate: true });
            regionalToSet = regionais.find(
-            (r) => r.toLowerCase() === apiRegional.toLowerCase()
+            (r) => r.toLowerCase() === apiRegional
           );
         }
 
@@ -382,7 +382,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                             <FormItem>
                                             <FormLabel>Email</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="seu.email@exemplo.com" {...field} readOnly={!!ergonData} className={cn(ergonData && 'bg-muted/50')} />
+                                                <Input placeholder="seu.email@exemplo.com" {...field} />
                                             </FormControl>
                                             <FormMessage />
                                             </FormItem>
@@ -400,7 +400,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                             <FormLabel>Regional</FormLabel>
                                             <Select onValueChange={field.onChange} value={field.value} disabled={loadingRegionais || !!ergonData}>
                                                 <FormControl>
-                                                <SelectTrigger>
+                                                <SelectTrigger className={cn(ergonData && 'bg-muted/50')}>
                                                     <SelectValue placeholder={loadingRegionais ? "Carregando..." : "Selecione sua regional"} />
                                                 </SelectTrigger>
                                                 </FormControl>
@@ -435,7 +435,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                                     <FormControl>
                                                     <RadioGroupItem value="sre" />
                                                     </FormControl>
-                                                    <FormLabel className="font-normal">
+                                                    <FormLabel className={cn("font-normal", ergonData && "text-muted-foreground")}>
                                                     Superintendência Regional
                                                     </FormLabel>
                                                 </FormItem>
@@ -443,7 +443,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                                     <FormControl>
                                                     <RadioGroupItem value="sede" />
                                                     </FormControl>
-                                                    <FormLabel className="font-normal">
+                                                    <FormLabel className={cn("font-normal", ergonData && "text-muted-foreground")}>
                                                     SEDUC Sede
                                                     </FormLabel>
                                                 </FormItem>
@@ -451,7 +451,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                                     <FormControl>
                                                     <RadioGroupItem value="ue" />
                                                     </FormControl>
-                                                    <FormLabel className="font-normal">
+                                                    <FormLabel className={cn("font-normal", ergonData && "text-muted-foreground")}>
                                                     Unidade Escolar
                                                     </FormLabel>
                                                 </FormItem>
@@ -491,7 +491,7 @@ export function InscricaoForm({ formacao }: { formacao: Formacao }) {
                                 <FormLabel>Unidade Escolar</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value} disabled={!selectedRegional || loadingEscolas || !!ergonData}>
                                     <FormControl>
-                                    <SelectTrigger>
+                                    <SelectTrigger className={cn(ergonData && 'bg-muted/50')}>
                                         <SelectValue placeholder={
                                             loadingEscolas ? "Carregando escolas..." :
                                             !selectedRegional ? "Selecione uma regional primeiro" : "Selecione sua escola"
