@@ -37,11 +37,6 @@ const nextConfig: NextConfig = {
         destination: '/formacoes',
         permanent: true,
       },
-      {
-        source: '/reservations',
-        destination: '/ensalamentos',
-        permanent: true,
-      },
     ]
   },
 };
