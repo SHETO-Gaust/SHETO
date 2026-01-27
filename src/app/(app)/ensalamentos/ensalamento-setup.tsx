@@ -168,7 +168,7 @@ export function EnsalamentoSetup({ formations, onProcess, isLoading }: Ensalamen
                   <FormItem>
                     <FormLabel>Quantidade de Salas</FormLabel>
                     <FormControl>
-                      <Input type="number" min="1" placeholder="Ex: 5" {...field} />
+                      <Input type="number" min="1" placeholder="Ex: 5" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -181,7 +181,7 @@ export function EnsalamentoSetup({ formations, onProcess, isLoading }: Ensalamen
                   <FormItem>
                     <FormLabel>Pessoas por Sala</FormLabel>
                     <FormControl>
-                      <Input type="number" min="1" placeholder="Ex: 30" {...field} />
+                      <Input type="number" min="1" placeholder="Ex: 30" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
