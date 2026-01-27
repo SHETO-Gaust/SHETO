@@ -22,19 +22,17 @@ const CountdownRedirect = ({ formacaoId, cpf }: { formacaoId: string, cpf: strin
     const [countdown, setCountdown] = useState(8);
 
     useEffect(() => {
+        if (countdown <= 0) {
+            router.push(`/avaliacoes/${formacaoId}?cpf=${encodeURIComponent(cpf)}`);
+            return;
+        }
+
         const timer = setInterval(() => {
-            setCountdown((prev) => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    router.push(`/avaliacoes/${formacaoId}?cpf=${encodeURIComponent(cpf)}`);
-                    return 0;
-                }
-                return prev - 1;
-            });
+            setCountdown((prev) => prev - 1);
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [router, formacaoId, cpf]);
+    }, [countdown, router, formacaoId, cpf]);
     
     const handleRedirectNow = () => {
         router.push(`/avaliacoes/${formacaoId}?cpf=${encodeURIComponent(cpf)}`);
