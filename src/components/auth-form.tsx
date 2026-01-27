@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, GraduationCap, CheckCircle, Star } from 'lucide-react';
+import { Loader2, GraduationCap, CheckCircle, Star, ShieldCheck } from 'lucide-react';
 import { signIn } from '@/app/login/actions';
 import { useSearchParams } from 'next/navigation';
 import { Separator } from './ui/separator';
@@ -108,6 +108,12 @@ export function AuthForm() {
                 <Link href="/avaliacoes">
                     <Star className="mr-2 h-4 w-4" />
                     Avaliar Formação
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/validar-certificado">
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    Validar Certificado
                 </Link>
               </Button>
           </div>

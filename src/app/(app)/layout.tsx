@@ -24,6 +24,7 @@ const moduleMap: { [key: string]: string } = {
     '/metricas-gerais': 'metricas-gerais',
     '/relatorios': 'relatorios',
     '/avaliacoes-admin': 'avaliacoes-admin',
+    '/emitir-certificado': 'emitir-certificado',
     '/usuarios': 'usuarios',
 };
 

@@ -11,6 +11,7 @@ import {
   ListChecks,
   BarChart3,
   Users,
+  Award,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -33,12 +34,16 @@ const allLinks = [
   { href: '/relatorios', label: 'Relatório de Frequência', icon: ClipboardList, module: 'relatorios', group: 'analysis' },
   { href: '/avaliacoes-admin', label: 'Avaliações', icon: Star, module: 'avaliacoes-admin', group: 'analysis' },
 
+  // Certification group
+  { href: '/emitir-certificado', label: 'Emitir Certificado', icon: Award, module: 'emitir-certificado', group: 'certification' },
+
   // Management group
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
 ];
 
 const linkGroups = [
     { id: 'analysis', label: 'Análise de Dados' },
+    { id: 'certification', label: 'Certificação' },
     { id: 'management', label: 'Gestão' },
 ];
 

@@ -24,6 +24,7 @@ const allModules = [
   { id: 'metricas-gerais', label: 'Métricas Gerais' },
   { id: 'relatorios', label: 'Relatório de Frequência' },
   { id: 'avaliacoes-admin', label: 'Avaliações' },
+  { id: 'emitir-certificado', label: 'Emitir Certificado' },
   { id: 'usuarios', label: 'Usuários' },
 ];
 
