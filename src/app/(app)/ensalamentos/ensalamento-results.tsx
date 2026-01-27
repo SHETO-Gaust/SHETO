@@ -33,32 +33,47 @@ const StatCard = ({ title, value, icon: Icon }: { title: string; value: number |
   </Card>
 );
 
-const ParticipantsTable = ({ participants }: { participants: Inscricao[] }) => (
-  <div className="rounded-md border max-h-96 overflow-y-auto">
-    <Table>
-      <TableHeader className="sticky top-0 bg-muted/50">
-        <TableRow>
-          <TableHead>Nome</TableHead>
-          <TableHead>CPF</TableHead>
-          <TableHead>Regional</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {participants.map(p => (
-          <TableRow key={p.id}>
-            <TableCell className="font-medium">{p.nome_completo}</TableCell>
-            <TableCell>{p.cpf}</TableCell>
-            <TableCell>{p.dados?.regional || 'N/A'}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  </div>
-);
+const ParticipantsTable = ({ participants, criterion, criterionLabel }: { participants: Inscricao[], criterion: string, criterionLabel: string }) => {
+    const getCriterionValue = (p: Inscricao) => p.dados?.[criterion] || p[criterion as keyof Inscricao] || 'N/A';
+
+    return (
+        <div className="rounded-md border max-h-96 overflow-y-auto">
+            <Table>
+            <TableHeader className="sticky top-0 bg-muted/50">
+                <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>CPF</TableHead>
+                <TableHead>Regional</TableHead>
+                <TableHead>{criterionLabel}</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {participants.map(p => (
+                <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.nome_completo}</TableCell>
+                    <TableCell>{p.cpf}</TableCell>
+                    <TableCell>{p.dados?.regional || 'N/A'}</TableCell>
+                    <TableCell>{getCriterionValue(p)}</TableCell>
+                </TableRow>
+                ))}
+            </TableBody>
+            </Table>
+        </div>
+    );
+};
 
 
-export function EnsalamentoResults({ result }: { result: EnsalamentoResult }) {
+const formatLabel = (key: string) => {
+    return key
+        .replace(/_/g, ' ')
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, (str) => str.toUpperCase())
+        .trim();
+}
+
+export function EnsalamentoResults({ result, criterion }: { result: EnsalamentoResult, criterion: string }) {
   const { salas, naoAlocados, stats } = result;
+  const criterionLabel = formatLabel(criterion);
 
   return (
     <div className="space-y-6">
@@ -106,7 +121,7 @@ export function EnsalamentoResults({ result }: { result: EnsalamentoResult }) {
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="p-4 pt-0">
-                                    <ParticipantsTable participants={sala.participants} />
+                                    <ParticipantsTable participants={sala.participants} criterion={criterion} criterionLabel={criterionLabel} />
                                 </AccordionContent>
                             </AccordionItem>
                          </Card>
@@ -129,7 +144,7 @@ export function EnsalamentoResults({ result }: { result: EnsalamentoResult }) {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <ParticipantsTable participants={naoAlocados} />
+                    <ParticipantsTable participants={naoAlocados} criterion={criterion} criterionLabel={criterionLabel} />
                 </CardContent>
            </Card>
         </TabsContent>

@@ -140,8 +140,8 @@ export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
                     isLoading={isLoading}
                 />
             )}
-             {step === 3 && ensalamentoResult && (
-                <EnsalamentoResults result={ensalamentoResult} />
+             {step === 3 && ensalamentoResult && criteriaData && (
+                <EnsalamentoResults result={ensalamentoResult} criterion={criteriaData.criterion} />
             )}
         </div>
     );
