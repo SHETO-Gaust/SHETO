@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Calendar, CheckCircle, XCircle, Monitor, MapPin, Sun, Sunset, Users } from "lucide-react";
+import { Calendar, CheckCircle, XCircle, Monitor, MapPin, Sun, Sunset, Users, AlertCircle } from "lucide-react";
 import type { Formacao, Formador } from "@/lib/types";
 import { format, isFuture, isPast, differenceInDays, isToday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -50,12 +50,28 @@ function getStatusAndNextDate(dates: any): { status: 'Próxima' | 'Em andamento'
     return { status: 'Pendente', nextDate: formattedNextDate, daysUntilNext: daysUntil };
 }
 
-const PendencyItem = ({ name, done }: { name: string, done: boolean }) => (
-    <div className="flex items-center gap-2">
-      {done ? <CheckCircle className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-500" />}
-      <span className="text-sm text-muted-foreground">{name}</span>
-    </div>
-);
+type PendencyStatus = 'done' | 'pending' | 'configured';
+
+const PendencyItem = ({ name, status }: { name: string, status: PendencyStatus }) => {
+    const getStatusIcon = () => {
+        switch (status) {
+            case 'done':
+                return <CheckCircle className="h-4 w-4 text-green-500" />;
+            case 'pending':
+                return <XCircle className="h-4 w-4 text-red-500" />;
+            case 'configured':
+                 return <AlertCircle className="h-4 w-4 text-orange-500" />;
+            default:
+                return <XCircle className="h-4 w-4 text-red-500" />;
+        }
+    }
+    return (
+        <div className="flex items-center gap-2">
+            {getStatusIcon()}
+            <span className="text-sm text-muted-foreground">{name}</span>
+        </div>
+    );
+};
 
 type FormacaoCardProps = {
     formacao: Formacao;
@@ -125,20 +141,27 @@ export function FormacaoCard({ formacao }: FormacaoCardProps) {
         return 'configured';
     }
     
-    const isDone = (status: 'done' | 'pending' | 'configured') => status === 'done';
+    const hasFormadores = (details?.formadores.length ?? 0) > 0;
+    
+    const getAvaliacaoStatus = (): 'done' | 'pending' | 'configured' => {
+        if (!hasFormadores) return 'pending';
+        if (formacao.gadsg_info?.avaliacao?.open) return 'done';
+        if (formacao.gadsg_info?.hasOwnProperty('avaliacao')) return 'configured';
+        return 'pending';
+    };
 
+    const pendencias = [
+        { name: 'Formadores', status: hasFormadores ? 'done' : 'pending' },
+        { name: 'Ensalamento', status: (details?.ensalamentoCount ?? 0) > 0 ? 'done' : 'pending' },
+        { name: 'Inscrição', status: getSubscriptionStatus() },
+        { name: 'Frequência', status: getAttendanceStatus() },
+        { name: 'Avaliação', status: getAvaliacaoStatus() },
+    ];
+    
     const sortedDates = formacao.dates 
       ? [...formacao.dates].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       : [];
     
-    const pendencias = [
-        { name: 'Formadores', done: (details?.formadores.length ?? 0) > 0 },
-        { name: 'Ensalamento', done: (details?.ensalamentoCount ?? 0) > 0 },
-        { name: 'Inscrição', done: isDone(getSubscriptionStatus()) },
-        { name: 'Frequência', done: isDone(getAttendanceStatus()) },
-        { name: 'Avaliação', done: !!formacao.gadsg_info?.avaliacao },
-    ];
-
     return (
         <Card className={cn('shadow-lg rounded-xl flex flex-col', { 'border-2 border-blue-300 bg-blue-50/50': status === 'Em andamento' })}>
             <CardHeader>
@@ -177,7 +200,7 @@ export function FormacaoCard({ formacao }: FormacaoCardProps) {
                     <h4 className="font-semibold text-sm mb-3">Status das Pendências</h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
                         {loading ? <>
-                            <PendencyItem name="Formadores" done={false} /><PendencyItem name="Ensalamento" done={false} /><PendencyItem name="Inscrição" done={false} /><PendencyItem name="Frequência" done={false} /><PendencyItem name="Avaliação" done={false} />
+                            <Skeleton className="h-5 w-24" /><Skeleton className="h-5 w-24" /><Skeleton className="h-5 w-24" /><Skeleton className="h-5 w-24" /><Skeleton className="h-5 w-24" />
                         </> : pendencias.map(p => <PendencyItem key={p.name} {...p}/>)}
                     </div>
                 </div>
