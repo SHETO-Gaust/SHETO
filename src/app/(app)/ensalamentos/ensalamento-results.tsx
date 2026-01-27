@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { EnsalamentoResult, Inscricao } from '@/lib/types';
+import type { EnsalamentoResult, Inscricao, Sala } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -19,7 +19,16 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Users, Users2, UserCheck, UserX } from 'lucide-react';
+import { Users, Users2, UserCheck, UserX, Move, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const StatCard = ({ title, value, icon: Icon }: { title: string; value: number | string; icon: React.ElementType }) => (
   <Card>
@@ -33,7 +42,21 @@ const StatCard = ({ title, value, icon: Icon }: { title: string; value: number |
   </Card>
 );
 
-const ParticipantsTable = ({ participants, criterion, criterionLabel }: { participants: Inscricao[], criterion: string, criterionLabel: string }) => {
+const ParticipantsTable = ({
+  participants,
+  criterion,
+  criterionLabel,
+  selectedIds,
+  onSelectAll,
+  onSelectRow,
+}: {
+  participants: Inscricao[],
+  criterion: string,
+  criterionLabel: string,
+  selectedIds: string[],
+  onSelectAll: (checked: boolean | 'indeterminate') => void,
+  onSelectRow: (id: string, checked: boolean) => void,
+}) => {
     const getCriterionValue = (p: Inscricao) => p.dados?.[criterion] || p[criterion as keyof Inscricao] || 'N/A';
 
     return (
@@ -41,6 +64,12 @@ const ParticipantsTable = ({ participants, criterion, criterionLabel }: { partic
             <Table>
             <TableHeader className="sticky top-0 bg-muted/50">
                 <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={participants.length > 0 && selectedIds.length === participants.length ? true : selectedIds.length > 0 ? 'indeterminate' : false}
+                    onCheckedChange={onSelectAll}
+                  />
+                </TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>CPF</TableHead>
                 <TableHead>Regional</TableHead>
@@ -49,7 +78,13 @@ const ParticipantsTable = ({ participants, criterion, criterionLabel }: { partic
             </TableHeader>
             <TableBody>
                 {participants.map(p => (
-                <TableRow key={p.id}>
+                <TableRow key={p.id} data-state={selectedIds.includes(p.id) ? 'selected' : ''}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.includes(p.id)}
+                        onCheckedChange={(checked) => onSelectRow(p.id, !!checked)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{p.nome_completo}</TableCell>
                     <TableCell>{p.cpf}</TableCell>
                     <TableCell>{p.dados?.regional || 'N/A'}</TableCell>
@@ -62,6 +97,35 @@ const ParticipantsTable = ({ participants, criterion, criterionLabel }: { partic
     );
 };
 
+const BulkMoveBar = ({ salas, onMove, selectedCount }: { salas: Sala[], onMove: (targetRoom: string) => void, selectedCount: number }) => {
+    const [targetRoom, setTargetRoom] = React.useState('');
+
+    return (
+        <Card className="mb-4 bg-muted/50">
+            <CardContent className="p-3 flex items-center justify-between">
+                <p className="text-sm font-semibold">{selectedCount} participante(s) selecionado(s)</p>
+                <div className="flex items-center gap-2">
+                    <Select value={targetRoom} onValueChange={setTargetRoom}>
+                        <SelectTrigger className="w-[250px]">
+                            <SelectValue placeholder="Selecione uma sala de destino..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {salas.map(sala => (
+                                <SelectItem key={sala.name} value={sala.name}>
+                                    {sala.name} ({sala.participants.length} pessoas)
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button onClick={() => onMove(targetRoom)} disabled={!targetRoom}>
+                        <Move className="mr-2 h-4 w-4" />
+                        Mover
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
 
 const formatLabel = (key: string) => {
     return key
@@ -71,9 +135,36 @@ const formatLabel = (key: string) => {
         .trim();
 }
 
-export function EnsalamentoResults({ result, criterion }: { result: EnsalamentoResult, criterion: string }) {
+type EnsalamentoResultsProps = {
+  result: EnsalamentoResult;
+  criterion: string;
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+  onMoveToRoom: (targetRoomName: string) => void;
+  onOpenForceDistribute: () => void;
+};
+
+
+export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute }: EnsalamentoResultsProps) {
   const { salas, naoAlocados, stats } = result;
   const criterionLabel = formatLabel(criterion);
+  
+  const unassignedParticipants = naoAlocados;
+
+  const handleSelectAllUnassigned = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      setSelectedIds(unassignedParticipants.map(p => p.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleSelectRow = (id: string, checked: boolean) => {
+    setSelectedIds(prev =>
+      checked ? [...prev, id] : prev.filter(rowId => rowId !== id)
+    );
+  };
+
 
   return (
     <div className="space-y-6">
@@ -121,7 +212,14 @@ export function EnsalamentoResults({ result, criterion }: { result: EnsalamentoR
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="p-4 pt-0">
-                                    <ParticipantsTable participants={sala.participants} criterion={criterion} criterionLabel={criterionLabel} />
+                                    <ParticipantsTable 
+                                        participants={sala.participants} 
+                                        criterion={criterion} 
+                                        criterionLabel={criterionLabel}
+                                        selectedIds={[]} // Selection is not implemented within rooms yet
+                                        onSelectAll={() => {}}
+                                        onSelectRow={() => {}}
+                                    />
                                 </AccordionContent>
                             </AccordionItem>
                          </Card>
@@ -137,14 +235,30 @@ export function EnsalamentoResults({ result, criterion }: { result: EnsalamentoR
         </TabsContent>
         <TabsContent value="nao-alocados" className="pt-4">
            <Card>
-                <CardHeader>
-                    <CardTitle>Participantes não Alocados</CardTitle>
-                    <CardDescription>
-                        Esta é a lista de participantes que não se encaixaram em nenhuma sala com base nos critérios definidos.
-                    </CardDescription>
+                <CardHeader className="flex items-center justify-between">
+                    <div>
+                        <CardTitle>Participantes não Alocados</CardTitle>
+                        <CardDescription>
+                            Esta é a lista de participantes que não se encaixaram em nenhuma sala.
+                        </CardDescription>
+                    </div>
+                     <Button onClick={onOpenForceDistribute}>
+                        <Users2 className="mr-2 h-4 w-4" />
+                        Distribuir Restantes
+                    </Button>
                 </CardHeader>
                 <CardContent>
-                    <ParticipantsTable participants={naoAlocados} criterion={criterion} criterionLabel={criterionLabel} />
+                    {selectedIds.length > 0 && (
+                        <BulkMoveBar salas={salas} onMove={onMoveToRoom} selectedCount={selectedIds.length} />
+                    )}
+                    <ParticipantsTable 
+                        participants={unassignedParticipants} 
+                        criterion={criterion} 
+                        criterionLabel={criterionLabel}
+                        selectedIds={selectedIds}
+                        onSelectAll={handleSelectAllUnassigned}
+                        onSelectRow={handleSelectRow}
+                    />
                 </CardContent>
            </Card>
         </TabsContent>

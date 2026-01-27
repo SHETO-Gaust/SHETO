@@ -8,10 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { EnsalamentoCriteria, type CriteriaFormValues } from './ensalamento-criteria';
 import type { FormacaoWithCount } from './actions';
 import { EnsalamentoResults, type EnsalamentoResult } from './ensalamento-results';
-
-type EnsalamentoClientProps = {
-    formations: FormacaoWithCount[];
-};
+import { ForceDistributionDialog } from './force-distribution-dialog';
 
 
 export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
@@ -23,6 +20,9 @@ export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
     const [participants, setParticipants] = useState<Inscricao[]>([]);
     const [criteriaData, setCriteriaData] = useState<CriteriaFormValues | null>(null);
     const [ensalamentoResult, setEnsalamentoResult] = useState<EnsalamentoResult | null>(null);
+
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [isForceDistributeModalOpen, setIsForceDistributeModalOpen] = useState(false);
 
     const processAndContinue = async (data: SetupData, parsedParticipants?: Inscricao[]) => {
         setIsLoading(true);
@@ -49,6 +49,89 @@ export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
             setIsLoading(false);
         }
     }
+
+    const handleMoveSelectedToRoom = (targetRoomName: string) => {
+        if (!ensalamentoResult) return;
+        
+        setEnsalamentoResult(prevResult => {
+            if (!prevResult) return null;
+
+            const movingParticipants = prevResult.naoAlocados.filter(p => selectedIds.includes(p.id));
+            const remainingUnassigned = prevResult.naoAlocados.filter(p => !selectedIds.includes(p.id));
+            
+            const newSalas = prevResult.salas.map(sala => {
+                if (sala.name === targetRoomName) {
+                    return { ...sala, participants: [...sala.participants, ...movingParticipants] };
+                }
+                return sala;
+            });
+            
+            const totalAlocados = newSalas.reduce((sum, room) => sum + room.participants.length, 0);
+
+            return {
+                salas: newSalas,
+                naoAlocados: remainingUnassigned,
+                stats: {
+                    ...prevResult.stats,
+                    totalAlocados,
+                    totalNaoAlocados: remainingUnassigned.length,
+                }
+            };
+        });
+
+        setSelectedIds([]);
+        toast({ title: 'Participantes Movidos', description: `${selectedIds.length} participante(s) foram movidos para a sala ${targetRoomName}.`})
+    };
+    
+    const handleForceDistribute = (strategy: 'new_rooms' | 'fill_existing') => {
+        if (!ensalamentoResult || !setupData) return;
+        const { roomCount, participantsPerRoom } = setupData;
+
+        setEnsalamentoResult(prevResult => {
+            if (!prevResult) return null;
+
+            let currentSalas = [...prevResult.salas];
+            let currentNaoAlocados = [...prevResult.naoAlocados];
+
+            if (strategy === 'fill_existing') {
+                if(currentSalas.length === 0) {
+                    toast({ title: 'Nenhuma sala existente', description: 'Não é possível distribuir em salas que não existem.', variant: 'destructive' });
+                    return prevResult;
+                }
+                currentNaoAlocados.forEach((participant, index) => {
+                    const targetSalaIndex = index % currentSalas.length;
+                    currentSalas[targetSalaIndex].participants.push(participant);
+                });
+                currentNaoAlocados = [];
+            } else if (strategy === 'new_rooms') {
+                let roomIndex = currentSalas.length + 1;
+                while(currentNaoAlocados.length > 0 && currentSalas.length < roomCount) {
+                    const roomParticipants = currentNaoAlocados.splice(0, participantsPerRoom);
+                    currentSalas.push({
+                        name: `Sala ${roomIndex++}`,
+                        participants: roomParticipants,
+                        criterionValue: 'Mista (Forçada)',
+                    });
+                }
+            }
+            
+            const totalAlocados = currentSalas.reduce((sum, room) => sum + room.participants.length, 0);
+
+            return {
+                salas: currentSalas,
+                naoAlocados: currentNaoAlocados,
+                stats: {
+                    ...prevResult.stats,
+                    totalSalas: roomCount,
+                    totalAlocados,
+                    totalNaoAlocados: currentNaoAlocados.length,
+                }
+            }
+        });
+        
+        setIsForceDistributeModalOpen(false);
+        toast({ title: 'Distribuição Forçada Concluída!' });
+    };
 
     const generateEnsalamento = (data: CriteriaFormValues) => {
         if (!setupData || participants.length === 0) {
@@ -140,8 +223,24 @@ export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
                     isLoading={isLoading}
                 />
             )}
-             {step === 3 && ensalamentoResult && criteriaData && (
-                <EnsalamentoResults result={ensalamentoResult} criterion={criteriaData.criterion} />
+             {step === 3 && ensalamentoResult && criteriaData && setupData && (
+                <>
+                    <EnsalamentoResults 
+                        result={ensalamentoResult} 
+                        criterion={criteriaData.criterion} 
+                        selectedIds={selectedIds}
+                        setSelectedIds={setSelectedIds}
+                        onMoveToRoom={handleMoveSelectedToRoom}
+                        onOpenForceDistribute={() => setIsForceDistributeModalOpen(true)}
+                    />
+                     <ForceDistributionDialog
+                        isOpen={isForceDistributeModalOpen}
+                        setIsOpen={setIsForceDistributeModalOpen}
+                        onConfirm={handleForceDistribute}
+                        existingRoomCount={ensalamentoResult.salas.length}
+                        totalRoomCount={setupData.roomCount}
+                    />
+                </>
             )}
         </div>
     );
