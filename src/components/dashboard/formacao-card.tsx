@@ -62,7 +62,7 @@ type FormacaoCardProps = {
 };
 
 export function FormacaoCard({ formacao }: FormacaoCardProps) {
-    const [details, setDetails] = useState<{ formadores: Formador[], inscritosCount: number } | null>(null);
+    const [details, setDetails] = useState<{ formadores: Formador[], inscritosCount: number, ensalamentoCount: number } | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -81,7 +81,12 @@ export function FormacaoCard({ formacao }: FormacaoCardProps) {
                 .select('id', { count: 'exact', head: true })
                 .eq('formacao_id', formacao.id);
 
-            const [formadoresResult, inscritosResult] = await Promise.all([formadoresPromise, inscritosPromise]);
+            const ensalamentoPromise = supabase
+                .from('ensalamentos')
+                .select('id', { count: 'exact', head: true })
+                .eq('formacao_id', formacao.id);
+
+            const [formadoresResult, inscritosResult, ensalamentoResult] = await Promise.all([formadoresPromise, inscritosPromise, ensalamentoPromise]);
 
             if (formadoresResult.error) {
                 console.error(`Error fetching formadores for ${formacao.id}:`, formadoresResult.error);
@@ -89,10 +94,14 @@ export function FormacaoCard({ formacao }: FormacaoCardProps) {
             if (inscritosResult.error) {
                 console.error(`Error fetching inscritos count for ${formacao.id}:`, inscritosResult.error);
             }
+            if (ensalamentoResult.error) {
+                console.error(`Error fetching ensalamento count for ${formacao.id}:`, ensalamentoResult.error);
+            }
 
             setDetails({
                 formadores: formadoresResult.data || [],
                 inscritosCount: inscritosResult.count ?? 0,
+                ensalamentoCount: ensalamentoResult.count ?? 0,
             });
 
             setLoading(false);
@@ -124,7 +133,7 @@ export function FormacaoCard({ formacao }: FormacaoCardProps) {
     
     const pendencias = [
         { name: 'Formadores', done: (details?.formadores.length ?? 0) > 0 },
-        { name: 'Ensalamento', done: !!formacao.gfcpe_info?.ensalamento },
+        { name: 'Ensalamento', done: (details?.ensalamentoCount ?? 0) > 0 },
         { name: 'Inscrição', done: isDone(getSubscriptionStatus()) },
         { name: 'Frequência', done: isDone(getAttendanceStatus()) },
         { name: 'Avaliação', done: !!formacao.gadsg_info?.avaliacao },
