@@ -1,5 +1,6 @@
 
 
+
 export type SetupData = {
     formationId: string;
     roomCount: number;
@@ -74,6 +75,7 @@ export type Formacao = {
   attendance_list_info?: AttendanceListInfo;
   consolidation_info?: any; // jsonb
   subscription_form_config?: any; // jsonb
+  certificate_config?: any; // jsonb
 };
 
 export type InfraestruturaAvaliacao = {
