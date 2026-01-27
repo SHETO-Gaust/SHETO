@@ -18,7 +18,6 @@ type ForceDistributionDialogProps = {
   setIsOpen: (open: boolean) => void;
   onConfirm: (strategy: 'new_rooms' | 'fill_existing') => void;
   existingRoomCount: number;
-  totalRoomCount: number;
 };
 
 export function ForceDistributionDialog({
@@ -26,10 +25,8 @@ export function ForceDistributionDialog({
   setIsOpen,
   onConfirm,
   existingRoomCount,
-  totalRoomCount
 }: ForceDistributionDialogProps) {
   const [strategy, setStrategy] = useState<'new_rooms' | 'fill_existing'>('fill_existing');
-  const canCreateNewRooms = existingRoomCount < totalRoomCount;
 
   const handleConfirm = () => {
     onConfirm(strategy);
@@ -53,18 +50,17 @@ export function ForceDistributionDialog({
               <span className="font-semibold">Distribuir nas salas existentes</span>
             </div>
             <p className="pl-7 text-sm text-muted-foreground mt-1">
-              Preenche as vagas restantes e/ou excede o limite das salas já criadas, alocando todos os participantes.
+              Tenta preencher salas com o mesmo critério e depois distribui o restante para preencher as vagas e/ou exceder o limite.
             </p>
           </Label>
-          <Label className={`flex flex-col p-4 border rounded-md ${!canCreateNewRooms ? 'cursor-not-allowed opacity-50' : 'cursor-pointer has-[:checked]:border-primary'}`}>
+          <Label className={`flex flex-col p-4 border rounded-md cursor-pointer has-[:checked]:border-primary`}>
              <div className="flex items-center gap-3">
-              <RadioGroupItem value="new_rooms" id="new_rooms" disabled={!canCreateNewRooms} />
+              <RadioGroupItem value="new_rooms" id="new_rooms" />
               <span className="font-semibold">Criar novas salas</span>
             </div>
             <p className="pl-7 text-sm text-muted-foreground mt-1">
-              Cria novas salas para alocar os participantes, respeitando o limite por sala.
+              Cria novas salas para alocar os participantes, respeitando o limite por sala. Pode exceder o total de salas definido inicialmente.
             </p>
-            {!canCreateNewRooms && <p className="pl-7 text-xs text-destructive mt-1">(O número máximo de salas definido já foi atingido.)</p>}
           </Label>
         </RadioGroup>
 

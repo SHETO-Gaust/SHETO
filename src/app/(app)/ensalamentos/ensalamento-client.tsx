@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Inscricao } from '@/lib/types';
+import type { Inscricao, Sala } from '@/lib/types';
 import { EnsalamentoSetup, type SetupData } from './ensalamento-setup';
 import * as actions from './actions';
 import { useToast } from '@/hooks/use-toast';
@@ -88,8 +88,8 @@ export function EnsalamentoClient({ formations }: { formations: FormacaoWithCoun
     };
     
     const handleForceDistribute = (strategy: 'new_rooms' | 'fill_existing') => {
-        if (!ensalamentoResult || !setupData) return;
-        const { roomCount, participantsPerRoom } = setupData;
+        if (!ensalamentoResult || !setupData || !criteriaData) return;
+        const { participantsPerRoom } = setupData;
 
         setEnsalamentoResult(prevResult => {
             if (!prevResult) return null;
@@ -99,17 +99,54 @@ export function EnsalamentoClient({ formations }: { formations: FormacaoWithCoun
 
             if (strategy === 'fill_existing') {
                 if(currentSalas.length === 0) {
-                    toast({ title: 'Nenhuma sala existente', description: 'Não é possível distribuir em salas que não existem.', variant: 'destructive' });
+                    toast({ title: 'Nenhuma sala existente', description: 'Não é possível distribuir em salas existentes.', variant: 'destructive' });
                     return prevResult;
                 }
-                currentNaoAlocados.forEach((participant, index) => {
-                    const targetSalaIndex = index % currentSalas.length;
-                    currentSalas[targetSalaIndex].participants.push(participant);
+
+                const getCriterionValue = (p: Inscricao) => p.dados?.[criteriaData.criterion] || p[criteriaData.criterion as keyof Inscricao] || 'Sem critério';
+                
+                const salasByCriterion = new Map<string, Sala[]>();
+                currentSalas.forEach(sala => {
+                    if (sala.criterionValue !== 'Mista' && sala.criterionValue !== 'Mista (Forçada)') {
+                        if (!salasByCriterion.has(sala.criterionValue)) {
+                            salasByCriterion.set(sala.criterionValue, []);
+                        }
+                        salasByCriterion.get(sala.criterionValue)!.push(sala);
+                    }
                 });
+
+                const remainingForDistribution: Inscricao[] = [];
+                
+                currentNaoAlocados.forEach(participant => {
+                    const pCriterion = String(getCriterionValue(participant));
+                    const matchingSalas = salasByCriterion.get(pCriterion);
+
+                    if (matchingSalas && matchingSalas.length > 0) {
+                        matchingSalas.sort((a, b) => a.participants.length - b.participants.length);
+                        matchingSalas[0].participants.push(participant);
+                    } else {
+                        remainingForDistribution.push(participant);
+                    }
+                });
+
+                if (remainingForDistribution.length > 0) {
+                    remainingForDistribution.forEach(participant => {
+                        let targetSalaIndex = 0;
+                        let minParticipants = currentSalas[0]?.participants.length ?? Infinity;
+                        for (let i = 1; i < currentSalas.length; i++) {
+                            if (currentSalas[i].participants.length < minParticipants) {
+                                minParticipants = currentSalas[i].participants.length;
+                                targetSalaIndex = i;
+                            }
+                        }
+                        currentSalas[targetSalaIndex].participants.push(participant);
+                    });
+                }
                 currentNaoAlocados = [];
+                
             } else if (strategy === 'new_rooms') {
                 let roomIndex = currentSalas.length + 1;
-                while(currentNaoAlocados.length > 0 && currentSalas.length < roomCount) {
+                while(currentNaoAlocados.length > 0) {
                     const roomParticipants = currentNaoAlocados.splice(0, participantsPerRoom);
                     currentSalas.push({
                         name: `Sala ${roomIndex++}`,
@@ -126,7 +163,7 @@ export function EnsalamentoClient({ formations }: { formations: FormacaoWithCoun
                 naoAlocados: currentNaoAlocados,
                 stats: {
                     ...prevResult.stats,
-                    totalSalas: roomCount,
+                    totalSalas: currentSalas.length,
                     totalAlocados,
                     totalNaoAlocados: currentNaoAlocados.length,
                 }
@@ -244,7 +281,6 @@ export function EnsalamentoClient({ formations }: { formations: FormacaoWithCoun
                         setIsOpen={setIsForceDistributeModalOpen}
                         onConfirm={handleForceDistribute}
                         existingRoomCount={ensalamentoResult.salas.length}
-                        totalRoomCount={setupData.roomCount}
                     />
                 </>
             )}
