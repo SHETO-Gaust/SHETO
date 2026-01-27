@@ -20,7 +20,7 @@ export default function PublicLayout({
       </header>
       <main className="flex-grow container mx-auto p-4 sm:p-6">{children}</main>
       <footer className="bg-white border-t p-4 text-center text-xs text-muted-foreground">
-        Desenvolvido pela Gerência de Apoio ao Usuário e Suporte Técnico da Seduc Tocantins - Todos os direitos reservados © 2026
+      Desenvolvido pela Diretoria de Tecnologia e Inovação Educacional da Seduc Tocantins - Todos os direitos reservados © 2026
       </footer>
     </div>
   );

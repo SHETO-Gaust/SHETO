@@ -51,11 +51,11 @@ export function AuthForm() {
             priority
           />
         </div>
-        <CardTitle className="sr-only text-2xl font-bold font-headline">
-          GForms
+        <CardTitle className="text-2xl font-bold font-headline">
+          GForms 2.0
         </CardTitle>
         <CardDescription>
-          Gerenciamento de Formações
+          Sistema de Gerenciamento de Formações
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -71,7 +71,7 @@ export function AuthForm() {
               id="email-signin"
               name="email"
               type="email"
-              placeholder="seu@email.com"
+              placeholder="seu-email@seduc.to.gov.br"
               required
             />
           </div>

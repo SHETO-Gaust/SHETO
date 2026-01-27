@@ -103,7 +103,7 @@ export default async function AppLayout({
             {hasPermission ? children : <AccessDenied />}
         </div>
         <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">
-          Desenvolvido pela Gerência de Apoio ao Usuário e Suporte Técnico da Seduc Tocantins - Todos os direitos reservados © 2026
+          Desenvolvido pela Diretoria de Tecnologia e Inovação Educacional da Seduc Tocantins - Todos os direitos reservados © 2026
         </footer>
       </SidebarInset>
     </SidebarProvider>

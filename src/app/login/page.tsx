@@ -22,7 +22,7 @@ export default async function LoginPage() {
         </div>
       </main>
       <footer className="border-t p-4 text-center text-xs text-muted-foreground">
-        Desenvolvido pela Gerência de Apoio ao Usuário e Suporte Técnico da Seduc Tocantins - Todos os direitos reservados © 2026
+      Desenvolvido pela Diretoria de Tecnologia e Inovação Educacional da Seduc Tocantins - Todos os direitos reservados © 2026
       </footer>
     </div>
   );
