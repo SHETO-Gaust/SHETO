@@ -16,12 +16,17 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2 } from 'lucide-react';
+import { Loader2, Info } from 'lucide-react';
 import { getRegionais, getEscolasPorRegional } from '@/lib/escolas';
 import type { Formacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { validateCPF } from '@/lib/utils';
+import { fetchErgonDataByCpf } from '@/app/(public)/inscricoes/actions';
+import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
+
 
 const generateSchema = (formConfig: any) => {
     let schema: any = {
@@ -68,8 +73,9 @@ const generateSchema = (formConfig: any) => {
 
 
 export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { formacao: Formacao, cpf: string, onSubmit: (data: any) => void, loading: boolean }) {
+  const { toast } = useToast();
   
-  const formSchema = generateSchema(formacao.subscription_form_config);
+  const formSchema = useMemo(() => generateSchema(formacao.subscription_form_config), [formacao.subscription_form_config]);
   type InscricaoFormValues = z.infer<typeof formSchema>;
 
   const initialValues = {
@@ -96,6 +102,10 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
     mode: 'onChange',
   });
   
+  const [isCpfLoading, setIsCpfLoading] = useState(false);
+  const [isCpfValidated, setIsCpfValidated] = useState(false);
+  const [ergonData, setErgonData] = useState<any>(null);
+
   const [regionais, setRegionais] = useState<string[]>([]);
   const [escolas, setEscolas] = useState<string[]>([]);
   const [loadingRegionais, setLoadingRegionais] = useState(true);
@@ -103,6 +113,94 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
 
   const selectedRegional = form.watch('regional');
   const selectedLotacao = form.watch('lotacao');
+
+   useEffect(() => {
+    const fetchData = async () => {
+      setIsCpfLoading(true);
+      const result = await fetchErgonDataByCpf(cpf);
+      setIsCpfLoading(false);
+
+      if (result.data) {
+        setErgonData(result.data);
+        setIsCpfValidated(true);
+        toast({
+          title: "Dados encontrados!",
+          description: "Seu nome e dados foram preenchidos. Por favor, confirme ou complete os demais campos."
+        });
+      } else {
+         setErgonData(null);
+         setIsCpfValidated(true); // Allow manual fill
+         if (result.error) {
+            toast({
+              title: "Erro na consulta de CPF",
+              description: result.error,
+              variant: 'destructive',
+            });
+         } else {
+             toast({
+                title: "CPF não encontrado no SisErgon",
+                description: "Por favor, preencha o formulário manualmente.",
+                variant: 'default',
+            });
+         }
+      }
+    };
+    fetchData();
+  }, [cpf, toast]);
+  
+  useEffect(() => {
+    if (ergonData && regionais.length > 0) {
+      form.setValue('nome_completo', ergonData.nome || '', {
+        shouldValidate: true,
+      });
+      form.setValue('email', ergonData.email || '', { shouldValidate: true });
+
+      const vinculo = ergonData.vinculos?.[0];
+      if (vinculo) {
+        const apiRegional = vinculo.regional?.trim().toLowerCase();
+        const setorNome = vinculo.setorNome?.trim().toLowerCase();
+
+        let regionalToSet: string | undefined = undefined;
+
+        if (apiRegional === 'palmas_sede') {
+          regionalToSet = regionais.find(
+            (r) => r.toLowerCase() === 'palmas'
+          );
+          form.setValue('lotacao', 'sede', { shouldValidate: true });
+          form.setValue('lotacao_especifica', vinculo.setorNome, {
+            shouldValidate: true,
+          });
+        } else if (setorNome.includes('superintendência regional')) {
+          form.setValue('lotacao', 'sre', { shouldValidate: true });
+          form.setValue('lotacao_especifica', vinculo.setorNome, {
+            shouldValidate: true,
+          });
+
+          const match = setorNome.match(/de\s(.*)$/i);
+          if (match && match[1]) {
+            const extractedRegional = match[1].trim().toLowerCase();
+            regionalToSet = regionais.find(
+              (r) => r.toLowerCase() === extractedRegional
+            );
+          }
+          if (!regionalToSet) {
+            regionalToSet = regionais.find(
+              (r) => r.toLowerCase() === apiRegional
+            );
+          }
+        } else {
+          form.setValue('lotacao', 'ue', { shouldValidate: true });
+           regionalToSet = regionais.find(
+            (r) => r.toLowerCase() === apiRegional
+          );
+        }
+
+        if (regionalToSet) {
+          form.setValue('regional', regionalToSet, { shouldValidate: true });
+        }
+      }
+    }
+  }, [ergonData, form, regionais]);
 
   useEffect(() => {
     const fetchRegionais = async () => {
@@ -118,16 +216,28 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
     if (selectedRegional) {
         const fetchEscolas = async () => {
             setLoadingEscolas(true);
-            form.setValue('escola', undefined, { shouldValidate: true });
+            if (!ergonData || form.getValues('lotacao') !== 'ue') {
+                form.setValue('escola', undefined, { shouldValidate: true });
+            }
             const data = await getEscolasPorRegional(selectedRegional);
             setEscolas(data);
             setLoadingEscolas(false);
+            
+            if (ergonData && ergonData.vinculos?.[0] && form.getValues('lotacao') === 'ue') {
+                const setorNomeFromApi = ergonData.vinculos[0].setorNome?.trim().toLowerCase();
+                if (setorNomeFromApi) {
+                    const matchingSchool = data.find(schoolName => schoolName.trim().toLowerCase() === setorNomeFromApi);
+                    if (matchingSchool) {
+                        form.setValue('escola', matchingSchool, { shouldValidate: true });
+                    }
+                }
+            }
         };
         fetchEscolas();
     } else {
         setEscolas([]);
     }
-  }, [selectedRegional, form]);
+  }, [selectedRegional, form, ergonData]);
 
 
   const handleFormSubmit = (data: InscricaoFormValues) => {
@@ -138,6 +248,8 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
 
   const formConfig = formacao.subscription_form_config;
   if (!formConfig) return <p>Erro: Configuração do formulário não encontrada.</p>;
+  
+  const formFieldsDisabled = !isCpfValidated;
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
@@ -148,254 +260,275 @@ export function FrequenciaInscricaoForm({ formacao, cpf, onSubmit, loading }: { 
             </CardDescription>
         </CardHeader>
         <CardContent>
+            {isCpfLoading && (
+                 <div className="flex items-center justify-center p-8 space-x-2">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <p>Buscando seus dados no SisErgon...</p>
+                 </div>
+            )}
+
             <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-8">
-                {formConfig.fields.map((field: any) => {
-                    if (field.hidden) return null;
-                    switch (field.id) {
-                        case 'nomeCompleto':
-                            return (
-                                <FormField
-                                    key={field.id}
-                                    control={form.control}
-                                    name="nome_completo"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel>Nome Completo</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Seu nome completo" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            );
-                        case 'cpf':
-                             return (
-                                <FormField
-                                    key={field.id}
-                                    control={form.control}
-                                    name="cpf"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel>CPF</FormLabel>
-                                        <FormControl>
-                                            <Input {...field} readOnly />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            );
-                        case 'email':
-                            return (
-                                <FormField
-                                    key={field.id}
-                                    control={form.control}
-                                    name="email"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel>Email</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="seu.email@exemplo.com" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            );
-                        case 'regional':
-                            return (
-                                <FormField
-                                    key={field.id}
-                                    control={form.control}
-                                    name="regional"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                        <FormLabel>Regional</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value} disabled={loadingRegionais}>
+            <form onSubmit={form.handleSubmit(handleFormSubmit)} className={cn("space-y-8", isCpfLoading && 'hidden')}>
+
+                {ergonData && (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>Dados Localizados</AlertTitle>
+                    <AlertDescription>
+                      Seus dados foram encontrados no sistema. Caso haja alguma divergência, entre em contato pelo e-mail <a href="mailto:gforms@seduc.to.gov.br" className="font-semibold underline">gforms@seduc.to.gov.br</a> ou pelo telefone (63) 3027-3657 (ligação e WhatsApp).
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                 <fieldset disabled={formFieldsDisabled} className="space-y-8 disabled:opacity-50">
+                    {formConfig.fields.map((field: any) => {
+                        if (field.hidden) return null;
+                        switch (field.id) {
+                            case 'nomeCompleto':
+                                return (
+                                    <FormField
+                                        key={field.id}
+                                        control={form.control}
+                                        name="nome_completo"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel>Nome Completo</FormLabel>
                                             <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder={loadingRegionais ? "Carregando..." : "Selecione sua regional"} />
-                                            </SelectTrigger>
+                                                <Input placeholder="Seu nome completo" {...field} readOnly={!!ergonData} className={cn(ergonData && 'bg-muted/50')} />
                                             </FormControl>
-                                            <SelectContent>
-                                                {regionais.map(regional => (
-                                                    <SelectItem key={regional} value={regional}>{regional}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                        </FormItem>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                );
+                            case 'cpf':
+                                return (
+                                    <FormField
+                                        key={field.id}
+                                        control={form.control}
+                                        name="cpf"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel>CPF</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} readOnly className="bg-muted/50" />
+                                            </FormControl>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                );
+                            case 'email':
+                                return (
+                                    <FormField
+                                        key={field.id}
+                                        control={form.control}
+                                        name="email"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel>Email</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="seu.email@exemplo.com" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                );
+                            case 'regional':
+                                return (
+                                    <FormField
+                                        key={field.id}
+                                        control={form.control}
+                                        name="regional"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                            <FormLabel>Regional</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={loadingRegionais || !!ergonData}>
+                                                <FormControl>
+                                                <SelectTrigger className={cn(ergonData && 'bg-muted/50')}>
+                                                    <SelectValue placeholder={loadingRegionais ? "Carregando..." : "Selecione sua regional"} />
+                                                </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {regionais.map(regional => (
+                                                        <SelectItem key={regional} value={regional}>{regional}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                );
+                            case 'lotacao':
+                                return (
+                                    <FormField
+                                        key={field.id}
+                                        control={form.control}
+                                        name="lotacao"
+                                        render={({ field }) => (
+                                            <FormItem className="space-y-3">
+                                            <FormLabel>Lotação</FormLabel>
+                                            <FormControl>
+                                                <RadioGroup
+                                                onValueChange={field.onChange}
+                                                value={field.value}
+                                                className="flex flex-col space-y-1"
+                                                disabled={!!ergonData}
+                                                >
+                                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                                    <FormControl>
+                                                    <RadioGroupItem value="sre" />
+                                                    </FormControl>
+                                                    <FormLabel className={cn("font-normal", ergonData && "text-muted-foreground")}>
+                                                    Superintendência Regional
+                                                    </FormLabel>
+                                                </FormItem>
+                                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                                    <FormControl>
+                                                    <RadioGroupItem value="sede" />
+                                                    </FormControl>
+                                                    <FormLabel className={cn("font-normal", ergonData && "text-muted-foreground")}>
+                                                    SEDUC Sede
+                                                    </FormLabel>
+                                                </FormItem>
+                                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                                    <FormControl>
+                                                    <RadioGroupItem value="ue" />
+                                                    </FormControl>
+                                                    <FormLabel className={cn("font-normal", ergonData && "text-muted-foreground")}>
+                                                    Unidade Escolar
+                                                    </FormLabel>
+                                                </FormItem>
+                                                </RadioGroup>
+                                            </FormControl>
+                                            <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                );
+                            default:
+                                return null;
+                        }
+                    })}
+
+                    {(selectedLotacao === 'sre' || selectedLotacao === 'sede') && (
+                        <FormField
+                            control={form.control}
+                            name="lotacao_especifica"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Especifique sua lotação</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="Ex: Supervisão, setor, etc." {...field} readOnly={!!ergonData} value={field.value ?? ''} className={cn(ergonData && 'bg-muted/50')} />
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    )}
+                    {selectedLotacao === 'ue' && (
+                        <FormField
+                            control={form.control}
+                            name="escola"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel>Unidade Escolar</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value} disabled={!selectedRegional || loadingEscolas || !!ergonData}>
+                                    <FormControl>
+                                    <SelectTrigger className={cn(ergonData && 'bg-muted/50')}>
+                                        <SelectValue placeholder={
+                                            loadingEscolas ? "Carregando escolas..." :
+                                            !selectedRegional ? "Selecione uma regional primeiro" : "Selecione sua escola"
+                                        } />
+                                    </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {escolas.map(escola => (
+                                            <SelectItem key={escola} value={escola}>{escola}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    )}
+
+                    {/* Custom Fields */}
+                    {formConfig.customFields?.map((field: any) => (
+                        <FormField
+                            key={field.id}
+                            control={form.control}
+                            name={field.id}
+                            render={({ field: formField }) => (
+                                <FormItem>
+                                    <FormLabel>{field.label}</FormLabel>
+                                    {field.type === 'text' && (
+                                        <FormControl>
+                                            <Input {...formField} value={formField.value || ''} />
+                                        </FormControl>
                                     )}
-                                />
-                            );
-                        case 'lotacao':
-                            return (
-                                <FormField
-                                    key={field.id}
-                                    control={form.control}
-                                    name="lotacao"
-                                    render={({ field }) => (
-                                        <FormItem className="space-y-3">
-                                        <FormLabel>Lotação</FormLabel>
+                                    {(field.type === 'multiple-choice') && (
                                         <FormControl>
                                             <RadioGroup
-                                            onValueChange={field.onChange}
-                                            value={field.value}
-                                            className="flex flex-col space-y-1"
+                                                onValueChange={formField.onChange}
+                                                value={formField.value}
+                                                className="flex flex-col space-y-1"
                                             >
-                                            <FormItem className="flex items-center space-x-3 space-y-0">
-                                                <FormControl>
-                                                <RadioGroupItem value="sre" />
-                                                </FormControl>
-                                                <FormLabel className="font-normal">
-                                                Superintendência Regional
-                                                </FormLabel>
-                                            </FormItem>
-                                            <FormItem className="flex items-center space-x-3 space-y-0">
-                                                <FormControl>
-                                                <RadioGroupItem value="sede" />
-                                                </FormControl>
-                                                <FormLabel className="font-normal">
-                                                SEDUC Sede
-                                                </FormLabel>
-                                            </FormItem>
-                                            <FormItem className="flex items-center space-x-3 space-y-0">
-                                                <FormControl>
-                                                <RadioGroupItem value="ue" />
-                                                </FormControl>
-                                                <FormLabel className="font-normal">
-                                                Unidade Escolar
-                                                </FormLabel>
-                                            </FormItem>
+                                                {field.options.map((option: string) => (
+                                                    <FormItem key={option} className="flex items-center space-x-3 space-y-0">
+                                                        <FormControl><RadioGroupItem value={option} /></FormControl>
+                                                        <FormLabel className="font-normal">{option}</FormLabel>
+                                                    </FormItem>
+                                                ))}
                                             </RadioGroup>
                                         </FormControl>
-                                        <FormMessage />
-                                        </FormItem>
                                     )}
-                                />
-                            );
-                        default:
-                            return null;
-                    }
-                })}
+                                    {field.type === 'checkboxes' && (
+                                        <div className="space-y-2">
+                                        {field.options.map((option: string) => (
+                                            <Controller
+                                                key={option}
+                                                control={form.control}
+                                                name={field.id}
+                                                render={({ field: controllerField }) => {
+                                                    const fieldValue = controllerField.value || [];
+                                                    return (
+                                                        <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                            <FormControl>
+                                                                <Checkbox
+                                                                    checked={fieldValue.includes(option)}
+                                                                    onCheckedChange={(checked) => {
+                                                                        return checked
+                                                                            ? controllerField.onChange([...fieldValue, option])
+                                                                            : controllerField.onChange(
+                                                                                fieldValue.filter(
+                                                                                    (value: string) => value !== option
+                                                                                )
+                                                                            );
+                                                                    }}
+                                                                />
+                                                            </FormControl>
+                                                            <FormLabel className="font-normal">
+                                                                {option}
+                                                            </FormLabel>
+                                                        </FormItem>
+                                                    )
+                                                }}
+                                            />
+                                        ))}
+                                        </div>
+                                    )}
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    ))}
+                </fieldset>
 
-                {(selectedLotacao === 'sre' || selectedLotacao === 'sede') && (
-                     <FormField
-                        control={form.control}
-                        name="lotacao_especifica"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Especifique sua lotação</FormLabel>
-                            <FormControl>
-                                <Input placeholder="Ex: Supervisão, setor, etc." {...field} value={field.value ?? ''} />
-                            </FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                )}
-                {selectedLotacao === 'ue' && (
-                     <FormField
-                        control={form.control}
-                        name="escola"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Unidade Escolar</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedRegional || loadingEscolas}>
-                                <FormControl>
-                                <SelectTrigger>
-                                    <SelectValue placeholder={
-                                        loadingEscolas ? "Carregando escolas..." :
-                                        !selectedRegional ? "Selecione uma regional primeiro" : "Selecione sua escola"
-                                    } />
-                                </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                    {escolas.map(escola => (
-                                        <SelectItem key={escola} value={escola}>{escola}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                )}
-
-                {/* Custom Fields */}
-                {formConfig.customFields?.map((field: any) => (
-                    <FormField
-                        key={field.id}
-                        control={form.control}
-                        name={field.id}
-                        render={({ field: formField }) => (
-                            <FormItem>
-                                <FormLabel>{field.label}</FormLabel>
-                                {field.type === 'text' && (
-                                     <FormControl>
-                                        <Input {...formField} value={formField.value || ''} />
-                                     </FormControl>
-                                )}
-                                {(field.type === 'multiple-choice') && (
-                                    <FormControl>
-                                        <RadioGroup
-                                            onValueChange={formField.onChange}
-                                            value={formField.value}
-                                            className="flex flex-col space-y-1"
-                                        >
-                                            {field.options.map((option: string) => (
-                                                <FormItem key={option} className="flex items-center space-x-3 space-y-0">
-                                                    <FormControl><RadioGroupItem value={option} /></FormControl>
-                                                    <FormLabel className="font-normal">{option}</FormLabel>
-                                                </FormItem>
-                                            ))}
-                                        </RadioGroup>
-                                    </FormControl>
-                                )}
-                                {field.type === 'checkboxes' && (
-                                    <div className="space-y-2">
-                                    {field.options.map((option: string) => (
-                                        <Controller
-                                            key={option}
-                                            control={form.control}
-                                            name={field.id}
-                                            render={({ field: controllerField }) => {
-                                                const fieldValue = controllerField.value || [];
-                                                return (
-                                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                                                        <FormControl>
-                                                            <Checkbox
-                                                                checked={fieldValue.includes(option)}
-                                                                onCheckedChange={(checked) => {
-                                                                    return checked
-                                                                        ? controllerField.onChange([...fieldValue, option])
-                                                                        : controllerField.onChange(
-                                                                            fieldValue.filter(
-                                                                                (value: string) => value !== option
-                                                                            )
-                                                                        );
-                                                                }}
-                                                            />
-                                                        </FormControl>
-                                                        <FormLabel className="font-normal">
-                                                            {option}
-                                                        </FormLabel>
-                                                    </FormItem>
-                                                )
-                                            }}
-                                         />
-                                    ))}
-                                    </div>
-                                )}
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                ))}
-
-                <Button type="submit" disabled={loading} className="w-full">
+                <Button type="submit" disabled={loading || formFieldsDisabled} className="w-full">
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Registrar Frequência
                 </Button>
