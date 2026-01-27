@@ -39,6 +39,7 @@ type EnsalamentoCriteriaProps = {
   participants: Inscricao[];
   onGenerate: (data: CriteriaFormValues) => void;
   isLoading: boolean;
+  onBack: () => void;
 };
 
 const formatLabel = (key: string) => {
@@ -49,7 +50,7 @@ const formatLabel = (key: string) => {
         .trim();
 }
 
-export function EnsalamentoCriteria({ participants, onGenerate, isLoading }: EnsalamentoCriteriaProps) {
+export function EnsalamentoCriteria({ participants, onGenerate, isLoading, onBack }: EnsalamentoCriteriaProps) {
   const [criteriaOptions, setCriteriaOptions] = React.useState<string[]>([]);
   
   React.useEffect(() => {
@@ -156,7 +157,10 @@ export function EnsalamentoCriteria({ participants, onGenerate, isLoading }: Ens
               )}
             />
 
-            <div className="flex justify-end">
+            <div className="flex justify-between items-center">
+              <Button type="button" variant="outline" onClick={onBack} disabled={isLoading}>
+                Voltar
+              </Button>
               <Button type="submit" disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Gerar Ensalamento

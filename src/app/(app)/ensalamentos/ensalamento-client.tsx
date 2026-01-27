@@ -11,7 +11,7 @@ import { EnsalamentoResults, type EnsalamentoResult } from './ensalamento-result
 import { ForceDistributionDialog } from './force-distribution-dialog';
 
 
-export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
+export function EnsalamentoClient({ formations }: { formations: FormacaoWithCount[] }) {
     const { toast } = useToast();
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +23,10 @@ export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isForceDistributeModalOpen, setIsForceDistributeModalOpen] = useState(false);
+
+    const handleBack = () => {
+        setStep(prev => Math.max(1, prev - 1));
+    };
 
     const processAndContinue = async (data: SetupData, parsedParticipants?: Inscricao[]) => {
         setIsLoading(true);
@@ -221,6 +225,7 @@ export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
                     participants={participants} 
                     onGenerate={generateEnsalamento} 
                     isLoading={isLoading}
+                    onBack={handleBack}
                 />
             )}
              {step === 3 && ensalamentoResult && criteriaData && setupData && (
@@ -232,6 +237,7 @@ export function EnsalamentoClient({ formations }: EnsalamentoClientProps) {
                         setSelectedIds={setSelectedIds}
                         onMoveToRoom={handleMoveSelectedToRoom}
                         onOpenForceDistribute={() => setIsForceDistributeModalOpen(true)}
+                        onBack={handleBack}
                     />
                      <ForceDistributionDialog
                         isOpen={isForceDistributeModalOpen}

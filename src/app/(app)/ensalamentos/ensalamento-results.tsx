@@ -19,7 +19,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Users, Users2, UserCheck, UserX, Move, Trash2 } from 'lucide-react';
+import { Users, Users2, UserCheck, UserX, Move, Trash2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -142,10 +142,11 @@ type EnsalamentoResultsProps = {
   setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
   onMoveToRoom: (targetRoomName: string) => void;
   onOpenForceDistribute: () => void;
+  onBack: () => void;
 };
 
 
-export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute }: EnsalamentoResultsProps) {
+export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute, onBack }: EnsalamentoResultsProps) {
   const { salas, naoAlocados, stats } = result;
   const criterionLabel = formatLabel(criterion);
   
@@ -170,10 +171,18 @@ export function EnsalamentoResults({ result, criterion, selectedIds, setSelected
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Passo 3: Resultados do Ensalamento</CardTitle>
-          <CardDescription>
-            Abaixo estão os resultados da distribuição dos participantes nas salas.
-          </CardDescription>
+            <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle>Passo 3: Resultados do Ensalamento</CardTitle>
+                  <CardDescription>
+                    Abaixo estão os resultados da distribuição dos participantes nas salas.
+                  </CardDescription>
+                </div>
+                <Button variant="outline" onClick={onBack}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Voltar
+                </Button>
+            </div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
