@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { EnsalamentoResult } from '@/lib/types';
+import type { EnsalamentoResult, SetupData, CriteriaFormValues } from '@/lib/types';
 import { saveEnsalamento } from './actions';
 import { useRouter } from 'next/navigation';
 
@@ -23,9 +23,11 @@ type SaveEnsalamentoDialogProps = {
   setIsOpen: (open: boolean) => void;
   result: EnsalamentoResult;
   formacaoId: string;
+  setupData: SetupData;
+  criteriaData: CriteriaFormValues;
 };
 
-export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId }: SaveEnsalamentoDialogProps) {
+export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId, setupData, criteriaData }: SaveEnsalamentoDialogProps) {
   const { toast } = useToast();
   const router = useRouter();
   const [name, setName] = useState('');
@@ -37,7 +39,7 @@ export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId }:
         return;
     }
     setLoading(true);
-    const saveResult = await saveEnsalamento(name, result, formacaoId);
+    const saveResult = await saveEnsalamento(name, result, formacaoId, setupData, criteriaData);
     setLoading(false);
 
     if (saveResult.error) {

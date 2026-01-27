@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { EnsalamentoResult, Inscricao, Sala } from '@/lib/types';
+import type { EnsalamentoResult, Inscricao, Sala, SetupData, CriteriaFormValues } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -30,7 +30,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { SaveEnsalamentoDialog } from './save-ensalamento-dialog';
-import type { SetupData } from './ensalamento-setup';
 
 const StatCard = ({ title, value, icon: Icon }: { title: string; value: number | string; icon: React.ElementType }) => (
   <Card>
@@ -146,10 +145,11 @@ type EnsalamentoResultsProps = {
   onOpenForceDistribute: () => void;
   onBack: () => void;
   setupData: SetupData;
+  criteriaData: CriteriaFormValues;
 };
 
 
-export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute, onBack, setupData }: EnsalamentoResultsProps) {
+export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute, onBack, setupData, criteriaData }: EnsalamentoResultsProps) {
   const { salas, naoAlocados, stats } = result;
   const criterionLabel = formatLabel(criterion);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = React.useState(false);
@@ -288,6 +288,8 @@ export function EnsalamentoResults({ result, criterion, selectedIds, setSelected
           setIsOpen={setIsSaveDialogOpen}
           result={result}
           formacaoId={setupData.formationId}
+          setupData={setupData}
+          criteriaData={criteriaData}
       />
     </div>
   );

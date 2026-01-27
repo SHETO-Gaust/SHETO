@@ -1,25 +1,40 @@
 'use client';
 
 import { useState } from 'react';
-import type { Inscricao, Sala } from '@/lib/types';
-import { EnsalamentoSetup, type SetupData } from './ensalamento-setup';
+import type { Inscricao, Sala, SetupData, CriteriaFormValues } from '@/lib/types';
+import { EnsalamentoSetup } from './ensalamento-setup';
 import * as actions from './actions';
 import { useToast } from '@/hooks/use-toast';
-import { EnsalamentoCriteria, type CriteriaFormValues } from './ensalamento-criteria';
-import type { FormacaoWithCount } from './actions';
+import { EnsalamentoCriteria } from './ensalamento-criteria';
+import type { FormacaoWithCount, SavedEnsalamento } from './actions';
 import { EnsalamentoResults, type EnsalamentoResult } from './ensalamento-results';
 import { ForceDistributionDialog } from './force-distribution-dialog';
 
 
-export function EnsalamentoClient({ formations }: { formations: FormacaoWithCount[] }) {
+export function EnsalamentoClient({ formations, initialEnsalamento }: { formations: FormacaoWithCount[], initialEnsalamento?: SavedEnsalamento }) {
     const { toast } = useToast();
-    const [step, setStep] = useState(1);
+    const [step, setStep] = useState(initialEnsalamento ? 3 : 1);
     const [isLoading, setIsLoading] = useState(false);
     
-    const [setupData, setSetupData] = useState<SetupData | null>(null);
-    const [participants, setParticipants] = useState<Inscricao[]>([]);
-    const [criteriaData, setCriteriaData] = useState<CriteriaFormValues | null>(null);
-    const [ensalamentoResult, setEnsalamentoResult] = useState<EnsalamentoResult | null>(null);
+    const [setupData, setSetupData] = useState<SetupData | null>(initialEnsalamento?.stats.setupData || null);
+    
+    const [participants, setParticipants] = useState<Inscricao[]>(() => {
+        if (!initialEnsalamento) return [];
+        const alocados = initialEnsalamento.salas.flatMap(s => s.participants);
+        const naoAlocados = initialEnsalamento.nao_alocados;
+        return [...alocados, ...naoAlocados];
+    });
+
+    const [criteriaData, setCriteriaData] = useState<CriteriaFormValues | null>(initialEnsalamento?.stats.criteriaData || null);
+    
+    const [ensalamentoResult, setEnsalamentoResult] = useState<EnsalamentoResult | null>(() => {
+        if (!initialEnsalamento) return null;
+        return {
+            salas: initialEnsalamento.salas,
+            naoAlocados: initialEnsalamento.nao_alocados,
+            stats: initialEnsalamento.stats
+        };
+    });
 
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isForceDistributeModalOpen, setIsForceDistributeModalOpen] = useState(false);
@@ -276,6 +291,7 @@ export function EnsalamentoClient({ formations }: { formations: FormacaoWithCoun
                         onOpenForceDistribute={() => setIsForceDistributeModalOpen(true)}
                         onBack={handleBack}
                         setupData={setupData}
+                        criteriaData={criteriaData}
                     />
                      <ForceDistributionDialog
                         isOpen={isForceDistributeModalOpen}

@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2 } from 'lucide-react';
-import type { Formacao, Inscricao } from '@/lib/types';
+import type { Inscricao, SetupData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 import type { FormacaoWithCount } from './actions';
@@ -37,8 +37,6 @@ const setupSchema = z.object({
   participantsPerRoom: z.coerce.number().min(1, 'Deve haver pelo menos 1 participante por sala.'),
   source: z.enum(['system', 'sheet'], { required_error: 'Selecione a fonte dos participantes.' }),
 });
-
-export type SetupData = z.infer<typeof setupSchema>;
 
 type EnsalamentoSetupProps = {
   formations: FormacaoWithCount[];

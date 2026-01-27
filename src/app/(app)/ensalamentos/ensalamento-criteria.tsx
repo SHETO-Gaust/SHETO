@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2 } from 'lucide-react';
-import type { Inscricao } from '@/lib/types';
+import type { Inscricao, CriteriaFormValues } from '@/lib/types';
 import { Label } from '@/components/ui/label';
 
 const criteriaSchema = z.object({
@@ -32,8 +32,6 @@ const criteriaSchema = z.object({
     required_error: 'Selecione uma estratégia.',
   }),
 });
-
-export type CriteriaFormValues = z.infer<typeof criteriaSchema>;
 
 type EnsalamentoCriteriaProps = {
   participants: Inscricao[];

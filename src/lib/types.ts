@@ -1,19 +1,16 @@
 
 
+export type SetupData = {
+    formationId: string;
+    roomCount: number;
+    participantsPerRoom: number;
+    source: 'system' | 'sheet';
+};
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+export type CriteriaFormValues = {
+    criterion: string;
+    strategy: 'exclusividade' | 'preferencial';
+};
 
 export type TrainingModality = 'presencial' | 'online' | 'hibrido';
 
@@ -182,6 +179,8 @@ export type EnsalamentoResult = {
     totalParticipantes: number;
     totalAlocados: number;
     totalNaoAlocados: number;
+    setupData?: SetupData;
+    criteriaData?: CriteriaFormValues;
   };
 };
 

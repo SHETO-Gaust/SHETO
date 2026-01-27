@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
-import type { Formacao, Inscricao, Ensalamento, EnsalamentoResult } from '@/lib/types';
+import type { Formacao, Inscricao, Ensalamento, EnsalamentoResult, SetupData, CriteriaFormValues } from '@/lib/types';
 import { isPast, isToday } from "date-fns";
 import { revalidatePath } from 'next/cache';
 
@@ -99,7 +99,13 @@ export async function getSavedEnsalamentos(): Promise<SavedEnsalamento[]> {
     return data as SavedEnsalamento[];
 }
 
-export async function saveEnsalamento(name: string, result: EnsalamentoResult, formacaoId: string) {
+export async function saveEnsalamento(
+    name: string,
+    result: EnsalamentoResult,
+    formacaoId: string,
+    setupData: SetupData,
+    criteriaData: CriteriaFormValues
+) {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
     
@@ -117,7 +123,7 @@ export async function saveEnsalamento(name: string, result: EnsalamentoResult, f
         user_id: user.id,
         salas,
         nao_alocados: naoAlocados,
-        stats,
+        stats: { ...stats, setupData, criteriaData },
     });
 
     if (error) {
@@ -142,4 +148,25 @@ export async function deleteEnsalamento(id: string) {
     
     revalidatePath('/ensalamentos');
     return { success: true };
+}
+
+export async function getEnsalamentoDetails(ensalamentoId: string): Promise<SavedEnsalamento | null> {
+    const cookieStore = cookies();
+    const supabase = createClient(cookieStore);
+
+    const { data, error } = await supabase
+        .from('ensalamentos')
+        .select(`
+            *,
+            formacoes (name)
+        `)
+        .eq('id', ensalamentoId)
+        .single();
+
+    if (error) {
+        console.error('Error fetching ensalamento details:', error);
+        return null;
+    }
+
+    return data as SavedEnsalamento;
 }

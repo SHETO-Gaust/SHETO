@@ -26,6 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 type EnsalamentosListProps = {
   initialEnsalamentos: SavedEnsalamento[];
@@ -92,9 +93,11 @@ export function EnsalamentosList({ initialEnsalamentos }: EnsalamentosListProps)
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                      <DropdownMenuItem disabled>
-                        <Eye className="mr-2 h-4 w-4" />
-                        Visualizar
+                      <DropdownMenuItem asChild>
+                        <Link href={`/ensalamentos/${item.id}`}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            Visualizar
+                        </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleDeleteClick(item)} className="text-destructive focus:text-destructive">
                         <Trash2 className="mr-2 h-4 w-4" />
