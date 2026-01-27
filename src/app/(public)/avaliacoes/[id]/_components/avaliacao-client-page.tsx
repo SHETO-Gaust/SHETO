@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import type { Formacao, Inscricao, Formador } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ const formatCPF = (value: string) => {
 
 export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>('cpf');
   const [loading, setLoading] = useState(false);
   const [cpf, setCpf] = useState('');
@@ -37,14 +39,15 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
   const [isFrequenciaOpen, setIsFrequenciaOpen] = useState(false);
   const [periodo, setPeriodo] = useState<'MAT' | 'VESP' | null>(null);
 
-  const handleCpfCheck = async () => {
-    if (cpf.length !== 14) {
+  const handleCpfCheck = async (cpfToCheck?: string) => {
+    const finalCpf = cpfToCheck || cpf;
+    if (finalCpf.length !== 14) {
       toast({ title: 'CPF inválido.', variant: 'destructive' });
       return;
     }
     
     setLoading(true);
-    const result = await checkParticipantForAvaliacao(formacao.id, cpf);
+    const result = await checkParticipantForAvaliacao(formacao.id, finalCpf);
     setLoading(false);
 
     if (result.success) {
@@ -59,6 +62,15 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
         setStep('error');
     }
   };
+  
+  useEffect(() => {
+    const cpfFromUrl = searchParams.get('cpf');
+    if (cpfFromUrl) {
+        const formatted = formatCPF(cpfFromUrl);
+        setCpf(formatted);
+        handleCpfCheck(formatted);
+    }
+  }, [searchParams]);
 
   const handleSelectFormadores = (formadores: Formador[]) => {
       setSelectedFormadores(formadores);
@@ -127,6 +139,20 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
              />
   }
 
+  if (step === 'cpf' && searchParams.get('cpf')) {
+    return (
+        <Card className="w-full max-w-lg mx-auto">
+            <CardHeader className="text-center">
+                <CardTitle className="text-2xl">Aguarde...</CardTitle>
+                 <CardDescription>Verificando seus dados...</CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center items-center p-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </CardContent>
+        </Card>
+    );
+  }
+
   return (
     <Card className="w-full max-w-lg mx-auto">
       <CardHeader className="text-center">
@@ -146,7 +172,7 @@ export function AvaliacaoClientPage({ formacao }: { formacao: Formacao }) {
             disabled={loading}
           />
         </div>
-        <Button onClick={handleCpfCheck} className="w-full" disabled={loading || cpf.length !== 14}>
+        <Button onClick={() => handleCpfCheck()} className="w-full" disabled={loading || cpf.length !== 14}>
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Verificar
         </Button>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { Formacao, Coordinates } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,45 @@ import { checkInscricao, registerFrequency } from '../../actions';
 import { format } from 'date-fns';
 
 type PageState = 'idle' | 'getting_location' | 'registering' | 'success' | 'already_registered' | 'error';
+
+const CountdownRedirect = ({ formacaoId, cpf }: { formacaoId: string, cpf: string }) => {
+    const router = useRouter();
+    const [countdown, setCountdown] = useState(8);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCountdown((prev) => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    router.push(`/avaliacoes/${formacaoId}?cpf=${encodeURIComponent(cpf)}`);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [router, formacaoId, cpf]);
+    
+    const handleRedirectNow = () => {
+        router.push(`/avaliacoes/${formacaoId}?cpf=${encodeURIComponent(cpf)}`);
+    };
+
+    return (
+        <div className="pt-4 mt-4 border-t">
+            <div className="pt-4 space-y-2 text-center">
+                <p className="font-semibold text-primary">Sua opinião é muito importante para nós!</p>
+                <p className="text-muted-foreground text-sm">Você será redirecionado para a avaliação em:</p>
+                <p className="text-6xl font-bold tabular-nums">{countdown}</p>
+                 <Button onClick={handleRedirectNow} size="lg">
+                    <Star className="mr-2 h-4 w-4" />
+                    Avaliar Agora
+                </Button>
+            </div>
+        </div>
+    );
+};
+
 
 export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
   const { toast } = useToast();
@@ -171,18 +211,7 @@ export function FrequenciaClientPage({ formacao }: { formacao: Formacao }) {
                     )}
                 </div>
                 {showAvaliacaoPrompt && (
-                    <div className="pt-4 mt-4 border-t">
-                         <div className="pt-4 space-y-2 text-center">
-                             <p className="font-semibold text-blue-600">Que tal avaliar esta formação?</p>
-                             <p className="text-muted-foreground text-sm">Sua opinião é muito importante para nós. Contribua respondendo à avaliação.</p>
-                             <Link href={`/avaliacoes/${formacao.id}`} passHref>
-                                <Button variant="outline">
-                                    <Star className="mr-2 h-4 w-4" />
-                                    Ir para a Avaliação
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
+                    <CountdownRedirect formacaoId={formacao.id} cpf={cpf} />
                 )}
            </SuccessCard>
       );
