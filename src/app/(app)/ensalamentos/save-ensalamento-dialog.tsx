@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { EnsalamentoResult, SetupData, CriteriaFormValues } from '@/lib/types';
-import { saveEnsalamento } from './actions';
+import { saveEnsalamento, SavedEnsalamento } from './actions';
 import { useRouter } from 'next/navigation';
 
 type SaveEnsalamentoDialogProps = {
@@ -25,13 +25,22 @@ type SaveEnsalamentoDialogProps = {
   formacaoId: string;
   setupData: SetupData;
   criteriaData: CriteriaFormValues;
+  initialEnsalamento?: SavedEnsalamento;
 };
 
-export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId, setupData, criteriaData }: SaveEnsalamentoDialogProps) {
+export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId, setupData, criteriaData, initialEnsalamento }: SaveEnsalamentoDialogProps) {
   const { toast } = useToast();
   const router = useRouter();
+  const isEditMode = !!initialEnsalamento;
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+        setName(isEditMode ? initialEnsalamento.name : '');
+    }
+  }, [isOpen, isEditMode, initialEnsalamento]);
+
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -39,7 +48,14 @@ export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId, s
         return;
     }
     setLoading(true);
-    const saveResult = await saveEnsalamento(name, result, formacaoId, setupData, criteriaData);
+    const saveResult = await saveEnsalamento(
+        name,
+        result,
+        formacaoId,
+        setupData,
+        criteriaData,
+        initialEnsalamento?.id
+    );
     setLoading(false);
 
     if (saveResult.error) {
@@ -50,12 +66,12 @@ export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId, s
       });
     } else {
       toast({
-        title: 'Ensalamento Salvo!',
+        title: isEditMode ? 'Ensalamento Atualizado!' : 'Ensalamento Salvo!',
         description: `O ensalamento "${name}" foi salvo com sucesso.`,
       });
       setName('');
       setIsOpen(false);
-      router.refresh(); // To show the new item in the list
+      router.refresh();
     }
   };
 
@@ -63,9 +79,9 @@ export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId, s
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Salvar Ensalamento</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Salvar Alterações' : 'Salvar Ensalamento'}</DialogTitle>
           <DialogDescription>
-            Dê um nome para este ensalamento para que você possa consultá-lo mais tarde.
+            {isEditMode ? `As alterações feitas no ensalamento "${initialEnsalamento.name}" serão salvas.` : 'Dê um nome para este ensalamento para que você possa consultá-lo mais tarde.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-4">
@@ -83,7 +99,7 @@ export function SaveEnsalamentoDialog({ isOpen, setIsOpen, result, formacaoId, s
           </Button>
           <Button onClick={handleSave} disabled={loading || !name.trim()}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Salvar
+            {isEditMode ? 'Salvar Alterações' : 'Salvar'}
           </Button>
         </DialogFooter>
       </DialogContent>

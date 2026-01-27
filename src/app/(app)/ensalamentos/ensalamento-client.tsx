@@ -292,6 +292,7 @@ export function EnsalamentoClient({ formations, initialEnsalamento }: { formatio
                         onBack={handleBack}
                         setupData={setupData}
                         criteriaData={criteriaData}
+                        initialEnsalamento={initialEnsalamento}
                     />
                      <ForceDistributionDialog
                         isOpen={isForceDistributeModalOpen}

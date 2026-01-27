@@ -104,7 +104,8 @@ export async function saveEnsalamento(
     result: EnsalamentoResult,
     formacaoId: string,
     setupData: SetupData,
-    criteriaData: CriteriaFormValues
+    criteriaData: CriteriaFormValues,
+    ensalamentoId?: string
 ) {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
@@ -117,21 +118,44 @@ export async function saveEnsalamento(
 
     const { salas, naoAlocados, stats } = result;
 
-    const { error } = await supabase.from('ensalamentos').insert({
-        name,
-        formacao_id: formacaoId,
-        user_id: user.id,
-        salas,
-        nao_alocados: naoAlocados,
-        stats: { ...stats, setupData, criteriaData },
-    });
+    if (ensalamentoId) {
+        // Update existing ensalamento
+        const { error } = await supabase
+            .from('ensalamentos')
+            .update({
+                name,
+                salas,
+                nao_alocados: naoAlocados,
+                stats: { ...stats, setupData, criteriaData },
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', ensalamentoId);
 
-    if (error) {
-        console.error('Error saving ensalamento:', error);
-        return { error: 'Ocorreu um erro ao salvar o ensalamento.' };
+        if (error) {
+            console.error('Error updating ensalamento:', error);
+            return { error: 'Ocorreu um erro ao atualizar o ensalamento.' };
+        }
+    } else {
+        // Insert new ensalamento
+        const { error } = await supabase.from('ensalamentos').insert({
+            name,
+            formacao_id: formacaoId,
+            user_id: user.id,
+            salas,
+            nao_alocados: naoAlocados,
+            stats: { ...stats, setupData, criteriaData },
+        });
+
+        if (error) {
+            console.error('Error saving ensalamento:', error);
+            return { error: 'Ocorreu um erro ao salvar o ensalamento.' };
+        }
     }
     
     revalidatePath('/ensalamentos');
+    if (ensalamentoId) {
+        revalidatePath(`/ensalamentos/${ensalamentoId}`);
+    }
     return { success: true };
 }
 

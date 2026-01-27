@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { SaveEnsalamentoDialog } from './save-ensalamento-dialog';
+import type { SavedEnsalamento } from './actions';
 
 const StatCard = ({ title, value, icon: Icon }: { title: string; value: number | string; icon: React.ElementType }) => (
   <Card>
@@ -146,10 +147,11 @@ type EnsalamentoResultsProps = {
   onBack: () => void;
   setupData: SetupData;
   criteriaData: CriteriaFormValues;
+  initialEnsalamento?: SavedEnsalamento;
 };
 
 
-export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute, onBack, setupData, criteriaData }: EnsalamentoResultsProps) {
+export function EnsalamentoResults({ result, criterion, selectedIds, setSelectedIds, onMoveToRoom, onOpenForceDistribute, onBack, setupData, criteriaData, initialEnsalamento }: EnsalamentoResultsProps) {
   const { salas, naoAlocados, stats } = result;
   const criterionLabel = formatLabel(criterion);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = React.useState(false);
@@ -290,6 +292,7 @@ export function EnsalamentoResults({ result, criterion, selectedIds, setSelected
           formacaoId={setupData.formationId}
           setupData={setupData}
           criteriaData={criteriaData}
+          initialEnsalamento={initialEnsalamento}
       />
     </div>
   );
