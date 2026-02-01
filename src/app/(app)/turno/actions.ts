@@ -1,143 +1,136 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import type { Turno } from '@/lib/types';
 
-/* =======================
-   GET
-======================= */
-export async function getTurnos(escolaId: string) {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
+import { createClient } from '@/lib/supabase/server';
+import type { Turno, HorarioAula } from '@/lib/types';
 
-    const { data: turnos, error } = await supabase
-        .from('turnos')
-        .select('*')
-        .eq('escola_id', escolaId)
-        .order('created_at', { ascending: true });
+/* -------------------------------------------------------------------------- */
+/*                               GET TURNOS                                   */
+/* -------------------------------------------------------------------------- */
+/**
+ * Busca os turnos de uma escola.
+ * Caso não existam, cria os turnos padrão.
+ */
+export async function getTurnos(
+  escolaId: string
+): Promise<{ data?: Turno[]; error?: string }> {
+  const supabase = createClient(cookies());
 
-    if (error) {
-        console.error('Error fetching turnos:', error);
-        return { data: [], error: 'Não foi possível buscar os turnos.' };
+  const { data, error } = await supabase
+    .from('turnos')
+    .select('*')
+    .eq('escola_id', escolaId)
+    .order('nome', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching turnos:', error);
+    return { error: 'Não foi possível buscar os turnos.' };
+  }
+
+  if (!data || data.length === 0) {
+    const defaultTurnos = [
+      {
+        nome: 'Matutino',
+        escola_id: escolaId,
+        ativo: true,
+        aulas_por_dia: 5,
+        dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
+      },
+      {
+        nome: 'Vespertino',
+        escola_id: escolaId,
+        ativo: true,
+        aulas_por_dia: 5,
+        dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
+      },
+      {
+        nome: 'Noturno',
+        escola_id: escolaId,
+        ativo: false,
+        aulas_por_dia: 4,
+        dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
+      },
+    ];
+
+    const { data: newTurnos, error: insertError } = await supabase
+      .from('turnos')
+      .insert(defaultTurnos)
+      .select();
+
+    if (insertError) {
+      console.error('Error creating default turnos:', insertError);
+      return { error: 'Não foi possível criar os turnos padrão.' };
     }
 
-    if (turnos.length === 0) {
-        // First time access for this school, create default turnos
-        const defaultTurnos = [
-            { escola_id: escolaId, nome: 'Matutino', ativo: true, dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'], aulas_por_dia: 5 },
-            { escola_id: escolaId, nome: 'Vespertino', ativo: false, dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'], aulas_por_dia: 5 },
-            { escola_id: escolaId, nome: 'Noturno', ativo: false, dias_semana: [], aulas_por_dia: 4 },
-        ];
+    return { data: newTurnos as Turno[] };
+  }
 
-        const { data: newTurnos, error: insertError } = await supabase
-            .from('turnos')
-            .insert(defaultTurnos)
-            .select();
-
-        if (insertError) {
-            console.error('Error creating default turnos:', insertError);
-            return { data: [], error: 'Não foi possível criar os turnos padrão.' };
-        }
-        return { data: newTurnos as Turno[], error: null };
-    }
-
-    return { data: turnos as Turno[], error: null };
+  return { data: data as Turno[] };
 }
 
+/* -------------------------------------------------------------------------- */
+/*                              UPSERT TURNO                                  */
+/* -------------------------------------------------------------------------- */
 
-/* =======================
-   SCHEMAS
-======================= */
-
-const turnoSchema = z.object({
+const upsertTurnoSchema = z.object({
   id: z.string().optional(),
   escola_id: z.string(),
   nome: z.string().min(3, 'O nome deve ter pelo menos 3 caracteres.'),
   dias_semana: z.array(z.string()),
-  aulas_por_dia: z.coerce.number().min(1, 'Deve haver pelo menos 1 aula por dia.'),
+  aulas_por_dia: z.coerce
+    .number()
+    .min(1, 'Deve haver pelo menos 1 aula por dia.'),
 });
 
-const horariosFormSchema = z.object({
-  id: z.string(),
-  horarios: z.array(z.object({
-    id: z.string(),
-    inicio: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Formato inválido."),
-    fim: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Formato inválido."),
-  })),
-}).refine(data => {
-    for (const aula of data.horarios) {
-        if (!aula.inicio || !aula.fim || aula.inicio >= aula.fim) return false;
-    }
-    return true;
-}, {
-    message: 'Todos os horários devem ser preenchidos e o início deve ser anterior ao fim.',
-    path: ['horarios'],
-});
+/**
+ * Cria ou atualiza um turno.
+ */
+export async function upsertTurno(
+  formData: z.infer<typeof upsertTurnoSchema>
+) {
+  const supabase = createClient(cookies());
 
-
-/* =======================
-   CREATE / UPDATE
-======================= */
-
-export async function upsertTurno(formData: z.infer<typeof turnoSchema>) {
-  const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
-
-  const parsed = turnoSchema.safeParse(formData);
-
-  if (!parsed.success) {
+  const validated = upsertTurnoSchema.safeParse(formData);
+  if (!validated.success) {
     return {
       error: 'Dados inválidos.',
-      errors: parsed.error.flatten().fieldErrors,
+      errors: validated.error.flatten().fieldErrors,
     };
   }
 
-  const { id, escola_id, nome, dias_semana, aulas_por_dia } = parsed.data;
+  const { id, escola_id, nome, dias_semana, aulas_por_dia } = validated.data;
 
-  if (id) {
-    // UPDATE
-    const { data, error } = await supabase
-      .from('turnos')
-      .update({ nome, dias_semana, aulas_por_dia })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error(error);
-      return { error: 'Não foi possível atualizar o turno.' };
-    }
-
-    revalidatePath('/turno');
-    return { data: data as Turno };
-  }
-
-  // CREATE
   const { data, error } = await supabase
     .from('turnos')
-    .insert({ escola_id, nome, dias_semana, aulas_por_dia, ativo: true })
+    .upsert(
+      { id, escola_id, nome, dias_semana, aulas_por_dia },
+      { onConflict: 'id' }
+    )
     .select()
     .single();
 
   if (error) {
-    console.error(error);
-    return { error: 'Não foi possível criar o turno.' };
+    if (error.code === '23505') {
+      return { error: `Um turno com o nome "${nome}" já existe.` };
+    }
+
+    console.error('Error upserting turno:', error);
+    return { error: 'Não foi possível salvar o turno.' };
   }
 
   revalidatePath('/turno');
-  return { data: data as Turno };
+  return { data };
 }
 
-/* =======================
-   STATUS
-======================= */
+/* -------------------------------------------------------------------------- */
+/*                          ATIVAR / DESATIVAR TURNO                           */
+/* -------------------------------------------------------------------------- */
 
 export async function updateTurnoStatus(id: string, ativo: boolean) {
-  const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createClient(cookies());
 
   const { error } = await supabase
     .from('turnos')
@@ -145,44 +138,72 @@ export async function updateTurnoStatus(id: string, ativo: boolean) {
     .eq('id', id);
 
   if (error) {
-    console.error(error);
-    return { error: 'Erro ao atualizar status.' };
+    console.error('Error updating turno status:', error);
+    return { error: 'Não foi possível atualizar o status do turno.' };
   }
 
   revalidatePath('/turno');
   return { success: true };
 }
 
+/* -------------------------------------------------------------------------- */
+/*                         HORÁRIOS DO TURNO                                   */
+/* -------------------------------------------------------------------------- */
 
-/* =======================
-   HORARIOS
-======================= */
+const horarioAulaSchema = z.object({
+  id: z.string(),
+  inicio: z.string().regex(
+    /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
+    'Formato de hora inválido.'
+  ),
+  fim: z.string().regex(
+    /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
+    'Formato de hora inválido.'
+  ),
+});
 
-export async function updateTurnoHorarios(formData: z.infer<typeof horariosFormSchema>) {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
-
-    const parsed = horariosFormSchema.safeParse(formData);
-
-    if (!parsed.success) {
-        return {
-            error: 'Dados inválidos.',
-            errors: parsed.error.flatten().fieldErrors,
-        };
+const updateHorariosSchema = z
+  .object({
+    id: z.string(),
+    horarios: z.array(horarioAulaSchema),
+  })
+  .refine(
+    ({ horarios }) =>
+      horarios.every(aula => aula.inicio < aula.fim),
+    {
+      message: 'O horário de início deve ser anterior ao horário de fim.',
+      path: ['horarios'],
     }
+  );
 
-    const { id, horarios } = parsed.data;
+/**
+ * Atualiza os horários de um turno.
+ */
+export async function updateTurnoHorarios(
+  formData: z.infer<typeof updateHorariosSchema>
+) {
+  const supabase = createClient(cookies());
 
-    const { error } = await supabase
-        .from('turnos')
-        .update({ horarios: horarios as any })
-        .eq('id', id);
+  const validated = updateHorariosSchema.safeParse(formData);
+  if (!validated.success) {
+    return {
+      error: 'Dados inválidos.',
+      errors: validated.error.flatten().fieldErrors,
+    };
+  }
 
-    if (error) {
-        console.error(error);
-        return { error: 'Não foi possível atualizar os horários.' };
-    }
+  const { id, horarios } = validated.data;
 
-    revalidatePath('/turno');
-    return { success: true };
+  const { error } = await supabase
+    .from('turnos')
+    .update({ horarios: horarios as HorarioAula[] })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error updating turno horarios:', error);
+    return { error: 'Não foi possível salvar os horários do turno.' };
+  }
+
+  revalidatePath('/turno');
+  return { success: true };
 }
