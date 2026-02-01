@@ -23,11 +23,12 @@ const moduleMap: { [key: string]: string } = {
     '/formacoes': 'professores',
     '/gerenciamento': 'disciplinas',
     '/ensalamentos': 'turmas',
-    '/metricas-gerais': 'unidades-escolares',
-    '/relatorios': 'restricoes',
     '/avaliacoes-admin': 'horarios',
-    '/emitir-certificado': 'horarios',
+    '/relatorios': 'horarios',
     '/usuarios': 'usuarios',
+    '/turno': 'turno',
+    '/ensino': 'ensino',
+    '/serie': 'serie',
 };
 
 
@@ -69,7 +70,7 @@ export default async function AppLayout({
   let hasPermission = true;
 
   if (requiredModuleKey) {
-      const moduleName = moduleMap[requiredModuleKey];
+      const moduleName = moduleMap[requiredModuleKey as keyof typeof moduleMap];
       const isAdmin = userProfile?.role === 'admin';
 
       if (isAdmin) {
@@ -77,7 +78,7 @@ export default async function AppLayout({
       } else if (moduleName === 'dashboard') {
         hasPermission = true;
       } else {
-        const groupModule = moduleName === 'unidades-escolares' || moduleName === 'professores' || moduleName === 'disciplinas' || moduleName === 'turmas' || moduleName === 'restricoes' ? 'dados-horario'
+        const groupModule = ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'].includes(moduleName) ? 'dados-horario'
                             : moduleName === 'horarios' ? 'horarios' : null;
 
         if(groupModule) {

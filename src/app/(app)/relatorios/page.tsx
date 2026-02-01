@@ -1,13 +1,13 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 
-export default async function RestricoesPage() {
+export default async function RelatoriosPage() {
     return (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Restrições</CardTitle>
+                    <CardTitle>Relatórios</CardTitle>
                     <CardDescription>
-                        Gerencie as restrições de horários para professores e turmas.
+                        Visualize os relatórios gerados pelo sistema.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

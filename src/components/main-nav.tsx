@@ -7,10 +7,11 @@ import {
   Users,
   BookOpen,
   Clock,
-  Save,
-  Building2,
   Users2,
-  Ban,
+  BarChart3,
+  Sun,
+  GraduationCap,
+  Layers,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -26,15 +27,16 @@ const allLinks = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard, module: 'dashboard' },
 
   // Dados do Horário
-  { href: '/metricas-gerais', label: 'Unidades Escolares', icon: Building2, module: 'unidades-escolares', group: 'dados-horario' },
-  { href: '/formacoes', label: 'Professores', icon: Users, module: 'professores', group: 'dados-horario' },
+  { href: '/turno', label: 'Turno', icon: Sun, module: 'turno', group: 'dados-horario' },
+  { href: '/ensino', label: 'Ensino', icon: GraduationCap, module: 'ensino', group: 'dados-horario' },
   { href: '/gerenciamento', label: 'Disciplinas', icon: BookOpen, module: 'disciplinas', group: 'dados-horario' },
+  { href: '/formacoes', label: 'Professores', icon: Users, module: 'professores', group: 'dados-horario' },
+  { href: '/serie', label: 'Série', icon: Layers, module: 'serie', group: 'dados-horario' },
   { href: '/ensalamentos', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados-horario' },
-  { href: '/relatorios', label: 'Restrições', icon: Ban, module: 'restricoes', group: 'dados-horario' },
   
   // Horários
-  { href: '/avaliacoes-admin', label: 'Gerar Novo Horário', icon: Clock, module: 'horarios', group: 'horarios' },
-  { href: '/emitir-certificado', label: 'Horários Salvos', icon: Save, module: 'horarios', group: 'horarios' },
+  { href: '/avaliacoes-admin', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios' },
+  { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios' },
 
   // Gestão
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
@@ -55,7 +57,7 @@ export function MainNav({ profile }: { profile: Profile | null }) {
       if (module === 'dashboard') return true;
       
       const groupModules: {[key: string]: string[]} = {
-        'dados-horario': ['unidades-escolares', 'professores', 'disciplinas', 'turmas', 'restricoes'],
+        'dados-horario': ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'],
         'horarios': ['horarios']
       };
 

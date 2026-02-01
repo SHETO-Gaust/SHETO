@@ -4,7 +4,7 @@ export default async function GerarHorarioPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Gerar Novo Horário</CardTitle>
+        <CardTitle>Gerar Horário</CardTitle>
         <CardDescription>
           Configure os parâmetros e gere um novo horário escolar.
         </CardDescription>
