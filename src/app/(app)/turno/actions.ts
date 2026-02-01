@@ -49,7 +49,7 @@ export async function getTurnos(escolaId: string): Promise<{ data?: Turno[], err
 
 const upsertTurnoSchema = z.object({
     id: z.string().optional(),
-    escola_id: z.string().uuid(),
+    escola_id: z.string(),
     nome: z.string().min(3, 'O nome deve ter pelo menos 3 caracteres.'),
 });
 

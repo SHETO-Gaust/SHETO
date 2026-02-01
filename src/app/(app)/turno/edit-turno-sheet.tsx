@@ -37,7 +37,7 @@ type EditTurnoSheetProps = {
 
 const turnoFormSchema = z.object({
   id: z.string().optional(),
-  escola_id: z.string().uuid(),
+  escola_id: z.string(),
   nome: z.string().min(3, { message: "O nome deve ter pelo menos 3 caracteres." }),
 });
 
