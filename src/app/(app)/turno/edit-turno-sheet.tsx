@@ -137,76 +137,79 @@ export function EditTurnoSheet({
         </SheetHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 space-y-6 overflow-y-auto py-6">
-            <FormField
-              control={form.control}
-              name="nome"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nome</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder="Ex: Matutino" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col justify-between">
+            <div className="flex-1 space-y-6 overflow-y-auto py-6 pr-4">
+              <FormField
+                control={form.control}
+                name="nome"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Ex: Matutino" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <Separator />
+              <Separator />
 
-            <FormField
-              control={form.control}
-              name="dias_semana"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Dias da semana</FormLabel>
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    {DIAS_SEMANA.map((dia) => (
-                      <div key={dia.id} className="flex items-center gap-2">
-                        <Checkbox
-                          checked={field.value.includes(dia.id)}
-                          onCheckedChange={(checked) => {
-                            checked
-                              ? field.onChange([...field.value, dia.id])
-                              : field.onChange(field.value.filter(d => d !== dia.id));
-                          }}
-                        />
-                        <span>{dia.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="dias_semana"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dias da semana</FormLabel>
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      {DIAS_SEMANA.map((dia) => (
+                        <div key={dia.id} className="flex items-center gap-2">
+                          <Checkbox
+                            checked={field.value.includes(dia.id)}
+                            onCheckedChange={(checked) => {
+                              checked
+                                ? field.onChange([...field.value, dia.id])
+                                : field.onChange(field.value.filter(d => d !== dia.id));
+                            }}
+                          />
+                          <span>{dia.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <Separator />
+              <Separator />
 
-            <FormField
-              control={form.control}
-              name="aulas_por_dia"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Aulas por dia</FormLabel>
-                  <FormControl>
-                    <Input type="number" min={1} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="aulas_por_dia"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Aulas por dia</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            
+            <SheetFooter className="mt-auto border-t pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar
+              </Button>
+            </SheetFooter>
           </form>
         </Form>
 
-        <SheetFooter className="mt-auto border-t pt-4">
-          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-            Cancelar
-          </Button>
-          <Button onClick={form.handleSubmit(onSubmit)} disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Salvar
-          </Button>
-        </SheetFooter>
       </SheetContent>
     </Sheet>
   );
