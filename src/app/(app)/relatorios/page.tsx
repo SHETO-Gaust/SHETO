@@ -1,21 +1,19 @@
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { getFormacoesForRelatorios } from './actions';
-import { RelatoriosClient } from './relatorios-client';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 
-export default async function RelatoriosPage() {
-    const formacoes = await getFormacoesForRelatorios();
-
+export default async function RestricoesPage() {
     return (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Relatórios de Participação</CardTitle>
+                    <CardTitle>Restrições</CardTitle>
                     <CardDescription>
-                        Selecione as formações que deseja analisar e clique em "Gerar Relatórios" para visualizar os dados de frequência.
+                        Gerencie as restrições de horários para professores e turmas.
                     </CardDescription>
                 </CardHeader>
+                <CardContent>
+                    <p>Página em construção.</p>
+                </CardContent>
             </Card>
-            <RelatoriosClient allFormacoes={formacoes} />
         </div>
     );
 }

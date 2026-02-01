@@ -1,21 +1,19 @@
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { getFinishedFormacoes } from './actions';
-import { MetricasClient } from './metricas-client';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 
-export default async function MetricasGeraisPage() {
-    const formacoes = await getFinishedFormacoes();
-
+export default async function UnidadesEscolaresPage() {
     return (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Métricas Gerais</CardTitle>
+                    <CardTitle>Unidades Escolares</CardTitle>
                     <CardDescription>
-                        Selecione as formações concluídas que deseja analisar e clique em "Gerar Métricas" para visualizar os dados consolidados.
+                        Gerencie as unidades escolares da sua regional.
                     </CardDescription>
                 </CardHeader>
+                 <CardContent>
+                    <p>Página em construção.</p>
+                </CardContent>
             </Card>
-            <MetricasClient finishedFormacoes={formacoes} />
         </div>
     );
 }

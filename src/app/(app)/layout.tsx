@@ -15,16 +15,17 @@ import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
 import type { Profile } from '@/lib/types';
 import { AccessDenied } from '@/components/access-denied';
+import { Sun } from 'lucide-react';
 
 const moduleMap: { [key: string]: string } = {
     '/dashboard': 'dashboard',
-    '/formacoes': 'formacoes',
-    '/gerenciamento': 'gerenciamento',
-    '/ensalamentos': 'ensalamentos',
-    '/metricas-gerais': 'metricas-gerais',
-    '/relatorios': 'relatorios',
-    '/avaliacoes-admin': 'avaliacoes-admin',
-    '/emitir-certificado': 'emitir-certificado',
+    '/formacoes': 'professores',
+    '/gerenciamento': 'disciplinas',
+    '/ensalamentos': 'turmas',
+    '/metricas-gerais': 'unidades-escolares',
+    '/relatorios': 'restricoes',
+    '/avaliacoes-admin': 'horarios',
+    '/emitir-certificado': 'horarios',
     '/usuarios': 'usuarios',
 };
 
@@ -68,7 +69,15 @@ export default async function AppLayout({
       } else if (moduleName === 'dashboard') {
         hasPermission = true;
       } else {
-        hasPermission = userProfile?.modules?.includes(moduleName) || false;
+        // For grouped modules, check if user has access to the parent module key
+        const groupModule = moduleName === 'unidades-escolares' || moduleName === 'professores' || moduleName === 'disciplinas' || moduleName === 'turmas' || moduleName === 'restricoes' ? 'dados-horario'
+                            : moduleName === 'horarios' ? 'horarios' : null;
+
+        if(groupModule) {
+            hasPermission = userProfile?.modules?.includes(groupModule) || false;
+        } else {
+            hasPermission = userProfile?.modules?.includes(moduleName) || false;
+        }
       }
   }
 
@@ -77,13 +86,10 @@ export default async function AppLayout({
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center justify-center p-2">
-            <Image
-              src="/img/logogforms.png"
-              alt="GForms Logo"
-              width={150}
-              height={40}
-              priority
-            />
+            <div className="flex items-center gap-2 text-xl font-bold text-sidebar-foreground">
+                <Sun className="h-6 w-6 text-orange-400" />
+                <span>RedeGrade TO</span>
+            </div>
           </div>
         </SidebarHeader>
         <SidebarContent>

@@ -30,15 +30,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  async redirects() {
-    return [
-      {
-        source: '/fines',
-        destination: '/formacoes',
-        permanent: true,
-      },
-    ]
-  },
 };
 
 export default nextConfig;

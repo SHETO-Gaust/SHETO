@@ -1,21 +1,17 @@
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { getFormacoesForAvaliacao } from './actions';
-import { AvaliacoesAdminClient } from './avaliacoes-admin-client';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 
-export default async function AvaliacoesAdminPage() {
-    const formacoes = await getFormacoesForAvaliacao();
-
-    return (
-        <div className="space-y-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Resultados das Avaliações</CardTitle>
-                    <CardDescription>
-                        Selecione as formações que deseja analisar e clique em "Gerar Resumos" para visualizar as médias.
-                    </CardDescription>
-                </CardHeader>
-            </Card>
-            <AvaliacoesAdminClient allFormacoes={formacoes} />
-        </div>
-    );
+export default async function GerarHorarioPage() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Gerar Novo Horário</CardTitle>
+        <CardDescription>
+          Configure os parâmetros e gere um novo horário escolar.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p>Página em construção.</p>
+      </CardContent>
+    </Card>
+  );
 }

@@ -4,14 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
-  GraduationCap,
-  School,
-  ClipboardList,
-  Star,
-  ListChecks,
-  BarChart3,
   Users,
-  Award,
+  BookOpen,
+  Clock,
+  Save,
+  Building2,
+  Users2,
+  Ban,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -21,29 +20,29 @@ import {
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/types';
 
-// Define all possible menu items with a unique module key
+// New structure for RedeGrade TO
 const allLinks = [
-  // No Group (Main)
+  // Main
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard, module: 'dashboard' },
-  { href: '/formacoes', label: 'Cadastrar Formação', icon: GraduationCap, module: 'formacoes' },
-  { href: '/gerenciamento', label: 'Gerenciamento', icon: ListChecks, module: 'gerenciamento' },
-  { href: '/ensalamentos', label: 'Ensalamentos', icon: School, module: 'ensalamentos' },
+
+  // Dados do Horário
+  { href: '/metricas-gerais', label: 'Unidades Escolares', icon: Building2, module: 'unidades-escolares', group: 'dados_horario' },
+  { href: '/formacoes', label: 'Professores', icon: Users, module: 'professores', group: 'dados_horario' },
+  { href: '/gerenciamento', label: 'Disciplinas', icon: BookOpen, module: 'disciplinas', group: 'dados_horario' },
+  { href: '/ensalamentos', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados_horario' },
+  { href: '/relatorios', label: 'Restrições', icon: Ban, module: 'restricoes', group: 'dados_horario' },
   
-  // Analysis group
-  { href: '/metricas-gerais', label: 'Métricas Gerais', icon: BarChart3, module: 'metricas-gerais', group: 'analysis' },
-  { href: '/relatorios', label: 'Relatório de Frequência', icon: ClipboardList, module: 'relatorios', group: 'analysis' },
-  { href: '/avaliacoes-admin', label: 'Avaliações', icon: Star, module: 'avaliacoes-admin', group: 'analysis' },
+  // Horários
+  { href: '/avaliacoes-admin', label: 'Gerar Novo Horário', icon: Clock, module: 'horarios', group: 'horarios' },
+  { href: '/emitir-certificado', label: 'Horários Salvos', icon: Save, module: 'horarios', group: 'horarios' },
 
-  // Certification group
-  { href: '/emitir-certificado', label: 'Emitir Certificado', icon: Award, module: 'emitir-certificado', group: 'certification' },
-
-  // Management group
+  // Gestão
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
 ];
 
 const linkGroups = [
-    { id: 'analysis', label: 'Análise de Dados' },
-    { id: 'certification', label: 'Certificação' },
+    { id: 'dados_horario', label: 'Dados do Horário' },
+    { id: 'horarios', label: 'Horários' },
     { id: 'management', label: 'Gestão' },
 ];
 
@@ -54,6 +53,18 @@ export function MainNav({ profile }: { profile: Profile | null }) {
   const hasAccess = (module: string) => {
       if (profile?.role === 'admin') return true;
       if (module === 'dashboard') return true;
+      
+      const groupModules: {[key: string]: string[]} = {
+        'dados-horario': ['unidades-escolares', 'professores', 'disciplinas', 'turmas', 'restricoes'],
+        'horarios': ['horarios']
+      };
+
+      for (const group in groupModules) {
+        if (groupModules[group].includes(module)) {
+          return profile?.modules?.includes(group) || false;
+        }
+      }
+
       return profile?.modules?.includes(module) || false;
   }
 

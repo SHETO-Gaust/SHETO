@@ -2,6 +2,8 @@ import { AuthForm } from '@/components/auth-form';
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import Image from 'next/image';
+import { Sun } from 'lucide-react';
 
 export default async function LoginPage() {
   const cookieStore = cookies();
@@ -15,15 +17,37 @@ export default async function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <main className="flex flex-1 flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md">
+    <div className="grid min-h-screen grid-cols-1 md:grid-cols-2">
+      <div className="flex flex-col items-center justify-center p-8 bg-background">
+        <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
+          <div className="flex flex-col space-y-2 text-center">
+             <div className="flex items-center justify-center gap-2 text-2xl font-bold">
+                <Sun className="h-6 w-6 text-orange-500" />
+                <h1 className="font-bold">RedeGrade TO</h1>
+            </div>
+            <p className="text-muted-foreground">
+              Entre com seu email para acessar o painel da SEDUC-TO.
+            </p>
+          </div>
           <AuthForm />
         </div>
-      </main>
-      <footer className="border-t p-4 text-center text-xs text-muted-foreground">
-      Desenvolvido pela Diretoria de Tecnologia e Inovação Educacional da Seduc Tocantins - Todos os direitos reservados © 2026
-      </footer>
+      </div>
+      <div className="relative hidden bg-muted md:block">
+        <Image
+          src="https://picsum.photos/seed/classroom/1200/1800"
+          alt="Sala de aula antiga"
+          fill
+          className="object-cover"
+          data-ai-hint="classroom empty"
+        />
+        <div className="absolute inset-0 bg-blue-950/60" />
+        <div className="absolute bottom-10 left-10 text-white bg-black/30 p-6 rounded-lg backdrop-blur-sm max-w-md">
+          <h2 className="text-3xl font-bold">RedeGrade TO</h2>
+          <p className="mt-2 text-white/90">
+            Inovando a gestão educacional no Tocantins com tecnologia e inteligência.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
