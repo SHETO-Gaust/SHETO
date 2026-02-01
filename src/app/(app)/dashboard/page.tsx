@@ -1,3 +1,5 @@
+'use client';
+
 import { StepCard } from '@/components/dashboard/step-card';
 import { Sun, GraduationCap, BookOpen, Users, Layers, Users2, Clock, BarChart3 } from 'lucide-react';
 
