@@ -56,9 +56,7 @@ const turnoFormSchema = z.object({
   id: z.string().optional(),
   escola_id: z.string(),
   nome: z.string().min(3, { message: "O nome deve ter pelo menos 3 caracteres." }),
-  dias_semana: z.array(z.string()).refine((value) => value.some((item) => item), {
-    message: "Você deve selecionar pelo menos um dia da semana.",
-  }),
+  dias_semana: z.array(z.string()),
   aulas_por_dia: z.coerce.number().min(1, { message: "Deve haver pelo menos 1 aula por dia." }),
 });
 
@@ -129,11 +127,11 @@ export function EditTurnoSheet({ isOpen, setIsOpen, turno, escolaId, onTurnoUpda
                 id: turno?.id,
                 escola_id: escolaId,
                 nome: turno?.nome || '',
-                dias_semana: turno?.dias_semana?.length ? turno.dias_semana : ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
-                aulas_por_dia: turno?.aulas_por_dia || 5,
+                dias_semana: isEditMode ? (turno.dias_semana ?? []) : ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
+                aulas_por_dia: isEditMode ? (turno.aulas_por_dia || 5) : 5,
             });
         }
-    }, [isOpen, turno, escolaId, form]);
+    }, [isOpen, turno, escolaId, form, isEditMode]);
 
     const aulasPorDia = form.watch('aulas_por_dia');
     const diasSelecionados = form.watch('dias_semana');
@@ -214,9 +212,9 @@ export function EditTurnoSheet({ isOpen, setIsOpen, turno, escolaId, onTurnoUpda
                                                         checked={field.value?.includes(item.id)}
                                                         onCheckedChange={(checked) => {
                                                         return checked
-                                                            ? field.onChange([...field.value, item.id])
+                                                            ? field.onChange([...(field.value || []), item.id])
                                                             : field.onChange(
-                                                                field.value?.filter(
+                                                                (field.value || []).filter(
                                                                 (value) => value !== item.id
                                                                 )
                                                             )
