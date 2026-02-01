@@ -51,7 +51,7 @@ const upsertTurnoSchema = z.object({
     id: z.string().optional(),
     escola_id: z.string(),
     nome: z.string().min(3, 'O nome deve ter pelo menos 3 caracteres.'),
-    dias_semana: z.array(z.string()).min(1, 'Selecione pelo menos um dia da semana.'),
+    dias_semana: z.array(z.string()),
     aulas_por_dia: z.coerce.number().min(1, 'Deve haver pelo menos 1 aula por dia.'),
 });
 
