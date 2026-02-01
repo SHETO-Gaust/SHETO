@@ -23,6 +23,14 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
@@ -35,14 +43,14 @@ import type { Turno } from '@/lib/types';
    CONSTANTS
 ======================= */
 
-const DIAS_SEMANA = [
-  { id: 'domingo', label: 'Domingo' },
+const DIAS_SEMANA_ALL = [
   { id: 'segunda', label: 'Segunda-feira' },
   { id: 'terca', label: 'Terça-feira' },
   { id: 'quarta', label: 'Quarta-feira' },
   { id: 'quinta', label: 'Quinta-feira' },
   { id: 'sexta', label: 'Sexta-feira' },
   { id: 'sabado', label: 'Sábado' },
+  { id: 'domingo', label: 'Domingo' },
 ];
 
 /* =======================
@@ -51,10 +59,10 @@ const DIAS_SEMANA = [
 
 const formSchema = z.object({
   id: z.string().optional(),
-  escola_id: z.string(),
-  nome: z.string().min(3),
-  dias_semana: z.array(z.string()),
-  aulas_por_dia: z.coerce.number().min(1),
+  escola_id: z.string().min(1, 'ID da escola é obrigatório'),
+  nome: z.string().min(3, 'O nome deve ter pelo menos 3 caracteres'),
+  dias_semana: z.array(z.string()).default([]), // Allow empty array
+  aulas_por_dia: z.coerce.number().min(1, 'Mínimo de 1 aula'),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -65,6 +73,47 @@ type Props = {
   turno: Turno | null;
   escolaId: string;
   onTurnoUpdated: (turno: Turno) => void;
+};
+
+const PreviewTable = ({ dias, aulas }: { dias: string[]; aulas: number }) => {
+  const orderedSelectedDias = DIAS_SEMANA_ALL.filter(d => dias.includes(d.id));
+
+  if (!dias || dias.length === 0 || !aulas || aulas < 1) {
+    return (
+      <div className="text-center text-muted-foreground p-4 border-dashed border rounded-lg">
+        Selecione os dias e a quantidade de aulas para ver a prévia.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[80px]">Aula</TableHead>
+            {orderedSelectedDias.map(dia => (
+              <TableHead key={dia.id} className="text-center">
+                {dia.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: aulas }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell className="font-medium">{index + 1}ª Aula</TableCell>
+              {orderedSelectedDias.map(dia => (
+                <TableCell key={dia.id} className="text-center text-green-500">
+                  ✔
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 };
 
 export function EditTurnoSheet({
@@ -84,10 +133,13 @@ export function EditTurnoSheet({
     defaultValues: {
       escola_id: escolaId,
       nome: '',
-      dias_semana: [],
+      dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'],
       aulas_por_dia: 5,
     },
   });
+
+  const watchedDias = form.watch('dias_semana');
+  const watchedAulas = form.watch('aulas_por_dia');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -96,34 +148,43 @@ export function EditTurnoSheet({
       id: turno?.id,
       escola_id: escolaId,
       nome: turno?.nome ?? '',
-      dias_semana: turno?.dias_semana ?? [],
+      dias_semana:
+        turno?.dias_semana ??
+        (isEdit ? [] : ['segunda', 'terca', 'quarta', 'quinta', 'sexta']),
       aulas_por_dia: turno?.aulas_por_dia ?? 5,
     });
-  }, [isOpen, turno, escolaId, form]);
+  }, [isOpen, turno, escolaId, form, isEdit]);
 
   const onSubmit = async (data: FormValues) => {
     setLoading(true);
+    try {
+      const result = await upsertTurno(data);
 
-    const result = await upsertTurno(data);
+      if (result?.error) {
+        toast({
+          title: 'Erro',
+          description: result.error,
+          variant: 'destructive',
+        });
+        return;
+      }
 
-    setLoading(false);
-
-    if (result?.error) {
       toast({
-        title: 'Erro',
-        description: result.error,
+        title: isEdit ? 'Turno atualizado' : 'Turno criado',
+        description: `Turno "${data.nome}" salvo com sucesso.`,
+      });
+
+      onTurnoUpdated(result.data);
+      setIsOpen(false);
+    } catch (error) {
+      toast({
+        title: 'Erro inesperado',
+        description: 'Ocorreu um erro ao salvar o turno.',
         variant: 'destructive',
       });
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    toast({
-      title: isEdit ? 'Turno atualizado' : 'Turno criado',
-      description: `Turno "${data.nome}" salvo com sucesso.`,
-    });
-
-    onTurnoUpdated(result.data);
-    setIsOpen(false);
   };
 
   return (
@@ -131,85 +192,113 @@ export function EditTurnoSheet({
       <SheetContent className="sm:max-w-2xl flex flex-col">
         <SheetHeader>
           <SheetTitle>{isEdit ? 'Editar Turno' : 'Novo Turno'}</SheetTitle>
-          <SheetDescription>
-            Configure os dados do turno
-          </SheetDescription>
+          <SheetDescription>Configure os dados do turno</SheetDescription>
         </SheetHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col justify-between">
-            <div className="flex-1 space-y-6 overflow-y-auto py-6 pr-4">
-              <FormField
-                control={form.control}
-                name="nome"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Ex: Matutino" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex-1 overflow-y-auto pr-4 py-4 space-y-6"
+          >
+            <FormField
+              control={form.control}
+              name="nome"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="Ex: Matutino" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <Separator />
+            <FormField
+              control={form.control}
+              name="dias_semana"
+              render={() => (
+                <FormItem>
+                  <FormLabel>Dias da semana</FormLabel>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 pt-2">
+                    {DIAS_SEMANA_ALL.map(dia => (
+                      <FormField
+                        key={dia.id}
+                        control={form.control}
+                        name="dias_semana"
+                        render={({ field }) => {
+                          return (
+                            <FormItem
+                              key={dia.id}
+                              className="flex flex-row items-start space-x-3 space-y-0"
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(dia.id)}
+                                  onCheckedChange={checked => {
+                                    return checked
+                                      ? field.onChange([
+                                          ...(field.value || []),
+                                          dia.id,
+                                        ])
+                                      : field.onChange(
+                                          field.value?.filter(
+                                            value => value !== dia.id
+                                          )
+                                        );
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                {dia.label}
+                              </FormLabel>
+                            </FormItem>
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <FormField
-                control={form.control}
-                name="dias_semana"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dias da semana</FormLabel>
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      {DIAS_SEMANA.map((dia) => (
-                        <div key={dia.id} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={field.value.includes(dia.id)}
-                            onCheckedChange={(checked) => {
-                              checked
-                                ? field.onChange([...field.value, dia.id])
-                                : field.onChange(field.value.filter(d => d !== dia.id));
-                            }}
-                          />
-                          <span>{dia.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <FormField
+              control={form.control}
+              name="aulas_por_dia"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Aulas por dia</FormLabel>
+                  <FormControl>
+                    <Input type="number" min={1} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <Separator />
+            <Separator />
 
-              <FormField
-                control={form.control}
-                name="aulas_por_dia"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Aulas por dia</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={1} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <div className="space-y-2">
+              <Label>Pré-visualização da Estrutura</Label>
+              <PreviewTable dias={watchedDias} aulas={watchedAulas} />
             </div>
-            
-            <SheetFooter className="mt-auto border-t pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar
-              </Button>
-            </SheetFooter>
           </form>
         </Form>
 
+        <SheetFooter className="mt-auto border-t pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsOpen(false)}
+          >
+            Cancelar
+          </Button>
+          <Button onClick={form.handleSubmit(onSubmit)} disabled={loading}>
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Salvar
+          </Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );
