@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -106,8 +105,8 @@ export function EditEnsinoSheet({ isOpen, setIsOpen, nivelEnsino, escolaId, onNi
         </SheetHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 space-y-6 overflow-y-auto p-1">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto py-4">
+            <div className="space-y-6 px-1">
               <FormField
                 control={form.control}
                 name="nome"
@@ -131,16 +130,16 @@ export function EditEnsinoSheet({ isOpen, setIsOpen, nivelEnsino, escolaId, onNi
                 )}
               />
             </div>
-            <SheetFooter className="mt-auto border-t pt-4">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Salvar'}
-              </Button>
-            </SheetFooter>
           </form>
         </Form>
+        <SheetFooter className="mt-auto border-t pt-4">
+          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={form.handleSubmit(onSubmit)} disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Salvar'}
+          </Button>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );
