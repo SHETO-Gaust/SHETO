@@ -45,12 +45,17 @@ const horariosFormSchema = z.object({
   id: z.string(),
   horarios: z.array(horarioAulaSchema),
 }).refine(data => {
+    // Valida se todos os campos estão preenchidos
+    for (const aula of data.horarios) {
+        if (!aula.inicio || !aula.fim) return false;
+    }
+    // Valida se o início é antes do fim
     for (const aula of data.horarios) {
         if (aula.inicio >= aula.fim) return false;
     }
     return true;
 }, {
-    message: 'O horário de início de uma aula não pode ser depois do horário de fim.',
+    message: 'Todos os horários devem ser preenchidos e o início deve ser anterior ao fim.',
     path: ['horarios'],
 });
 
@@ -69,23 +74,26 @@ export function HorariosTurnoSheet({ isOpen, setIsOpen, turno, onHorariosUpdated
         }
     });
 
-    const { fields, append, remove } = useFieldArray({
+    const { fields, replace } = useFieldArray({
         control: form.control,
         name: "horarios",
     });
 
     useEffect(() => {
         if (isOpen) {
+            const aulasPorDia = turno.aulas_por_dia || 5;
+            const existingHorarios = turno.horarios || [];
+            const newHorarios = Array.from({ length: aulasPorDia }, (_, i) => {
+                return existingHorarios[i] || { id: `aula_${i + 1}`, inicio: '', fim: '' };
+            });
+
             form.reset({
                 id: turno.id,
-                horarios: turno.horarios || [],
+                horarios: newHorarios,
             });
         }
     }, [isOpen, turno, form]);
 
-    const addAula = () => {
-        append({ id: `new_${Date.now()}`, inicio: '', fim: '' });
-    };
 
     const onSubmit = async (data: HorariosFormValues) => {
         setLoading(true);
@@ -127,7 +135,10 @@ export function HorariosTurnoSheet({ isOpen, setIsOpen, turno, onHorariosUpdated
                     <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col">
                          <div className="flex-1 overflow-y-auto p-1 space-y-4">
                             {fields.map((field, index) => (
-                                <div key={field.id} className="flex items-end gap-2 p-3 border rounded-lg">
+                                <div key={field.id} className="flex items-end gap-3 p-3 border rounded-lg">
+                                    <div className="flex-none font-medium w-16 text-center text-sm pt-7">
+                                        {index + 1}ª Aula
+                                    </div>
                                     <div className="grid grid-cols-2 gap-2 flex-1">
                                         <FormField
                                             control={form.control}
@@ -150,20 +161,12 @@ export function HorariosTurnoSheet({ isOpen, setIsOpen, turno, onHorariosUpdated
                                             )}
                                         />
                                     </div>
-                                    <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                                        <Trash2 className="h-5 w-5 text-destructive" />
-                                    </Button>
                                 </div>
                             ))}
 
                              {errors.horarios?.root && (
                                 <p className="text-sm font-medium text-destructive px-1">{errors.horarios.root.message}</p>
                             )}
-                            
-                            <Button type="button" variant="outline" className="w-full" onClick={addAula}>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Adicionar Aula
-                            </Button>
                          </div>
                     </form>
                 </Form>

@@ -32,6 +32,8 @@ export type Turno = {
   escola_id: string;
   nome: string;
   ativo: boolean;
+  dias_semana: string[];
+  aulas_por_dia: number;
   horarios: HorarioAula[];
   created_at: string;
 };

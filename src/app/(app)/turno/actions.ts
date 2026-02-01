@@ -27,9 +27,9 @@ export async function getTurnos(escolaId: string): Promise<{ data?: Turno[], err
   if (data.length === 0) {
     // Primeira vez acessando, cria os turnos padrão
     const defaultTurnos = [
-      { nome: 'Matutino', escola_id: escolaId, ativo: true },
-      { nome: 'Vespertino', escola_id: escolaId, ativo: true },
-      { nome: 'Noturno', escola_id: escolaId, ativo: false },
+      { nome: 'Matutino', escola_id: escolaId, ativo: true, aulas_por_dia: 5, dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'] },
+      { nome: 'Vespertino', escola_id: escolaId, ativo: true, aulas_por_dia: 5, dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'] },
+      { nome: 'Noturno', escola_id: escolaId, ativo: false, aulas_por_dia: 4, dias_semana: ['segunda', 'terca', 'quarta', 'quinta', 'sexta'] },
     ];
     const { data: newTurnos, error: insertError } = await supabase
       .from('turnos')
@@ -51,6 +51,8 @@ const upsertTurnoSchema = z.object({
     id: z.string().optional(),
     escola_id: z.string(),
     nome: z.string().min(3, 'O nome deve ter pelo menos 3 caracteres.'),
+    dias_semana: z.array(z.string()).min(1, 'Selecione pelo menos um dia da semana.'),
+    aulas_por_dia: z.coerce.number().min(1, 'Deve haver pelo menos 1 aula por dia.'),
 });
 
 /**
@@ -69,11 +71,11 @@ export async function upsertTurno(formData: z.infer<typeof upsertTurnoSchema>) {
         };
     }
     
-    const { id, escola_id, nome } = validatedFields.data;
+    const { id, escola_id, nome, dias_semana, aulas_por_dia } = validatedFields.data;
 
     const { data, error } = await supabase
         .from('turnos')
-        .upsert({ id, escola_id, nome }, { onConflict: 'id' })
+        .upsert({ id, escola_id, nome, dias_semana, aulas_por_dia }, { onConflict: 'id' })
         .select()
         .single();
     
