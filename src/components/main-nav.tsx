@@ -26,11 +26,11 @@ const allLinks = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard, module: 'dashboard' },
 
   // Dados do Horário
-  { href: '/metricas-gerais', label: 'Unidades Escolares', icon: Building2, module: 'unidades-escolares', group: 'dados_horario' },
-  { href: '/formacoes', label: 'Professores', icon: Users, module: 'professores', group: 'dados_horario' },
-  { href: '/gerenciamento', label: 'Disciplinas', icon: BookOpen, module: 'disciplinas', group: 'dados_horario' },
-  { href: '/ensalamentos', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados_horario' },
-  { href: '/relatorios', label: 'Restrições', icon: Ban, module: 'restricoes', group: 'dados_horario' },
+  { href: '/metricas-gerais', label: 'Unidades Escolares', icon: Building2, module: 'unidades-escolares', group: 'dados-horario' },
+  { href: '/formacoes', label: 'Professores', icon: Users, module: 'professores', group: 'dados-horario' },
+  { href: '/gerenciamento', label: 'Disciplinas', icon: BookOpen, module: 'disciplinas', group: 'dados-horario' },
+  { href: '/ensalamentos', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados-horario' },
+  { href: '/relatorios', label: 'Restrições', icon: Ban, module: 'restricoes', group: 'dados-horario' },
   
   // Horários
   { href: '/avaliacoes-admin', label: 'Gerar Novo Horário', icon: Clock, module: 'horarios', group: 'horarios' },
@@ -41,7 +41,7 @@ const allLinks = [
 ];
 
 const linkGroups = [
-    { id: 'dados_horario', label: 'Dados do Horário' },
+    { id: 'dados-horario', label: 'Dados do Horário' },
     { id: 'horarios', label: 'Horários' },
     { id: 'management', label: 'Gestão' },
 ];

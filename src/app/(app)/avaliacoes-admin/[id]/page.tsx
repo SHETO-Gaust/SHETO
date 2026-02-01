@@ -1,13 +1,4 @@
-import { notFound } from 'next/navigation';
-import * as actions from '../actions';
-import { AvaliacaoDashboard } from './avaliacao-dashboard';
 
-export default async function AvaliacaoDetalhesPage({ params }: { params: { id: string } }) {
-    const details = await actions.getAvaliacaoDetails(params.id);
-
-    if (!details) {
-        notFound();
-    }
-    
-    return <AvaliacaoDashboard details={details} />;
+export default function DeprecatedPage() {
+    return null;
 }

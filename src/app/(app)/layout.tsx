@@ -51,7 +51,7 @@ export default async function AppLayout({
   if (user) {
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('*, escolas(*)')
+        .select(`*, escolas(*)`)
         .eq('id', user.id)
         .single();
       userProfile = profileData as Profile;
@@ -77,7 +77,6 @@ export default async function AppLayout({
       } else if (moduleName === 'dashboard') {
         hasPermission = true;
       } else {
-        // For grouped modules, check if user has access to the parent module key
         const groupModule = moduleName === 'unidades-escolares' || moduleName === 'professores' || moduleName === 'disciplinas' || moduleName === 'turmas' || moduleName === 'restricoes' ? 'dados-horario'
                             : moduleName === 'horarios' ? 'horarios' : null;
 
