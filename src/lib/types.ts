@@ -15,8 +15,23 @@ export type Profile = {
   email: string;
   role?: ProfileRole;
   modules?: string[];
-  ue?: string | null;
+  ue?: string | null; // uuid da escola
   escolas?: Partial<Escola> | null;
   created_at: string; // timestamp with time zone
   updated_at: string; // timestamp with time zone
+};
+
+export type HorarioAula = {
+  id: string;
+  inicio: string; // "HH:mm"
+  fim: string; // "HH:mm"
+};
+
+export type Turno = {
+  id: string;
+  escola_id: string;
+  nome: string;
+  ativo: boolean;
+  horarios: HorarioAula[];
+  created_at: string;
 };
