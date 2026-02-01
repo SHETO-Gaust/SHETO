@@ -103,12 +103,12 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
 
                     <div className="space-y-2">
                         <Label htmlFor="school-select">Escola Vinculada</Label>
-                         <Select value={selectedSchool || ''} onValueChange={(value) => setSelectedSchool(value === '' ? null : value)} disabled={isAdmin}>
+                         <Select value={selectedSchool || ''} onValueChange={(value) => setSelectedSchool(value === 'null' ? null : value)} disabled={isAdmin}>
                             <SelectTrigger id="school-select">
                                 <SelectValue placeholder="Selecione uma escola" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">Nenhuma</SelectItem>
+                                <SelectItem value="null">Nenhuma</SelectItem>
                                 {allEscolas.map(escola => (
                                     <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
                                 ))}

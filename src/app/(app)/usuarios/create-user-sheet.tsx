@@ -41,7 +41,7 @@ const createUserFormSchema = z.object({
   password: z.string().min(6, { message: "A senha deve ter no mínimo 6 caracteres." }),
   role: z.enum(['admin', 'user']),
   modules: z.array(z.string()).optional(),
-  ue: z.string().optional(),
+  ue: z.string().nullable().optional(),
 });
 
 type CreateUserFormValues = z.infer<typeof createUserFormSchema>;
@@ -81,7 +81,8 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: C
 
     const onSubmit = async (data: CreateUserFormValues) => {
         setLoading(true);
-        const payload = { ...data, modules: data.role === 'admin' ? [] : data.modules || [], ue: data.role === 'admin' ? null : data.ue };
+        const ueValue = data.role === 'admin' ? null : (data.ue === 'null' ? null : data.ue);
+        const payload = { ...data, modules: data.role === 'admin' ? [] : data.modules || [], ue: ueValue };
         const result = await createUser(payload as any);
         setLoading(false);
 
@@ -183,7 +184,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: C
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
-                                            <SelectItem value="">Nenhuma</SelectItem>
+                                            <SelectItem value="null">Nenhuma</SelectItem>
                                             {allEscolas.map(escola => (
                                                 <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
                                             ))}
