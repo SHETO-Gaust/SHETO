@@ -73,7 +73,7 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
                     <div className="hidden lg:flex items-center gap-x-4 gap-y-1 text-xs text-muted-foreground border-l pl-4 flex-wrap">
                         <span>INEP: <span className="font-semibold text-foreground">{currentSchool.inep || 'N/A'}</span></span>
                         <span>Regional: <span className="font-semibold text-foreground">{currentSchool.regional || 'N/A'}</span></span>
-                        <span>Município: <span className="font-semibold text-foreground">{currentSchool.municipio || 'N/A'}</span></span>
+                        <span>Município: <span className="font-semibold text-foreground">{currentSchool.cidade || 'N/A'}</span></span>
                     </div>
                 )}
             </div>
@@ -91,7 +91,7 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
                  <div className="hidden lg:flex items-center gap-x-4 gap-y-1 text-xs text-muted-foreground border-l pl-4 flex-wrap">
                     <span>INEP: <span className="font-semibold text-foreground">{currentSchool.inep || 'N/A'}</span></span>
                     <span>Regional: <span className="font-semibold text-foreground">{currentSchool.regional || 'N/A'}</span></span>
-                    <span>Município: <span className="font-semibold text-foreground">{currentSchool.municipio || 'N/A'}</span></span>
+                    <span>Município: <span className="font-semibold text-foreground">{currentSchool.cidade || 'N/A'}</span></span>
                 </div>
             )}
         </div>

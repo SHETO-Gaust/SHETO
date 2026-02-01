@@ -2,6 +2,7 @@
 
 
 
+
 export type SetupData = {
     formationId: string;
     roomCount: number;
@@ -124,7 +125,7 @@ export type Escola = {
   id: string;
   escolar: string;
   regional?: string | null;
-  municipio?: string | null;
+  cidade?: string | null;
   inep?: string | null;
 };
 
