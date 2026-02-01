@@ -207,3 +207,20 @@ export async function updateTurnoHorarios(
   revalidatePath('/turno');
   return { success: true };
 }
+
+/* -------------------------------------------------------------------------- */
+/*                                DELETE TURNO                                */
+/* -------------------------------------------------------------------------- */
+export async function deleteTurno(id: string) {
+  const supabase = createClient(cookies());
+
+  const { error } = await supabase.from('turnos').delete().eq('id', id);
+
+  if (error) {
+    console.error('Error deleting turno:', error);
+    return { error: 'Não foi possível deletar o turno.' };
+  }
+
+  revalidatePath('/turno');
+  return { success: true };
+}
