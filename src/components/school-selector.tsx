@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 
 type SchoolSelectorProps = {
     userProfile: Profile;
-    allEscolas: Pick<Escola, 'id' | 'escolar'>[];
+    allEscolas: Escola[];
 };
 
 export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps) {
@@ -46,35 +46,54 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
         }
     };
     
-    const currentSchoolName = allEscolas.find(s => s.id === currentSchoolId)?.escolar || userProfile.escolas?.escolar || 'Nenhuma escola selecionada';
+    const currentSchool = allEscolas.find(s => s.id === currentSchoolId) || (userProfile.escolas as Escola | null);
+    const currentSchoolName = currentSchool?.escolar || 'Nenhuma escola selecionada';
 
     // If user is an admin, show a dropdown to switch schools.
     if (userProfile.role === 'admin') {
         return (
-            <div className="flex items-center gap-2 max-w-sm">
-                {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Building2 className="h-5 w-5 text-muted-foreground" />}
-                <Select value={currentSchoolId} onValueChange={handleSchoolChange} disabled={isPending}>
-                    <SelectTrigger className="w-auto border-none bg-transparent shadow-none focus:ring-0 truncate">
-                        <SelectValue placeholder="Selecione uma escola..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                         <SelectItem value="null">Visualização Geral (Admin)</SelectItem>
-                        {allEscolas.map(escola => (
-                            <SelectItem key={escola.id} value={escola.id}>
-                                {escola.escolar}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+            <div className="flex items-center gap-4 w-full">
+                <div className="flex items-center gap-2 max-w-xs shrink-0">
+                    {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Building2 className="h-5 w-5 text-muted-foreground" />}
+                    <Select value={currentSchoolId || 'null'} onValueChange={handleSchoolChange} disabled={isPending}>
+                        <SelectTrigger className="w-full border-none bg-transparent shadow-none focus:ring-0 truncate">
+                            <SelectValue placeholder="Selecione uma escola..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                             <SelectItem value="null">Visualização Geral (Admin)</SelectItem>
+                            {allEscolas.map(escola => (
+                                <SelectItem key={escola.id} value={escola.id}>
+                                    {escola.escolar}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                {currentSchool && (
+                    <div className="hidden lg:flex items-center gap-x-4 gap-y-1 text-xs text-muted-foreground border-l pl-4 flex-wrap">
+                        <span>INEP: <span className="font-semibold text-foreground">{currentSchool.inep || 'N/A'}</span></span>
+                        <span>Regional: <span className="font-semibold text-foreground">{currentSchool.regional || 'N/A'}</span></span>
+                        <span>Município: <span className="font-semibold text-foreground">{currentSchool.municipio || 'N/A'}</span></span>
+                    </div>
+                )}
             </div>
         );
     }
     
     // For non-admins, just display their associated school.
     return (
-        <div className="flex items-center gap-2 p-2">
-            <Building2 className="h-5 w-5 text-muted-foreground" />
-            <span className="font-medium text-sm text-foreground truncate">{currentSchoolName}</span>
+        <div className="flex items-center gap-4 p-2">
+             <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+                <span className="font-medium text-sm text-foreground truncate">{currentSchoolName}</span>
+            </div>
+             {currentSchool && (
+                 <div className="hidden lg:flex items-center gap-x-4 gap-y-1 text-xs text-muted-foreground border-l pl-4 flex-wrap">
+                    <span>INEP: <span className="font-semibold text-foreground">{currentSchool.inep || 'N/A'}</span></span>
+                    <span>Regional: <span className="font-semibold text-foreground">{currentSchool.regional || 'N/A'}</span></span>
+                    <span>Município: <span className="font-semibold text-foreground">{currentSchool.municipio || 'N/A'}</span></span>
+                </div>
+            )}
         </div>
     );
 }

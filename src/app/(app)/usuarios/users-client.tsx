@@ -29,7 +29,7 @@ const allModules = [
 ];
 
 
-export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profile[], allEscolas: Pick<Escola, 'id' | 'escolar'>[] }) {
+export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profile[], allEscolas: Escola[] }) {
     const [users, setUsers] = useState(initialUsers);
     const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
     const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);

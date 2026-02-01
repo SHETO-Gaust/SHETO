@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -50,7 +50,7 @@ type CreateUserSheetProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   allModules: Module[];
-  allEscolas: Pick<Escola, 'id' | 'escolar'>[];
+  allEscolas: Escola[];
 };
 
 export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: CreateUserSheetProps) {
@@ -70,6 +70,14 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: C
 
     const role = form.watch('role');
     const isAdmin = role === 'admin';
+
+    const [selectedRegional, setSelectedRegional] = useState('');
+    const regionais = useMemo(() => [...new Set(allEscolas.map(e => e.regional).filter(Boolean).sort((a,b) => (a || '').localeCompare(b || '')))], [allEscolas]);
+
+    const escolasFiltradas = useMemo(() => {
+        if (!selectedRegional) return [];
+        return allEscolas.filter(e => e.regional === selectedRegional);
+    }, [allEscolas, selectedRegional]);
     
     const handleModuleToggle = (moduleId: string) => {
         const currentModules = form.getValues('modules') || [];
@@ -171,21 +179,38 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: C
                             )}
                         />
                         
+                         <div className="space-y-2">
+                            <Label>Regional</Label>
+                            <Select onValueChange={(value) => {
+                                setSelectedRegional(value);
+                                form.setValue('ue', undefined, { shouldValidate: true });
+                            }} value={selectedRegional} disabled={isAdmin}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione uma regional" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {regionais.map(regional => (
+                                        <SelectItem key={regional} value={regional!}>{regional}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        
                          <FormField
                             control={form.control}
                             name="ue"
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Escola Vinculada</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isAdmin}>
+                                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isAdmin || !selectedRegional}>
                                         <FormControl>
                                             <SelectTrigger>
-                                                <SelectValue placeholder="Selecione uma escola" />
+                                                <SelectValue placeholder={!selectedRegional ? 'Selecione uma regional primeiro' : 'Selecione uma escola'} />
                                             </SelectTrigger>
                                         </FormControl>
                                         <SelectContent>
                                             <SelectItem value="null">Nenhuma</SelectItem>
-                                            {allEscolas.map(escola => (
+                                            {escolasFiltradas.map(escola => (
                                                 <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
                                             ))}
                                         </SelectContent>

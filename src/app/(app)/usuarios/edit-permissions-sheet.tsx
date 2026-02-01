@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { Profile, Escola } from '@/lib/types';
 import {
   Sheet,
@@ -29,7 +29,7 @@ type EditUserPermissionsSheetProps = {
   user: Profile;
   allModules: Module[];
   onUserUpdate: (updatedUser: Profile) => void;
-  allEscolas: Pick<Escola, 'id' | 'escolar'>[];
+  allEscolas: Escola[];
 };
 
 export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, onUserUpdate, allEscolas }: EditUserPermissionsSheetProps) {
@@ -38,14 +38,27 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
     const [selectedModules, setSelectedModules] = useState<string[]>([]);
     const [selectedRole, setSelectedRole] = useState<'admin' | 'user'>('user');
     const [selectedSchool, setSelectedSchool] = useState<string | null | undefined>(null);
+    const [selectedRegional, setSelectedRegional] = useState('');
+
+    const regionais = useMemo(() => [...new Set(allEscolas.map(e => e.regional).filter(Boolean).sort((a,b) => (a || '').localeCompare(b || '')))], [allEscolas]);
+    const escolasFiltradas = useMemo(() => {
+        if (!selectedRegional) return [];
+        return allEscolas.filter(e => e.regional === selectedRegional);
+    }, [allEscolas, selectedRegional]);
 
     useEffect(() => {
         if (user) {
             setSelectedModules(user.modules || []);
             setSelectedRole(user.role || 'user');
             setSelectedSchool(user.ue);
+            const userSchool = allEscolas.find(e => e.id === user.ue);
+            if (userSchool?.regional) {
+                setSelectedRegional(userSchool.regional);
+            } else {
+                setSelectedRegional('');
+            }
         }
-    }, [user]);
+    }, [user, allEscolas]);
 
     const handleModuleToggle = (moduleId: string) => {
         setSelectedModules(prev =>
@@ -102,14 +115,31 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                     </div>
 
                     <div className="space-y-2">
+                        <Label htmlFor="regional-select">Regional</Label>
+                        <Select value={selectedRegional} onValueChange={(value) => {
+                            setSelectedRegional(value);
+                            setSelectedSchool(null);
+                        }} disabled={isAdmin}>
+                            <SelectTrigger id="regional-select">
+                                <SelectValue placeholder="Selecione uma regional" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {regionais.map(regional => (
+                                    <SelectItem key={regional} value={regional!}>{regional}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-2">
                         <Label htmlFor="school-select">Escola Vinculada</Label>
-                         <Select value={selectedSchool || ''} onValueChange={(value) => setSelectedSchool(value === 'null' ? null : value)} disabled={isAdmin}>
+                         <Select value={selectedSchool || ''} onValueChange={(value) => setSelectedSchool(value === 'null' ? null : value)} disabled={isAdmin || !selectedRegional}>
                             <SelectTrigger id="school-select">
-                                <SelectValue placeholder="Selecione uma escola" />
+                                <SelectValue placeholder={!selectedRegional ? 'Selecione uma regional primeiro' : 'Selecione uma escola'} />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="null">Nenhuma</SelectItem>
-                                {allEscolas.map(escola => (
+                                {escolasFiltradas.map(escola => (
                                     <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
                                 ))}
                             </SelectContent>

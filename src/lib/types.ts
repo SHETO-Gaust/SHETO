@@ -1,6 +1,7 @@
 
 
 
+
 export type SetupData = {
     formationId: string;
     roomCount: number;
@@ -122,6 +123,9 @@ export type ProfileRole = 'admin' | 'user';
 export type Escola = {
   id: string;
   escolar: string;
+  regional?: string | null;
+  municipio?: string | null;
+  inep?: string | null;
 };
 
 export type Profile = {

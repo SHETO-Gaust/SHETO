@@ -51,7 +51,7 @@ export default async function AppLayout({
   if (user) {
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('*, escolas(id, escolar)')
+        .select('*, escolas(*)')
         .eq('id', user.id)
         .single();
       userProfile = profileData as Profile;
@@ -59,9 +59,9 @@ export default async function AppLayout({
   
   const { data: allEscolasData } = await supabase
     .from('escolas')
-    .select('id, escolar')
+    .select('*')
     .order('escolar', { ascending: true });
-  const allEscolas = allEscolasData as Pick<Escola, 'id' | 'escolar'>[] || [];
+  const allEscolas = allEscolasData as Escola[] || [];
 
 
   const pathname = headers().get('x-next-url') || '';

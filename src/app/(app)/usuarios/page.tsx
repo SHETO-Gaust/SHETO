@@ -12,9 +12,9 @@ export default async function UsuariosPage() {
     const supabase = createClient(cookieStore);
     const { data: allEscolasData } = await supabase
         .from('escolas')
-        .select('id, escolar')
+        .select('*')
         .order('escolar', { ascending: true });
-    const allEscolas = allEscolasData as Pick<Escola, 'id' | 'escolar'>[] || [];
+    const allEscolas = allEscolasData as Escola[] || [];
 
 
     return (
