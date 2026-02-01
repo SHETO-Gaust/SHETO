@@ -38,6 +38,7 @@ import { Loader2 } from 'lucide-react';
 
 import { upsertTurno } from './actions';
 import type { Turno } from '@/lib/types';
+import { Label } from '@/components/ui/label';
 
 /* =======================
    CONSTANTS
