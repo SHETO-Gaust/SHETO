@@ -1,4 +1,5 @@
 
+
 export type ProfileRole = 'admin' | 'user';
 
 export type Escola = {
@@ -36,4 +37,12 @@ export type Turno = {
   aulas_por_dia: number;
   horarios: HorarioAula[];
   created_at: string;
+};
+
+export type NivelEnsino = {
+    id: string;
+    escola_id: string;
+    nome: string;
+    sigla: string;
+    created_at: string;
 };
