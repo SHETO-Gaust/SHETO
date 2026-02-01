@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { Profile } from '@/lib/types';
+import type { Profile, Escola } from '@/lib/types';
 import {
   Sheet,
   SheetContent,
@@ -29,18 +29,21 @@ type EditUserPermissionsSheetProps = {
   user: Profile;
   allModules: Module[];
   onUserUpdate: (updatedUser: Profile) => void;
+  allEscolas: Pick<Escola, 'id' | 'escolar'>[];
 };
 
-export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, onUserUpdate }: EditUserPermissionsSheetProps) {
+export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, onUserUpdate, allEscolas }: EditUserPermissionsSheetProps) {
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
     const [selectedModules, setSelectedModules] = useState<string[]>([]);
     const [selectedRole, setSelectedRole] = useState<'admin' | 'user'>('user');
+    const [selectedSchool, setSelectedSchool] = useState<string | null | undefined>(null);
 
     useEffect(() => {
         if (user) {
             setSelectedModules(user.modules || []);
             setSelectedRole(user.role || 'user');
+            setSelectedSchool(user.ue);
         }
     }, [user]);
 
@@ -52,7 +55,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
 
     const handleSave = async () => {
         setLoading(true);
-        const result = await updateUserPermissions(user.id, selectedModules, selectedRole);
+        const result = await updateUserPermissions(user.id, selectedModules, selectedRole, selectedSchool);
         setLoading(false);
 
         if (result.error) {
@@ -66,7 +69,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                 title: 'Permissões Atualizadas!',
                 description: `As permissões de ${user.name || user.email} foram salvas.`,
             });
-            onUserUpdate({ ...user, modules: selectedModules, role: selectedRole });
+            onUserUpdate({ ...user, modules: selectedModules, role: selectedRole, ue: selectedSchool });
             setIsOpen(false);
         }
     };
@@ -96,6 +99,22 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                             </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground">Administradores têm acesso a todos os módulos.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="school-select">Escola Vinculada</Label>
+                         <Select value={selectedSchool || ''} onValueChange={(value) => setSelectedSchool(value === '' ? null : value)} disabled={isAdmin}>
+                            <SelectTrigger id="school-select">
+                                <SelectValue placeholder="Selecione uma escola" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="">Nenhuma</SelectItem>
+                                {allEscolas.map(escola => (
+                                    <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Vincule o usuário a uma unidade escolar.</p>
                     </div>
 
                     <div className="space-y-2">

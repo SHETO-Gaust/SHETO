@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { Profile } from '@/lib/types';
+import type { Profile, Escola } from '@/lib/types';
 import {
   Table,
   TableBody,
@@ -29,7 +29,7 @@ const allModules = [
 ];
 
 
-export function UsersClient({ initialUsers }: { initialUsers: Profile[] }) {
+export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profile[], allEscolas: Pick<Escola, 'id' | 'escolar'>[] }) {
     const [users, setUsers] = useState(initialUsers);
     const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
     const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
@@ -63,6 +63,7 @@ export function UsersClient({ initialUsers }: { initialUsers: Profile[] }) {
                             <TableHead>Nome</TableHead>
                             <TableHead>Email</TableHead>
                             <TableHead>Função</TableHead>
+                            <TableHead>Escola</TableHead>
                             <TableHead>Módulos</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
@@ -77,6 +78,7 @@ export function UsersClient({ initialUsers }: { initialUsers: Profile[] }) {
                                         {user.role}
                                     </Badge>
                                 </TableCell>
+                                <TableCell>{user.escolas?.escolar || 'N/A'}</TableCell>
                                 <TableCell className="max-w-xs">
                                    <div className="flex flex-wrap gap-1">
                                     {user.role === 'admin' ? (
@@ -107,12 +109,14 @@ export function UsersClient({ initialUsers }: { initialUsers: Profile[] }) {
                     user={selectedUser}
                     allModules={allModules}
                     onUserUpdate={handleUpdate}
+                    allEscolas={allEscolas}
                 />
             )}
              <CreateUserSheet
                 isOpen={isCreateSheetOpen}
                 setIsOpen={setIsCreateSheetOpen}
                 allModules={allModules}
+                allEscolas={allEscolas}
             />
         </>
     );

@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { createUser } from './actions';
 import { Loader2 } from 'lucide-react';
+import type { Escola } from '@/lib/types';
 
 type Module = {
     id: string;
@@ -40,6 +41,7 @@ const createUserFormSchema = z.object({
   password: z.string().min(6, { message: "A senha deve ter no mínimo 6 caracteres." }),
   role: z.enum(['admin', 'user']),
   modules: z.array(z.string()).optional(),
+  ue: z.string().optional(),
 });
 
 type CreateUserFormValues = z.infer<typeof createUserFormSchema>;
@@ -48,9 +50,10 @@ type CreateUserSheetProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   allModules: Module[];
+  allEscolas: Pick<Escola, 'id' | 'escolar'>[];
 };
 
-export function CreateUserSheet({ isOpen, setIsOpen, allModules }: CreateUserSheetProps) {
+export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: CreateUserSheetProps) {
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
 
@@ -78,8 +81,8 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules }: CreateUserShe
 
     const onSubmit = async (data: CreateUserFormValues) => {
         setLoading(true);
-        const payload = { ...data, modules: data.role === 'admin' ? [] : data.modules || [] };
-        const result = await createUser(payload);
+        const payload = { ...data, modules: data.role === 'admin' ? [] : data.modules || [], ue: data.role === 'admin' ? null : data.ue };
+        const result = await createUser(payload as any);
         setLoading(false);
 
         if (result.error) {
@@ -116,7 +119,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules }: CreateUserShe
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Nome Completo</FormLabel>
-                                    <FormControl><Input placeholder="Nome do usuário" {...field} /></FormControl>
+                                    <FormControl><Input placeholder="Nome do usuário" {...field} value={field.value ?? ''} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}
@@ -162,6 +165,30 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules }: CreateUserShe
                                         </SelectContent>
                                     </Select>
                                     <p className="text-xs text-muted-foreground">Administradores têm acesso a todos os módulos.</p>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        
+                         <FormField
+                            control={form.control}
+                            name="ue"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Escola Vinculada</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isAdmin}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione uma escola" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="">Nenhuma</SelectItem>
+                                            {allEscolas.map(escola => (
+                                                <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                     <FormMessage />
                                 </FormItem>
                             )}

@@ -12,7 +12,7 @@ export async function getUsers(): Promise<Profile[]> {
 
     const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('*, escolas(id, escolar)')
         .order('name', { ascending: true });
 
     if (error) {
@@ -20,16 +20,16 @@ export async function getUsers(): Promise<Profile[]> {
         return [];
     }
 
-    return data;
+    return data as Profile[];
 }
 
-export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user') {
+export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user', ue: string | null | undefined) {
     const cookieStore = cookies();
     const supabase = createClient(cookieStore);
 
     const { error } = await supabase
         .from('profiles')
-        .update({ modules, role })
+        .update({ modules, role, ue: role === 'admin' ? null : ue })
         .eq('id', userId);
 
     if (error) {
@@ -48,6 +48,7 @@ const createUserSchema = z.object({
   password: z.string().min(6, { message: "A senha deve ter no mínimo 6 caracteres." }),
   role: z.enum(['admin', 'user']),
   modules: z.array(z.string()),
+  ue: z.string().nullable().optional(),
 });
 
 export async function createUser(formData: z.infer<typeof createUserSchema>) {
@@ -62,7 +63,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         };
     }
     
-    const { email, password, name, role, modules } = validatedFields.data;
+    const { email, password, name, role, modules, ue } = validatedFields.data;
 
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: email,
@@ -91,6 +92,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
             role: role,
             modules: modules,
             email: email, // Garante que o email esteja na tabela de perfis também
+            ue: ue,
         })
         .eq('id', authData.user.id);
 

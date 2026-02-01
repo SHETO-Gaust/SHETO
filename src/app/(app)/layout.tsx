@@ -13,9 +13,10 @@ import {
 } from '@/components/ui/sidebar';
 import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
-import type { Profile } from '@/lib/types';
+import type { Profile, Escola } from '@/lib/types';
 import { AccessDenied } from '@/components/access-denied';
 import { Sun } from 'lucide-react';
+import { SchoolSelector } from '@/components/school-selector';
 
 const moduleMap: { [key: string]: string } = {
     '/dashboard': 'dashboard',
@@ -50,12 +51,19 @@ export default async function AppLayout({
   if (user) {
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('*')
+        .select('*, escolas(id, escolar)')
         .eq('id', user.id)
         .single();
-      userProfile = profileData;
+      userProfile = profileData as Profile;
   }
   
+  const { data: allEscolasData } = await supabase
+    .from('escolas')
+    .select('id, escolar')
+    .order('escolar', { ascending: true });
+  const allEscolas = allEscolasData as Pick<Escola, 'id' | 'escolar'>[] || [];
+
+
   const pathname = headers().get('x-next-url') || '';
   const requiredModuleKey = Object.keys(moduleMap).find(key => pathname.startsWith(key));
   let hasPermission = true;
@@ -101,7 +109,10 @@ export default async function AppLayout({
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
-          <SidebarTrigger className="md/hidden" />
+          <SidebarTrigger className="md:hidden" />
+           <div className="flex-1">
+            {userProfile && <SchoolSelector userProfile={userProfile} allEscolas={allEscolas} />}
+          </div>
           <div className="ml-auto flex items-center gap-4">
             <UserNav user={user} profile={userProfile} />
           </div>
