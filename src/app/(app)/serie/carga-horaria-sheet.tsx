@@ -4,7 +4,14 @@ import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '@/components/ui/form';
@@ -13,6 +20,16 @@ import { Loader2 } from 'lucide-react';
 import { updateCargaHoraria } from './actions';
 import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const formSchema = z.object({
     serie_id: z.string(),
@@ -39,6 +56,9 @@ type Props = {
 export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCargaUpdated }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [isOverloadDialogOpen, setIsOverloadDialogOpen] = useState(false);
+  const [overloadInfo, setOverloadInfo] = useState<{ name: string; aulas: number }[]>([]);
+  const [dataToSave, setDataToSave] = useState<FormValues | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -62,7 +82,7 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
     }
   }, [isOpen, serie, dependencies.componentes, form]);
 
-  const onSubmit = async (data: FormValues) => {
+  const executeSave = async (data: FormValues) => {
     setLoading(true);
     const result = await updateCargaHoraria(data);
     setLoading(false);
@@ -77,6 +97,50 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
     setIsOpen(false);
   };
   
+  const onSubmit = (data: FormValues) => {
+    const oldSerieLoad = new Map<string, number>();
+    serie.componentes.forEach(c => {
+        if (c.professor_id) {
+            oldSerieLoad.set(c.professor_id, (oldSerieLoad.get(c.professor_id) || 0) + c.aulas_semanais);
+        }
+    });
+
+    const newSerieLoad = new Map<string, number>();
+    data.componentes.forEach(c => {
+        if (c.professor_id && c.professor_id !== 'none') {
+            newSerieLoad.set(c.professor_id, (newSerieLoad.get(c.professor_id) || 0) + c.aulas_semanais);
+        }
+    });
+
+    const allInvolvedProfessorIds = new Set([...oldSerieLoad.keys(), ...newSerieLoad.keys()]);
+    const overloadedProfessors: { name: string; aulas: number }[] = [];
+
+    allInvolvedProfessorIds.forEach(profId => {
+        const professor = dependencies.professores.find(p => p.id === profId);
+        if (!professor) return;
+
+        const currentTotalLoad = professor.aulas_atribuidas || 0;
+        const oldLoadInThisSerie = oldSerieLoad.get(profId) || 0;
+        const newLoadInThisSerie = newSerieLoad.get(profId) || 0;
+        
+        // Se um professor não está mais na série, seu newLoadInThisSerie será 0, e a conta estará correta.
+        const newTotalLoad = currentTotalLoad - oldLoadInThisSerie + newLoadInThisSerie;
+        const overload = newTotalLoad - professor.aulas_disponiveis;
+        
+        if (overload > 0) {
+            overloadedProfessors.push({ name: professor.nome_horario, aulas: overload });
+        }
+    });
+    
+    if (overloadedProfessors.length > 0) {
+        setOverloadInfo(overloadedProfessors);
+        setDataToSave(data);
+        setIsOverloadDialogOpen(true);
+    } else {
+        executeSave(data);
+    }
+  };
+  
   const getComponenteInfo = (id: string) => dependencies.componentes.find(c => c.id === id);
 
   const getProfessoresQualificados = (componenteId: string) => {
@@ -86,74 +150,107 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-3xl flex flex-col">
-        <SheetHeader>
-          <SheetTitle>Carga Horária e Ensalamento: {serie.nome}</SheetTitle>
-          <SheetDescription>Defina a quantidade de aulas e o professor para cada disciplina.</SheetDescription>
-        </SheetHeader>
+    <>
+      <Sheet open={isOpen} onOpenChange={setIsOpen}>
+        <SheetContent className="sm:max-w-3xl flex flex-col">
+          <SheetHeader>
+            <SheetTitle>Carga Horária e Ensalamento: {serie.nome}</SheetTitle>
+            <SheetDescription>Defina a quantidade de aulas e o professor para cada disciplina.</SheetDescription>
+          </SheetHeader>
 
-        <div className="grid grid-cols-3 gap-2 text-center p-2 rounded-lg bg-muted my-4">
-            <div><p className="font-bold text-lg">{serie.total_aulas_semanais}</p><p className="text-xs text-muted-foreground">Total de Aulas</p></div>
-            <div><p className="font-bold text-lg">{totalAulasDistribuidas}</p><p className="text-xs text-muted-foreground">Aulas Distribuídas</p></div>
-            <div><p className="font-bold text-lg">{saldoAulas}</p><p className="text-xs text-muted-foreground">Saldo</p></div>
-        </div>
+          <div className="grid grid-cols-3 gap-2 text-center p-2 rounded-lg bg-muted my-4">
+              <div><p className="font-bold text-lg">{serie.total_aulas_semanais}</p><p className="text-xs text-muted-foreground">Total de Aulas</p></div>
+              <div><p className="font-bold text-lg">{totalAulasDistribuidas}</p><p className="text-xs text-muted-foreground">Aulas Distribuídas</p></div>
+              <div><p className="font-bold text-lg">{saldoAulas}</p><p className="text-xs text-muted-foreground">Saldo</p></div>
+          </div>
 
-        <Form {...form}>
-          <form id="carga-form" onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto pr-2 -mr-4 space-y-4">
-            {fields.map((field, index) => {
-              const componente = getComponenteInfo(field.componente_id);
-              if (!componente) return null;
-              const professoresQualificados = getProfessoresQualificados(componente.id);
+          <Form {...form}>
+            <form id="carga-form" onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto pr-2 -mr-4 space-y-4">
+              {fields.map((field, index) => {
+                const componente = getComponenteInfo(field.componente_id);
+                if (!componente) return null;
+                const professoresQualificados = getProfessoresQualificados(componente.id);
 
-              return (
-                <div key={field.id} className="p-4 border rounded-lg space-y-3 bg-card">
-                  <p className="font-semibold">{componente.nome} ({componente.sigla})</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name={`componentes.${index}.aulas_semanais`}
-                      render={({ field: aulasField }) => (
+                return (
+                  <div key={field.id} className="p-4 border rounded-lg space-y-3 bg-card">
+                    <p className="font-semibold">{componente.nome} ({componente.sigla})</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name={`componentes.${index}.aulas_semanais`}
+                        render={({ field: aulasField }) => (
+                            <FormItem>
+                                <FormLabel>Aulas Semanais</FormLabel>
+                                <FormControl>
+                                    <Input type="number" min="0" {...aulasField} />
+                                </FormControl>
+                            </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`componentes.${index}.professor_id`}
+                        render={({ field: profField }) => (
                           <FormItem>
-                              <FormLabel>Aulas Semanais</FormLabel>
-                              <FormControl>
-                                  <Input type="number" min="0" {...aulasField} />
-                              </FormControl>
+                            <FormLabel>Professor</FormLabel>
+                            <Select onValueChange={profField.onChange} value={profField.value || 'none'} disabled={professoresQualificados.length === 0}>
+                                <FormControl><SelectTrigger><SelectValue placeholder={professoresQualificados.length === 0 ? 'Nenhum prof. qualificado' : 'Selecione...'} /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    <SelectItem value="none">Nenhum/A definir</SelectItem>
+                                    {professoresQualificados.map(p => (
+                                        <SelectItem key={p.id} value={p.id}>{p.nome_horario}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                           </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`componentes.${index}.professor_id`}
-                      render={({ field: profField }) => (
-                        <FormItem>
-                          <FormLabel>Professor</FormLabel>
-                          <Select onValueChange={profField.onChange} value={profField.value || ''} disabled={professoresQualificados.length === 0}>
-                              <FormControl><SelectTrigger><SelectValue placeholder={professoresQualificados.length === 0 ? 'Nenhum prof. qualificado' : 'Selecione...'} /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                  <SelectItem value="none">Nenhum/A definir</SelectItem>
-                                  {professoresQualificados.map(p => (
-                                      <SelectItem key={p.id} value={p.id}>{p.nome_horario}</SelectItem>
-                                  ))}
-                              </SelectContent>
-                          </Select>
-                        </FormItem>
-                      )}
-                    />
+                        )}
+                      />
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </form>
-        </Form>
+                )
+              })}
+            </form>
+          </Form>
 
-        <SheetFooter className="mt-auto border-t pt-4">
-          <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button type="submit" form="carga-form" disabled={loading} className="min-w-[100px]">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+          <SheetFooter className="mt-auto border-t pt-4">
+            <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
+            <Button type="submit" form="carga-form" disabled={loading} className="min-w-[100px]">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <AlertDialog open={isOverloadDialogOpen} onOpenChange={setIsOverloadDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Professor com Carga Horária Excedida</AlertDialogTitle>
+            <AlertDialogDescription>
+              A seguinte alocação excederá a carga horária disponível dos professores:
+              <ul className="list-disc pl-5 mt-2 text-foreground font-normal">
+                {overloadInfo.map(info => (
+                  <li key={info.name}>
+                    <span className="font-semibold">{info.name}</span> excederá em <span className="font-semibold">{info.aulas}</span> {info.aulas > 1 ? 'aulas' : 'aula'}.
+                  </li>
+                ))}
+              </ul>
+              <br />
+              Deseja salvar mesmo assim?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDataToSave(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              if (dataToSave) {
+                executeSave(dataToSave);
+              }
+              setIsOverloadDialogOpen(false);
+            }}>
+              Salvar Mesmo Assim
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
