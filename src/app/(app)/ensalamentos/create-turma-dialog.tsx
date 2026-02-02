@@ -86,7 +86,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
         </DialogHeader>
 
         <Form {...form}>
-          <form id="turma-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
             <FormField
               control={form.control}
               name="serie_id"
@@ -125,7 +125,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button type="submit" form="turma-form" disabled={loading}>
+          <Button onClick={form.handleSubmit(onSubmit)} disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Criar Turma
           </Button>
