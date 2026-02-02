@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CalendarX, Ban, PenSquare, Circle } from 'lucide-react';
+import { Loader2, CalendarX, Ban, PenSquare } from 'lucide-react';
 import { updateProfessorRestricoes } from './actions';
 import type { ProfessorComDados } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -80,12 +80,12 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
           </SheetTitle>
           <SheetDescription>
             Defina os horários indisponíveis e de planejamento para {professor.nome_completo}.
-             <ul className="list-disc list-inside mt-2 text-xs">
-                <li><span className="font-semibold">Clique 1:</span> Marcar como Indisponível (aula não pode ser alocada).</li>
-                <li><span className="font-semibold">Clique 2:</span> Marcar como Planejamento (prioridade para alocação de aulas de planejamento).</li>
-                <li><span className="font-semibold">Clique 3:</span> Limpar marcação (disponível).</li>
-            </ul>
           </SheetDescription>
+           <ul className="list-disc list-inside text-sm text-muted-foreground pt-2">
+              <li><span className="font-semibold">Clique 1:</span> Marcar como Indisponível (aula não pode ser alocada).</li>
+              <li><span className="font-semibold">Clique 2:</span> Marcar como Planejamento (prioridade para alocação de aulas de planejamento).</li>
+              <li><span className="font-semibold">Clique 3:</span> Limpar marcação (disponível).</li>
+          </ul>
         </SheetHeader>
 
         <div className="flex-1 space-y-4 py-6 overflow-y-auto">
@@ -110,10 +110,9 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {/* This needs to be adapted based on actual Turno data structure */}
                                         {Array.from({ length: 5 }).map((_, aulaIndex) => (
                                             <tr key={aulaIndex} className="border-b last:border-0">
-                                                <td className="p-2 font-medium bg-muted/30 border-r">{aulaIndex + 1}ª</td>
+                                                <td className="p-2 font-medium bg-muted/20 border-r">{aulaIndex + 1}ª</td>
                                                 {DIAS_SEMANA_MAP.map(dia => {
                                                     const status = restricoes[turno.id]?.[dia.id]?.[aulaIndex];
                                                     return (
