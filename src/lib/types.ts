@@ -115,3 +115,22 @@ export type ChecklistItem = {
 };
 
 export type ChecklistReportData = ChecklistItem[];
+
+export type Horario = {
+  id: string;
+  escola_id: string;
+  turno_id: string;
+  nome: string;
+  status: 'em_rascunho' | 'publicado';
+  created_at: string;
+};
+
+export type HorarioAulaGerada = {
+  id: string;
+  horario_id: string;
+  serie_id: string;
+  componente_id: string;
+  professor_id: string;
+  dia_semana: string;
+  aula_index: number;
+};
