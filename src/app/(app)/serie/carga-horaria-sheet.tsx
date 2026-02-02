@@ -43,7 +43,7 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
 
   const { fields } = useFieldArray({ control: form.control, name: "componentes" });
   const watchedComponentes = form.watch('componentes');
-  const totalAulasDistribuidas = watchedComponentes.reduce((sum, comp) => sum + (comp.aulas_semanais || 0), 0);
+  const totalAulasDistribuidas = watchedComponentes.reduce((sum, comp) => sum + Number(comp.aulas_semanais || 0), 0);
   const saldoAulas = serie.total_aulas_semanais - totalAulasDistribuidas;
 
   useEffect(() => {

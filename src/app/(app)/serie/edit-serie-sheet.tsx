@@ -10,27 +10,29 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Ban, PenSquare, FileSignature } from 'lucide-react';
+import { Loader2, Ban } from 'lucide-react';
 import { upsertSerie } from './actions';
 import type { SerieComDados, NivelEnsino, Turno } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from '@/lib/utils';
 
+// CORREÇÃO 1: Schema flexível para escola_id
 const formSchema = z.object({
   id: z.string().optional(),
-  escola_id: z.string(),
+  escola_id: z.union([z.string(), z.number()]).transform(val => String(val)),
   nome: z.string().min(1, 'O nome é obrigatório.'),
   nivel_ensino_id: z.string({ required_error: 'Selecione um nível de ensino.' }),
   turno_id: z.string({ required_error: 'Selecione um turno.' }),
   restricoes: z.any().optional(),
 });
+
 type FormValues = z.infer<typeof formSchema>;
 
 type Props = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   serie: SerieComDados | null;
-  escolaId: string;
+  escolaId: string | number;
   dependencies: { niveisEnsino: NivelEnsino[], turnos: Turno[] };
   onSerieUpdated: () => void;
 };
@@ -48,7 +50,11 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { escola_id: escolaId },
+    defaultValues: { 
+        escola_id: String(escolaId),
+        nome: '',
+        restricoes: {}
+    },
   });
 
   const selectedTurnoId = form.watch('turno_id');
@@ -56,9 +62,12 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
   
   useEffect(() => {
     if (isOpen) {
+      // CORREÇÃO 2: Destrava clique no corpo da página
+      document.body.style.pointerEvents = 'auto';
+      
       form.reset({
         id: serie?.id,
-        escola_id: escolaId,
+        escola_id: String(escolaId),
         nome: serie?.nome ?? '',
         nivel_ensino_id: serie?.nivel_ensino_id ?? undefined,
         turno_id: serie?.turno_id ?? undefined,
@@ -79,36 +88,46 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
     } else {
         newRestricoes[dia][aulaIndex] = 'proibido';
     }
-    form.setValue('restricoes', newRestricoes);
+    form.setValue('restricoes', newRestricoes, { shouldDirty: true });
   };
 
   const onSubmit = async (data: FormValues) => {
+    console.log("🚀 Enviando Série:", data);
     setLoading(true);
-    const result = await upsertSerie(data);
-    setLoading(false);
-    if (result.error) {
-      toast({ title: 'Erro', description: result.error, variant: 'destructive' });
-      return;
+    try {
+        const result = await upsertSerie(data);
+        if (result.error) {
+            toast({ title: 'Erro', description: result.error, variant: 'destructive' });
+            return;
+        }
+        toast({ title: 'Sucesso', description: `Série "${data.nome}" salva.` });
+        onSerieUpdated();
+        setIsOpen(false);
+    } catch (e) {
+        toast({ title: 'Erro', description: 'Falha na comunicação com o servidor.', variant: 'destructive' });
+    } finally {
+        setLoading(false);
     }
-    toast({ title: 'Sucesso', description: `Série "${data.nome}" salva.` });
-    onSerieUpdated();
-    setIsOpen(false);
   };
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-2xl flex flex-col">
+      <SheetContent className="sm:max-w-2xl flex flex-col h-full pointer-events-auto">
         <SheetHeader>
           <SheetTitle>{isEdit ? 'Editar Série' : 'Nova Série'}</SheetTitle>
           <SheetDescription>{isEdit ? 'Edite as informações da série e suas restrições.' : 'Preencha os dados da nova série.'}</SheetDescription>
         </SheetHeader>
 
         <Form {...form}>
-          <form id="serie-form" onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto pr-2 py-4 space-y-6">
+          <form 
+            id="serie-form" 
+            onSubmit={form.handleSubmit(onSubmit, (err) => console.log("⚠️ Erros de Validação:", err))} 
+            className="flex-1 overflow-y-auto pr-2 py-4"
+          >
             <Tabs defaultValue="dados" className="w-full">
-                <TabsList>
+                <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="dados">Dados da Série</TabsTrigger>
-                    <TabsTrigger value="restricoes" disabled={!isEdit || !turnoInfo}>Restrições de Horário</TabsTrigger>
+                    <TabsTrigger value="restricoes" disabled={!turnoInfo}>Restrições</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="dados" className="pt-4 space-y-4">
@@ -118,16 +137,16 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField control={form.control} name="nivel_ensino_id" render={({ field }) => (
                             <FormItem><FormLabel>Nível de Ensino</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}><FormControl>
-                                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                                     <SelectContent>{dependencies.niveisEnsino.map(n => <SelectItem key={n.id} value={n.id}>{n.nome}</SelectItem>)}</SelectContent>
                                 </Select><FormMessage />
                             </FormItem>
                         )}/>
                         <FormField control={form.control} name="turno_id" render={({ field }) => (
                             <FormItem><FormLabel>Turno</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}><FormControl>
-                                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                                     <SelectContent>{dependencies.turnos.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
                                 </Select><FormMessage />
                             </FormItem>
@@ -171,16 +190,23 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                             </table>
                         </div>
                     ) : (
-                        <p className="text-muted-foreground text-center">Selecione e salve um turno para definir as restrições.</p>
+                        <p className="text-muted-foreground text-center py-10">Selecione um turno na aba "Dados" para liberar as restrições.</p>
                     )}
                 </TabsContent>
             </Tabs>
           </form>
         </Form>
-        <SheetFooter className="mt-auto border-t pt-4">
+        <SheetFooter className="mt-auto border-t pt-4 bg-background">
           <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button type="submit" form="serie-form" disabled={loading} className="min-w-[100px]">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+          <Button 
+            type="submit" 
+            form="serie-form" 
+            disabled={loading} 
+            className="min-w-[100px]"
+            onClick={() => console.log("🖱️ Clique no Salvar Série")}
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Salvar
           </Button>
         </SheetFooter>
       </SheetContent>
