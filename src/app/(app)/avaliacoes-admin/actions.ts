@@ -41,10 +41,12 @@ export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horar
 export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
     const supabase = await createClient();
 
-    // Check for required data (this will be expanded later)
-    const { data: series } = await supabase.from('series').select('id', { count: 'exact', head: true }).eq('turno_id', turnoId);
-    if ((series?.count ?? 0) === 0) {
-        return { error: 'Não há séries/turmas cadastradas para este turno. Verifique a página de Séries.' };
+    // Check for required data: turmas
+    const { data: turmas } = await supabase.from('turmas').select('id, series(turno_id)').eq('escola_id', escolaId);
+    const turmasDoTurno = turmas?.filter(t => t.series?.turno_id === turnoId) || [];
+
+    if (turmasDoTurno.length === 0) {
+        return { error: 'Não há turmas cadastradas para este turno. Verifique a página de Turmas.' };
     }
     
     const countResult = await supabase

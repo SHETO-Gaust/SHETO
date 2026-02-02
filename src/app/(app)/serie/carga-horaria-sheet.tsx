@@ -18,25 +18,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from '@/components/
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { updateCargaHoraria } from './actions';
-import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import type { SerieComDados, ComponenteCurricular } from '@/lib/types';
 
 const formSchema = z.object({
     serie_id: z.string(),
     componentes: z.array(z.object({
         componente_id: z.string(),
         aulas_semanais: z.coerce.number().min(0),
-        professor_id: z.string().nullable().optional(),
     }))
 });
 
@@ -48,7 +36,6 @@ type Props = {
   serie: SerieComDados;
   dependencies: { 
       componentes: ComponenteCurricular[],
-      professores: ProfessorComDados[],
   };
   onCargaUpdated: () => void;
 };
@@ -56,9 +43,6 @@ type Props = {
 export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCargaUpdated }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [isOverloadDialogOpen, setIsOverloadDialogOpen] = useState(false);
-  const [overloadInfo, setOverloadInfo] = useState<{ name: string; aulas: number }[]>([]);
-  const [dataToSave, setDataToSave] = useState<FormValues | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -72,17 +56,16 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
 
   useEffect(() => {
     if (isOpen) {
-      const cargaExistente = new Map(serie.componentes.map(c => [c.componente_id, { aulas_semanais: c.aulas_semanais, professor_id: c.professor_id }]));
+      const cargaExistente = new Map(serie.componentes.map(c => [c.componente_id, c.aulas_semanais]));
       const formComponentes = dependencies.componentes.map(comp => ({
         componente_id: comp.id,
-        aulas_semanais: cargaExistente.get(comp.id)?.aulas_semanais || 0,
-        professor_id: cargaExistente.get(comp.id)?.professor_id || undefined,
+        aulas_semanais: cargaExistente.get(comp.id) || 0,
       }));
       form.reset({ serie_id: serie.id, componentes: formComponentes });
     }
   }, [isOpen, serie, dependencies.componentes, form]);
 
-  const executeSave = async (data: FormValues) => {
+  const onSubmit = async (data: FormValues) => {
     setLoading(true);
     const result = await updateCargaHoraria(data);
     setLoading(false);
@@ -92,70 +75,19 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
       return;
     }
 
-    toast({ title: 'Sucesso', description: 'Carga horária e ensalamento salvos.' });
+    toast({ title: 'Sucesso', description: 'Carga horária salva.' });
     onCargaUpdated();
     setIsOpen(false);
   };
   
-  const onSubmit = (data: FormValues) => {
-    const oldSerieLoad = new Map<string, number>();
-    serie.componentes.forEach(c => {
-        if (c.professor_id) {
-            oldSerieLoad.set(c.professor_id, (oldSerieLoad.get(c.professor_id) || 0) + c.aulas_semanais);
-        }
-    });
-
-    const newSerieLoad = new Map<string, number>();
-    data.componentes.forEach(c => {
-        if (c.professor_id && c.professor_id !== 'none') {
-            newSerieLoad.set(c.professor_id, (newSerieLoad.get(c.professor_id) || 0) + c.aulas_semanais);
-        }
-    });
-
-    const allInvolvedProfessorIds = new Set([...oldSerieLoad.keys(), ...newSerieLoad.keys()]);
-    const overloadedProfessors: { name: string; aulas: number }[] = [];
-
-    allInvolvedProfessorIds.forEach(profId => {
-        const professor = dependencies.professores.find(p => p.id === profId);
-        if (!professor) return;
-
-        const currentTotalLoad = professor.aulas_atribuidas || 0;
-        const oldLoadInThisSerie = oldSerieLoad.get(profId) || 0;
-        const newLoadInThisSerie = newSerieLoad.get(profId) || 0;
-        
-        // Se um professor não está mais na série, seu newLoadInThisSerie será 0, e a conta estará correta.
-        const newTotalLoad = currentTotalLoad - oldLoadInThisSerie + newLoadInThisSerie;
-        const overload = newTotalLoad - professor.aulas_disponiveis;
-        
-        if (overload > 0) {
-            overloadedProfessors.push({ name: professor.nome_horario, aulas: overload });
-        }
-    });
-    
-    if (overloadedProfessors.length > 0) {
-        setOverloadInfo(overloadedProfessors);
-        setDataToSave(data);
-        setIsOverloadDialogOpen(true);
-    } else {
-        executeSave(data);
-    }
-  };
-  
   const getComponenteInfo = (id: string) => dependencies.componentes.find(c => c.id === id);
 
-  const getProfessoresQualificados = (componenteId: string) => {
-    return dependencies.professores.filter(prof => 
-        prof.componentes.some(c => c.id === componenteId) && prof.turnos.some(t => t.id === serie.turno_id)
-    );
-  };
-
   return (
-    <>
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent className="sm:max-w-3xl flex flex-col">
+        <SheetContent className="sm:max-w-xl flex flex-col">
           <SheetHeader>
-            <SheetTitle>Carga Horária e Ensalamento: {serie.nome}</SheetTitle>
-            <SheetDescription>Defina a quantidade de aulas e o professor para cada disciplina.</SheetDescription>
+            <SheetTitle>Carga Horária da Série: {serie.nome}</SheetTitle>
+            <SheetDescription>Defina a quantidade de aulas para cada disciplina deste modelo de série.</SheetDescription>
           </SheetHeader>
 
           <div className="grid grid-cols-3 gap-2 text-center p-2 rounded-lg bg-muted my-4">
@@ -169,43 +101,22 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
               {fields.map((field, index) => {
                 const componente = getComponenteInfo(field.componente_id);
                 if (!componente) return null;
-                const professoresQualificados = getProfessoresQualificados(componente.id);
 
                 return (
-                  <div key={field.id} className="p-4 border rounded-lg space-y-3 bg-card">
+                  <div key={field.id} className="p-4 border rounded-lg space-y-3 bg-card flex justify-between items-center">
                     <p className="font-semibold">{componente.nome} ({componente.sigla})</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name={`componentes.${index}.aulas_semanais`}
-                        render={({ field: aulasField }) => (
-                            <FormItem>
-                                <FormLabel>Aulas Semanais</FormLabel>
-                                <FormControl>
-                                    <Input type="number" min="0" {...aulasField} />
-                                </FormControl>
-                            </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`componentes.${index}.professor_id`}
-                        render={({ field: profField }) => (
-                          <FormItem>
-                            <FormLabel>Professor</FormLabel>
-                            <Select onValueChange={profField.onChange} value={profField.value || 'none'} disabled={professoresQualificados.length === 0}>
-                                <FormControl><SelectTrigger><SelectValue placeholder={professoresQualificados.length === 0 ? 'Nenhum prof. qualificado' : 'Selecione...'} /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    <SelectItem value="none">Nenhum/A definir</SelectItem>
-                                    {professoresQualificados.map(p => (
-                                        <SelectItem key={p.id} value={p.id}>{p.nome_horario}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                    <FormField
+                      control={form.control}
+                      name={`componentes.${index}.aulas_semanais`}
+                      render={({ field: aulasField }) => (
+                          <FormItem className="flex items-center gap-2 space-y-0">
+                              <FormLabel>Aulas:</FormLabel>
+                              <FormControl>
+                                  <Input type="number" min="0" {...aulasField} className="w-24" />
+                              </FormControl>
                           </FormItem>
-                        )}
-                      />
-                    </div>
+                      )}
+                    />
                   </div>
                 )
               })}
@@ -220,37 +131,5 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
           </SheetFooter>
         </SheetContent>
       </Sheet>
-
-      <AlertDialog open={isOverloadDialogOpen} onOpenChange={setIsOverloadDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Professor com Carga Horária Excedida</AlertDialogTitle>
-            <AlertDialogDescription>
-              A seguinte alocação excederá a carga horária disponível dos professores:
-              <ul className="list-disc pl-5 mt-2 text-foreground font-normal">
-                {overloadInfo.map(info => (
-                  <li key={info.name}>
-                    <span className="font-semibold">{info.name}</span> excederá em <span className="font-semibold">{info.aulas}</span> {info.aulas > 1 ? 'aulas' : 'aula'}.
-                  </li>
-                ))}
-              </ul>
-              <br />
-              Deseja salvar mesmo assim?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDataToSave(null)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => {
-              if (dataToSave) {
-                executeSave(dataToSave);
-              }
-              setIsOverloadDialogOpen(false);
-            }}>
-              Salvar Mesmo Assim
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
   );
 }

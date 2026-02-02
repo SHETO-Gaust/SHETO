@@ -3,8 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { getProfessores } from '@/app/(app)/professores/actions';
-import type { Serie, SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
+import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
 
 
 /* -------------------------------------------------------------------------- */
@@ -15,7 +14,7 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
   try {
     const { data: series, error: seriesError } = await supabase
       .from('series')
-      .select('*, nivel_ensino:niveis_ensino(*), turno:turnos(*)')
+      .select('*, nivel_ensino:niveis_ensino(*), turno:turnos(*), turmas(count)')
       .eq('escola_id', escolaId)
       .order('nome', { ascending: true });
 
@@ -26,7 +25,7 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
 
     const { data: seriesComponentes, error: componentesError } = await supabase
         .from('series_componentes')
-        .select('*, componente:componentes_curriculares(*), professor:professores(id, nome_horario)')
+        .select('*, componente:componentes_curriculares(*)')
         .in('serie_id', seriesIds);
     
     if (componentesError) throw componentesError;
@@ -43,6 +42,7 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
             componentes: componentesDaSerie as any,
             total_aulas_semanais,
             total_aulas_distribuidas,
+            turmas_count: serie.turmas[0]?.count ?? 0,
         }
     });
 
@@ -60,21 +60,18 @@ export async function getSerieDependencies(escolaId: string): Promise<{
     niveisEnsino: NivelEnsino[],
     turnos: Turno[],
     componentes: ComponenteCurricular[],
-    professores: ProfessorComDados[],
 }> {
     const supabase = await createClient();
-    const [niveisResult, turnosResult, componentesResult, professoresResult] = await Promise.all([
+    const [niveisResult, turnosResult, componentesResult] = await Promise.all([
         supabase.from('niveis_ensino').select('*').eq('escola_id', escolaId),
         supabase.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true),
         supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId),
-        getProfessores(escolaId),
     ]);
 
     return {
         niveisEnsino: niveisResult.data || [],
         turnos: turnosResult.data || [],
         componentes: componentesResult.data || [],
-        professores: professoresResult.data || [],
     };
 }
 
@@ -113,6 +110,7 @@ export async function upsertSerie(formData: z.infer<typeof upsertSerieSchema>) {
     }
 
     revalidatePath('/serie');
+    revalidatePath('/ensalamentos');
     return { data };
 }
 
@@ -124,7 +122,6 @@ const cargaHorariaSchema = z.object({
     componentes: z.array(z.object({
         componente_id: z.string(),
         aulas_semanais: z.coerce.number().min(0),
-        professor_id: z.string().nullable().optional(),
     }))
 });
 
@@ -151,7 +148,6 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
             serie_id,
             componente_id: c.componente_id,
             aulas_semanais: c.aulas_semanais,
-            professor_id: c.professor_id === 'none' ? null : c.professor_id,
         }));
 
     if (toInsert.length > 0) {
@@ -166,6 +162,7 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
     }
 
     revalidatePath('/serie');
+    revalidatePath('/ensalamentos');
     return { success: true };
 }
 
@@ -198,7 +195,7 @@ export async function duplicateSerie(serieId: string, newName: string) {
 
     const { data: originalComponentes, error: compError } = await supabase
         .from('series_componentes')
-        .select('componente_id, aulas_semanais, professor_id')
+        .select('componente_id, aulas_semanais')
         .eq('serie_id', serieId);
 
     if (compError) {
@@ -238,5 +235,6 @@ export async function deleteSerie(id: string) {
     }
 
     revalidatePath('/serie');
+    revalidatePath('/ensalamentos');
     return { success: true };
 }

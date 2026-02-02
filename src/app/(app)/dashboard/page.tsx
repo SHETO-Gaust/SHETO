@@ -10,8 +10,8 @@ const steps = [
   { step: 4, title: 'Professores', icon: Users, href: '/professores' },
   { step: 5, title: 'Série', icon: Layers, href: '/serie' },
   { step: 6, title: 'Turmas', icon: Users2, href: '/ensalamentos' },
-  { step: 7, title: 'Relatórios', icon: BarChart3, href: '/relatorios' },
-  { step: 8, title: 'Gerar Horário', icon: Clock, href: '/avaliacoes-admin' },
+  { step: 7, title: 'Gerar Horário', icon: Clock, href: '/avaliacoes-admin' },
+  { step: 8, title: 'Relatórios', icon: BarChart3, href: '/relatorios' },
 ];
 
 export default function DashboardPage() {

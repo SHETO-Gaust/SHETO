@@ -1,16 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
+import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, Users, BookOpen } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, BookOpen, Users2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { EditSerieSheet } from './edit-serie-sheet';
@@ -19,7 +19,6 @@ import { DuplicateSerieDialog } from './duplicate-serie-dialog';
 import { DeleteSerieDialog } from './delete-serie-dialog';
 import { getSeries } from './actions';
 import { useToast } from '@/hooks/use-toast';
-import { CargaHorariaProfessoresSheet } from './carga-horaria-professores-sheet';
 
 type SerieClientProps = {
   initialSeries: SerieComDados[];
@@ -28,7 +27,6 @@ type SerieClientProps = {
     niveisEnsino: NivelEnsino[],
     turnos: Turno[],
     componentes: ComponenteCurricular[],
-    professores: ProfessorComDados[],
   };
 };
 
@@ -40,7 +38,6 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
   const [selectedSerie, setSelectedSerie] = useState<SerieComDados | null>(null);
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
   const [activeDialog, setActiveDialog] = useState<DialogType>(null);
-  const [isCargaProfSheetOpen, setIsCargaProfSheetOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchAndUpdateSeries = async () => {
@@ -75,10 +72,6 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
   return (
     <>
       <div className="flex justify-end mb-4 gap-2">
-        <Button variant="outline" onClick={() => setIsCargaProfSheetOpen(true)}>
-          <Users className="mr-2 h-4 w-4" />
-          Carga Horária Professores
-        </Button>
         <Button onClick={() => handleOpenSheet(null, 'edit')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Série
@@ -87,7 +80,7 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
 
       {series.length === 0 ? (
         <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
-          Nenhuma série cadastrada. Clique em "Adicionar Série" para começar.
+          Nenhum modelo de série cadastrado. Clique em "Adicionar Série" para começar.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -95,9 +88,6 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
             const aulasRestantes = serie.total_aulas_semanais - serie.total_aulas_distribuidas;
             const progresso = serie.total_aulas_semanais > 0 ? (serie.total_aulas_distribuidas / serie.total_aulas_semanais) * 100 : 0;
             
-            const disciplinasComAulas = serie.componentes.filter(c => c.aulas_semanais > 0);
-            const disciplinasSemProfessor = disciplinasComAulas.filter(c => !c.professor_id).length;
-
             return (
               <Card key={serie.id} className="flex flex-col">
                 <CardHeader>
@@ -134,18 +124,10 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
                     <Badge variant={aulasRestantes === 0 ? 'secondary' : 'destructive'}>
                         {aulasRestantes > 0 ? `${aulasRestantes} aulas a distribuir` : aulasRestantes < 0 ? `${Math.abs(aulasRestantes)} aulas excedentes` : 'Carga horária completa'}
                     </Badge>
-                    
-                    {disciplinasComAulas.length > 0 && disciplinasSemProfessor > 0 && (
-                        <Badge variant="destructive">
-                            {disciplinasSemProfessor} {disciplinasSemProfessor === 1 ? 'disciplina sem' : 'disciplinas sem'} professor
-                        </Badge>
-                    )}
-
-                    {disciplinasComAulas.length > 0 && disciplinasSemProfessor === 0 && (
-                        <Badge variant="secondary">
-                            Professores alocados
-                        </Badge>
-                    )}
+                     <Badge variant="outline" className="flex items-center gap-1">
+                        <Users2 className="h-3 w-3"/>
+                        {serie.turmas_count} {serie.turmas_count === 1 ? 'turma' : 'turmas'}
+                     </Badge>
                   </div>
                 </CardContent>
               </Card>
@@ -186,12 +168,6 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
           />
         </>
       )}
-
-      <CargaHorariaProfessoresSheet
-        isOpen={isCargaProfSheetOpen}
-        setIsOpen={setIsCargaProfSheetOpen}
-        professores={dependencies.professores}
-      />
     </>
   );
 }

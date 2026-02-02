@@ -26,7 +26,7 @@ export function CargaHorariaProfessoresSheet({ isOpen, setIsOpen, professores }:
         <SheetHeader>
           <SheetTitle>Carga Horária dos Professores</SheetTitle>
           <SheetDescription>
-            Acompanhe a distribuição de aulas para cada professor.
+            Acompanhe a distribuição de aulas para cada professor em todas as turmas.
           </SheetDescription>
         </SheetHeader>
 
@@ -49,9 +49,9 @@ export function CargaHorariaProfessoresSheet({ isOpen, setIsOpen, professores }:
                 <div className="flex justify-between items-start pt-1">
                     <div className="flex flex-wrap gap-1">
                         {prof.alocacoes && prof.alocacoes.length > 0 ? (
-                            prof.alocacoes.map(aloc => (
-                                <Badge key={aloc.serie_nome} variant="secondary">
-                                    {aloc.serie_nome}: {aloc.aulas} {aloc.aulas > 1 ? 'aulas' : 'aula'}
+                            prof.alocacoes.map((aloc, i) => (
+                                <Badge key={`${prof.id}-${aloc.serie_nome}-${i}`} variant="secondary">
+                                    {aloc.serie_nome} '{aloc.turma_nome}': {aloc.aulas} {aloc.aulas > 1 ? 'aulas' : 'aula'}
                                 </Badge>
                             ))
                         ) : (

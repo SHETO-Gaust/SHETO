@@ -71,7 +71,7 @@ export type ProfessorComDados = Professor & {
     componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
     turnos: Pick<Turno, 'id' | 'nome'>[];
     aulas_atribuidas?: number;
-    alocacoes?: { serie_nome: string; aulas: number }[];
+    alocacoes?: { turma_nome: string; serie_nome: string; aulas: number }[];
 };
 
 export type Serie = {
@@ -88,20 +88,50 @@ export type SerieComponente = {
   serie_id: string;
   componente_id: string;
   aulas_semanais: number;
-  professor_id: string | null;
 };
 
-// This type represents the comprehensive data needed for the client
+// This type represents the comprehensive data needed for the /serie page
 export type SerieComDados = Serie & {
   nivel_ensino: Pick<NivelEnsino, 'id' | 'nome' | 'sigla'>;
   turno: Turno;
   componentes: (SerieComponente & {
       componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
-      professor: Pick<Professor, 'id' | 'nome_horario'> | null;
   })[];
   total_aulas_semanais: number;
   total_aulas_distribuidas: number;
+  turmas_count: number;
 };
+
+
+// --- NEW TYPES FOR TURMAS ---
+
+export type Turma = {
+    id: string;
+    escola_id: string;
+    serie_id: string;
+    nome: string; // e.g., 'A', 'B'
+    created_at: string;
+};
+
+export type TurmaProfessor = {
+    turma_id: string;
+    componente_id: string;
+    professor_id: string;
+};
+
+export type TurmaComDados = Turma & {
+    serie: Pick<Serie, 'id' | 'nome' | 'turno_id'> & {
+        componentes: (SerieComponente & {
+            componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
+        })[];
+    };
+    professores: (TurmaProfessor & {
+        professor: Pick<Professor, 'id' | 'nome_horario'>;
+    })[];
+};
+
+
+// --- HORARIO TYPES ---
 
 export type ChecklistItemStatus = 'ok' | 'warning' | 'error';
 
@@ -128,7 +158,7 @@ export type Horario = {
 export type HorarioAulaGerada = {
   id: string;
   horario_id: string;
-  serie_id: string;
+  turma_id: string;
   componente_id: string;
   professor_id: string;
   dia_semana: string;
