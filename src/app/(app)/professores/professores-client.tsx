@@ -181,6 +181,25 @@ export function ProfessoresClient({
           </TableBody>
         </Table>
       </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2">
+            <Pencil className="h-4 w-4" />
+            <span>Editar Dados</span>
+        </div>
+        <div className="flex items-center gap-2">
+            <BookCopy className="h-4 w-4" />
+            <span>Gerenciar Disciplinas</span>
+        </div>
+        <div className="flex items-center gap-2">
+            <CalendarX className="h-4 w-4" />
+            <span>Restrições de Horário</span>
+        </div>
+        <div className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 text-destructive" />
+            <span className="text-destructive">Deletar Professor</span>
+        </div>
+      </div>
       
       <EditProfessorSheet
           isOpen={isSheetOpenFor('edit')}

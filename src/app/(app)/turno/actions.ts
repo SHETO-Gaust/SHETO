@@ -91,7 +91,7 @@ const upsertTurnoSchema = z.object({
 export async function upsertTurno(
   formData: z.infer<typeof upsertTurnoSchema>
 ) {
-  const supabase = createClient(cookies());
+  const supabase = await createClient(cookies()); 
 
   const validated = upsertTurnoSchema.safeParse(formData);
   if (!validated.success) {
@@ -130,7 +130,7 @@ export async function upsertTurno(
 /* -------------------------------------------------------------------------- */
 
 export async function updateTurnoStatus(id: string, ativo: boolean) {
-  const supabase = createClient(cookies());
+  const supabase = await createClient(cookies());
 
   const { error } = await supabase
     .from('turnos')
@@ -212,7 +212,7 @@ export async function updateTurnoHorarios(
 /*                                DELETE TURNO                                */
 /* -------------------------------------------------------------------------- */
 export async function deleteTurno(id: string) {
-  const supabase = createClient(cookies());
+  const supabase = await createClient(cookies());
 
   const { error } = await supabase.from('turnos').delete().eq('id', id);
 
