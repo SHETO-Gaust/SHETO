@@ -97,10 +97,15 @@ export type SerieComDados = Serie & {
   total_aulas_distribuidas: number;
 };
 
-export type SituacaoDados = {
-  turnos: number;
-  niveisEnsino: number;
-  componentes: number;
-  professores: number;
-  series: number;
+export type ChecklistItemStatus = 'ok' | 'warning' | 'error';
+
+export type ChecklistItem = {
+    id: string;
+    title: string;
+    description: string;
+    status: ChecklistItemStatus;
+    details?: string;
+    link?: string;
 };
+
+export type ChecklistReportData = ChecklistItem[];
