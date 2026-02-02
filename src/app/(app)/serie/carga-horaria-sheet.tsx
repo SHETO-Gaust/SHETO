@@ -11,14 +11,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from '@/components/
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { updateCargaHoraria } from './actions';
-import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
-import { Separator } from '@/components/ui/separator';
+import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const formSchema = z.object({
     serie_id: z.string(),
     componentes: z.array(z.object({
         componente_id: z.string(),
         aulas_semanais: z.coerce.number().min(0),
+        professor_id: z.string().nullable().optional(),
     }))
 });
 
@@ -28,7 +29,10 @@ type Props = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   serie: SerieComDados;
-  dependencies: { componentes: ComponenteCurricular[] };
+  dependencies: { 
+      componentes: ComponenteCurricular[],
+      professores: ProfessorComDados[],
+  };
   onCargaUpdated: () => void;
 };
 
@@ -48,10 +52,11 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
 
   useEffect(() => {
     if (isOpen) {
-      const cargaExistente = new Map(serie.componentes.map(c => [c.componente_id, c.aulas_semanais]));
+      const cargaExistente = new Map(serie.componentes.map(c => [c.componente_id, { aulas_semanais: c.aulas_semanais, professor_id: c.professor_id }]));
       const formComponentes = dependencies.componentes.map(comp => ({
         componente_id: comp.id,
-        aulas_semanais: cargaExistente.get(comp.id) || 0,
+        aulas_semanais: cargaExistente.get(comp.id)?.aulas_semanais || 0,
+        professor_id: cargaExistente.get(comp.id)?.professor_id || undefined,
       }));
       form.reset({ serie_id: serie.id, componentes: formComponentes });
     }
@@ -67,19 +72,25 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
       return;
     }
 
-    toast({ title: 'Sucesso', description: 'Carga horária salva.' });
+    toast({ title: 'Sucesso', description: 'Carga horária e ensalamento salvos.' });
     onCargaUpdated();
     setIsOpen(false);
   };
   
   const getComponenteInfo = (id: string) => dependencies.componentes.find(c => c.id === id);
 
+  const getProfessoresQualificados = (componenteId: string) => {
+    return dependencies.professores.filter(prof => 
+        prof.componentes.some(c => c.id === componenteId) && prof.turnos.some(t => t.id === serie.turno_id)
+    );
+  };
+
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-xl flex flex-col">
+      <SheetContent className="sm:max-w-3xl flex flex-col">
         <SheetHeader>
-          <SheetTitle>Carga Horária: {serie.nome}</SheetTitle>
-          <SheetDescription>Defina a quantidade de aulas semanais para cada componente curricular.</SheetDescription>
+          <SheetTitle>Carga Horária e Ensalamento: {serie.nome}</SheetTitle>
+          <SheetDescription>Defina a quantidade de aulas e o professor para cada disciplina.</SheetDescription>
         </SheetHeader>
 
         <div className="grid grid-cols-3 gap-2 text-center p-2 rounded-lg bg-muted my-4">
@@ -93,18 +104,44 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
             {fields.map((field, index) => {
               const componente = getComponenteInfo(field.componente_id);
               if (!componente) return null;
+              const professoresQualificados = getProfessoresQualificados(componente.id);
 
               return (
-                <FormField key={field.id} control={form.control} name={`componentes.${index}.aulas_semanais`}
-                  render={({ field: inputField }) => (
-                    <FormItem className="flex items-center justify-between p-3 border rounded-md">
-                      <FormLabel className="text-base">{componente.nome} ({componente.sigla})</FormLabel>
-                      <FormControl>
-                        <Input type="number" min="0" {...inputField} className="w-20 text-center" />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                <div key={field.id} className="p-4 border rounded-lg space-y-3 bg-card">
+                  <p className="font-semibold">{componente.nome} ({componente.sigla})</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name={`componentes.${index}.aulas_semanais`}
+                      render={({ field: aulasField }) => (
+                          <FormItem>
+                              <FormLabel>Aulas Semanais</FormLabel>
+                              <FormControl>
+                                  <Input type="number" min="0" {...aulasField} />
+                              </FormControl>
+                          </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`componentes.${index}.professor_id`}
+                      render={({ field: profField }) => (
+                        <FormItem>
+                          <FormLabel>Professor</FormLabel>
+                          <Select onValueChange={profField.onChange} value={profField.value || ''} disabled={professoresQualificados.length === 0}>
+                              <FormControl><SelectTrigger><SelectValue placeholder={professoresQualificados.length === 0 ? 'Nenhum prof. qualificado' : 'Selecione...'} /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                  <SelectItem value="">Nenhum/A definir</SelectItem>
+                                  {professoresQualificados.map(p => (
+                                      <SelectItem key={p.id} value={p.id}>{p.nome_horario}</SelectItem>
+                                  ))}
+                              </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
               )
             })}
           </form>

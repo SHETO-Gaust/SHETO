@@ -67,7 +67,7 @@ export type Professor = {
 // This will be the type returned by the main get action
 export type ProfessorComDados = Professor & {
     componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
-    turnos: Turno[];
+    turnos: Pick<Turno, 'id' | 'nome'>[];
 };
 
 export type Serie = {
@@ -84,6 +84,7 @@ export type SerieComponente = {
   serie_id: string;
   componente_id: string;
   aulas_semanais: number;
+  professor_id: string | null;
 };
 
 // This type represents the comprehensive data needed for the client
@@ -91,7 +92,8 @@ export type SerieComDados = Serie & {
   nivel_ensino: Pick<NivelEnsino, 'id' | 'nome' | 'sigla'>;
   turno: Turno;
   componentes: (SerieComponente & {
-      componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>
+      componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
+      professor: Pick<Professor, 'id' | 'nome_horario'> | null;
   })[];
   total_aulas_semanais: number;
   total_aulas_distribuidas: number;

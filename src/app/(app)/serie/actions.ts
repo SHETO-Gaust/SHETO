@@ -3,7 +3,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import type { Serie, SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
+import { getProfessores } from '@/app/(app)/professores/actions';
+import type { Serie, SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
+
 
 /* -------------------------------------------------------------------------- */
 /*                                 GET SERIES                                 */
@@ -24,7 +26,7 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
 
     const { data: seriesComponentes, error: componentesError } = await supabase
         .from('series_componentes')
-        .select('*, componente:componentes_curriculares(*)')
+        .select('*, componente:componentes_curriculares(*), professor:professores(id, nome_horario)')
         .in('serie_id', seriesIds);
     
     if (componentesError) throw componentesError;
@@ -39,8 +41,8 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
             nivel_ensino: serie.nivel_ensino as any,
             turno: serie.turno as any,
             componentes: componentesDaSerie as any,
-            total_aulas_distribuidas,
             total_aulas_semanais,
+            total_aulas_distribuidas,
         }
     });
 
@@ -57,19 +59,22 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
 export async function getSerieDependencies(escolaId: string): Promise<{
     niveisEnsino: NivelEnsino[],
     turnos: Turno[],
-    componentes: ComponenteCurricular[]
+    componentes: ComponenteCurricular[],
+    professores: ProfessorComDados[],
 }> {
     const supabase = await createClient();
-    const [niveisResult, turnosResult, componentesResult] = await Promise.all([
+    const [niveisResult, turnosResult, componentesResult, professoresResult] = await Promise.all([
         supabase.from('niveis_ensino').select('*').eq('escola_id', escolaId),
         supabase.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true),
-        supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId)
+        supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId),
+        getProfessores(escolaId),
     ]);
 
     return {
         niveisEnsino: niveisResult.data || [],
         turnos: turnosResult.data || [],
-        componentes: componentesResult.data || []
+        componentes: componentesResult.data || [],
+        professores: professoresResult.data || [],
     };
 }
 
@@ -119,6 +124,7 @@ const cargaHorariaSchema = z.object({
     componentes: z.array(z.object({
         componente_id: z.string(),
         aulas_semanais: z.coerce.number().min(0),
+        professor_id: z.string().nullable().optional(),
     }))
 });
 
@@ -141,7 +147,12 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
     
     const toInsert = componentes
         .filter(c => c.aulas_semanais > 0)
-        .map(c => ({ ...c, serie_id }));
+        .map(c => ({
+            serie_id,
+            componente_id: c.componente_id,
+            aulas_semanais: c.aulas_semanais,
+            professor_id: c.professor_id || null,
+        }));
 
     if (toInsert.length > 0) {
         const { error: insertError } = await supabase
@@ -187,7 +198,7 @@ export async function duplicateSerie(serieId: string, newName: string) {
 
     const { data: originalComponentes, error: compError } = await supabase
         .from('series_componentes')
-        .select('componente_id, aulas_semanais')
+        .select('componente_id, aulas_semanais, professor_id')
         .eq('serie_id', serieId);
 
     if (compError) {
