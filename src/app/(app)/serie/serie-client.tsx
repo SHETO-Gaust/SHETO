@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
+import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, BookOpen, CalendarX } from 'lucide-react';
 import {
@@ -26,7 +26,8 @@ type SerieClientProps = {
   dependencies: {
     niveisEnsino: NivelEnsino[],
     turnos: Turno[],
-    componentes: ComponenteCurricular[]
+    componentes: ComponenteCurricular[],
+    professores: ProfessorComDados[],
   };
 };
 
@@ -87,6 +88,9 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
           {series.map((serie) => {
             const aulasRestantes = serie.total_aulas_semanais - serie.total_aulas_distribuidas;
             const progresso = serie.total_aulas_semanais > 0 ? (serie.total_aulas_distribuidas / serie.total_aulas_semanais) * 100 : 0;
+            
+            const disciplinasComAulas = serie.componentes.filter(c => c.aulas_semanais > 0);
+            const disciplinasSemProfessor = disciplinasComAulas.filter(c => !c.professor_id).length;
 
             return (
               <Card key={serie.id} className="flex flex-col">
@@ -120,9 +124,23 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
                     </div>
                     <Progress value={progresso} />
                   </div>
-                  <Badge variant={aulasRestantes === 0 ? 'secondary' : 'destructive'}>
-                    {aulasRestantes > 0 ? `${aulasRestantes} aulas a distribuir` : aulasRestantes < 0 ? `${Math.abs(aulasRestantes)} aulas excedentes` : 'Carga horária completa'}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={aulasRestantes === 0 ? 'secondary' : 'destructive'}>
+                        {aulasRestantes > 0 ? `${aulasRestantes} aulas a distribuir` : aulasRestantes < 0 ? `${Math.abs(aulasRestantes)} aulas excedentes` : 'Carga horária completa'}
+                    </Badge>
+                    
+                    {disciplinasComAulas.length > 0 && disciplinasSemProfessor > 0 && (
+                        <Badge variant="destructive">
+                            {disciplinasSemProfessor} {disciplinasSemProfessor === 1 ? 'disciplina sem' : 'disciplinas sem'} professor
+                        </Badge>
+                    )}
+
+                    {disciplinasComAulas.length > 0 && disciplinasSemProfessor === 0 && (
+                        <Badge variant="secondary">
+                            Professores alocados
+                        </Badge>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )
