@@ -16,6 +16,7 @@ import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
@@ -94,7 +95,7 @@ export function ProfessoresClient({
   };
 
   return (
-    <>
+    <TooltipProvider>
       <div className="flex justify-end mb-4">
         <Button onClick={() => openSheet(null, 'edit')}>
           <PlusCircle className="mr-2 h-4 w-4" />
@@ -238,6 +239,6 @@ export function ProfessoresClient({
             />
           </>
       )}
-    </>
+    </TooltipProvider>
   );
 }
