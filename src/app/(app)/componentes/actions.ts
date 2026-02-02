@@ -1,7 +1,6 @@
 
 'use server';
 
-import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
@@ -26,7 +25,7 @@ const defaultComponentes = [
 export async function getComponentes(
   escolaId: string
 ): Promise<{ data?: ComponenteCurricular[]; error?: string }> {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('componentes_curriculares')
@@ -68,7 +67,7 @@ const upsertComponenteSchema = z.object({
 export async function upsertComponente(
   formData: z.infer<typeof upsertComponenteSchema>
 ) {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const validated = upsertComponenteSchema.safeParse(formData);
   if (!validated.success) {
@@ -108,7 +107,7 @@ export async function upsertComponente(
 }
 
 export async function deleteComponente(id: string) {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const { error } = await supabase.from('componentes_curriculares').delete().eq('id', id);
 

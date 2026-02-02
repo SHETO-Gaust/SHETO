@@ -1,6 +1,6 @@
+
 'use server';
 
-import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
@@ -17,7 +17,7 @@ import type { Turno, HorarioAula } from '@/lib/types';
 export async function getTurnos(
   escolaId: string
 ): Promise<{ data?: Turno[]; error?: string }> {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('turnos')
@@ -91,7 +91,7 @@ const upsertTurnoSchema = z.object({
 export async function upsertTurno(
   formData: z.infer<typeof upsertTurnoSchema>
 ) {
-  const supabase = await createClient(cookies()); 
+  const supabase = await createClient(); 
 
   const validated = upsertTurnoSchema.safeParse(formData);
   if (!validated.success) {
@@ -130,7 +130,7 @@ export async function upsertTurno(
 /* -------------------------------------------------------------------------- */
 
 export async function updateTurnoStatus(id: string, ativo: boolean) {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const { error } = await supabase
     .from('turnos')
@@ -182,7 +182,7 @@ const updateHorariosSchema = z
 export async function updateTurnoHorarios(
   formData: z.infer<typeof updateHorariosSchema>
 ) {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const validated = updateHorariosSchema.safeParse(formData);
   if (!validated.success) {
@@ -212,7 +212,7 @@ export async function updateTurnoHorarios(
 /*                                DELETE TURNO                                */
 /* -------------------------------------------------------------------------- */
 export async function deleteTurno(id: string) {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const { error } = await supabase.from('turnos').delete().eq('id', id);
 

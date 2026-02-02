@@ -1,14 +1,12 @@
 'use server';
 
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import type { Profile } from '@/lib/types';
 import { z } from 'zod';
 
 export async function getUsers(): Promise<Profile[]> {
-    const cookieStore = cookies();
-    const supabase = await createClient(cookieStore);
+    const supabase = await createClient();
 
     const { data, error } = await supabase
         .from('profiles')
@@ -24,8 +22,7 @@ export async function getUsers(): Promise<Profile[]> {
 }
 
 export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user', ue: string | null | undefined) {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = await createClient();
 
     const { error } = await supabase
         .from('profiles')
@@ -52,7 +49,7 @@ const createUserSchema = z.object({
 });
 
 export async function createUser(formData: z.infer<typeof createUserSchema>) {
-    const supabaseAdmin = createAdminClient();
+    const supabaseAdmin = await createAdminClient();
 
     const validatedFields = createUserSchema.safeParse(formData);
 

@@ -1,7 +1,6 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { cookies } from 'next/headers';
 import { z } from 'zod';
 
 const updatePasswordSchema = z.object({
@@ -14,8 +13,7 @@ const updatePasswordSchema = z.object({
 });
 
 export async function updatePassword(formData: z.infer<typeof updatePasswordSchema>) {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = await createClient();
 
     const validatedFields = updatePasswordSchema.safeParse(formData);
 

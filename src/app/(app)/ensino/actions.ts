@@ -1,7 +1,6 @@
 
 'use server';
 
-import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
@@ -18,7 +17,7 @@ import type { NivelEnsino } from '@/lib/types';
 export async function getNiveisEnsino(
   escolaId: string
 ): Promise<{ data?: NivelEnsino[]; error?: string }> {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('niveis_ensino')
@@ -75,7 +74,7 @@ const upsertNivelEnsinoSchema = z.object({
 export async function upsertNivelEnsino(
   formData: z.infer<typeof upsertNivelEnsinoSchema>
 ) {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const validated = upsertNivelEnsinoSchema.safeParse(formData);
   if (!validated.success) {
@@ -115,7 +114,7 @@ export async function upsertNivelEnsino(
 }
 
 export async function deleteNivelEnsino(id: string) {
-  const supabase = await createClient(cookies());
+  const supabase = await createClient();
 
   const { error } = await supabase.from('niveis_ensino').delete().eq('id', id);
 
