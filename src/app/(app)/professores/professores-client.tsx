@@ -1,16 +1,31 @@
 'use client';
 
 import { useState } from 'react';
-import type { ProfessorComDados, ComponenteCurricular, Turno } from '@/lib/types';
+import type { ProfessorComDados, Turno, ComponenteCurricular } from '@/lib/types';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, MoreHorizontal, Pencil, BookCopy, CalendarX, Trash2 } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { MoreHorizontal, PlusCircle, BookCopy, CalendarX, Trash2, Pencil } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
 import { EditProfessorSheet } from './edit-professor-sheet';
-import { DeleteProfessorDialog } from './delete-professor-dialog';
 import { DisciplinasProfessorSheet } from './disciplinas-professor-sheet';
 import { RestricoesProfessorSheet } from './restricoes-professor-sheet';
+import { DeleteProfessorDialog } from './delete-professor-dialog';
+import { getProfessores } from './actions';
+import { useToast } from '@/hooks/use-toast';
 
 type ProfessoresClientProps = {
   initialProfessores: ProfessorComDados[];
@@ -18,6 +33,8 @@ type ProfessoresClientProps = {
   turnosDaEscola: Turno[];
   componentesDaEscola: ComponenteCurricular[];
 };
+
+type SheetType = 'edit' | 'disciplinas' | 'restricoes' | null;
 
 export function ProfessoresClient({
   initialProfessores,
@@ -27,40 +44,60 @@ export function ProfessoresClient({
 }: ProfessoresClientProps) {
   const [professores, setProfessores] = useState(initialProfessores);
   const [selectedProfessor, setSelectedProfessor] = useState<ProfessorComDados | null>(null);
+  const [activeSheet, setActiveSheet] = useState<SheetType>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { toast } = useToast();
 
-  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
-  const [isDisciplinasSheetOpen, setIsDisciplinasSheetOpen] = useState(false);
-  const [isRestricoesSheetOpen, setIsRestricoesSheetOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const fetchAndUpdateProfessores = async () => {
+    const { data, error } = await getProfessores(escolaId);
+    if (error) {
+      toast({
+        title: 'Erro ao atualizar lista',
+        description: 'Não foi possível buscar os professores atualizados.',
+        variant: 'destructive',
+      });
+    } else if (data) {
+      setProfessores(data);
+    }
+  };
 
-  const handleOpenSheet = (
-    sheet: 'edit' | 'disciplinas' | 'restricoes' | 'delete',
-    professor: ProfessorComDados | null
-  ) => {
+  const openSheet = (professor: ProfessorComDados | null, type: SheetType) => {
     setSelectedProfessor(professor);
-    if (sheet === 'edit') setIsEditSheetOpen(true);
-    if (sheet === 'disciplinas') setIsDisciplinasSheetOpen(true);
-    if (sheet === 'restricoes') setIsRestricoesSheetOpen(true);
-    if (sheet === 'delete') setIsDeleteDialogOpen(true);
+    setActiveSheet(type);
   };
   
-  const handleCloseModals = () => {
-    setIsEditSheetOpen(false);
-    setIsDisciplinasSheetOpen(false);
-    setIsRestricoesSheetOpen(false);
-    setIsDeleteDialogOpen(false);
+  const openDialog = (professor: ProfessorComDados) => {
+    setSelectedProfessor(professor);
+    setIsDialogOpen(true);
   };
   
-  // This function will be called by the child components to update the main list
-  const refreshProfessores = async () => {
-    // In a real app, you might re-fetch from the server. For now, we rely on revalidation.
-    // For client-side updates without full re-fetch, we'd need more complex state management.
+  const closeModals = () => {
+    setActiveSheet(null);
+    setIsDialogOpen(false);
+    setTimeout(() => {
+        setSelectedProfessor(null);
+    }, 300);
+  };
+  
+  const onProfessorDeleted = () => {
+    if (selectedProfessor) {
+      setProfessores(current => current.filter(p => p.id !== selectedProfessor.id));
+    }
+  };
+
+  const isSheetOpenFor = (type: SheetType) => activeSheet === type;
+  const setSheetOpenFor = (type: SheetType) => (open: boolean) => {
+    if (!open) {
+        closeModals();
+    } else {
+        setActiveSheet(type);
+    }
   };
 
   return (
     <>
       <div className="flex justify-end mb-4">
-        <Button onClick={() => handleOpenSheet('edit', null)}>
+        <Button onClick={() => openSheet(null, 'edit')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Professor
         </Button>
@@ -69,31 +106,36 @@ export function ProfessoresClient({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nome Completo</TableHead>
-              <TableHead>Nome (Horário)</TableHead>
-              <TableHead>Turnos</TableHead>
+              <TableHead>Nome</TableHead>
               <TableHead>Disciplinas</TableHead>
+              <TableHead>Turnos</TableHead>
               <TableHead className="w-[80px] text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {professores.map(prof => (
+            {professores.map((prof) => (
               <TableRow key={prof.id}>
-                <TableCell className="font-medium">{prof.nome_completo}</TableCell>
-                <TableCell>{prof.nome_horario}</TableCell>
+                <TableCell>
+                  <div className="font-medium">{prof.nome_completo}</div>
+                  <div className="text-sm text-muted-foreground">{prof.nome_horario}</div>
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    {prof.turnos.map(t => <Badge key={t.id} variant="secondary">{t.nome}</Badge>)}
+                    {prof.componentes.length > 0 ? (
+                      prof.componentes.map(c => <Badge key={c.id} variant="secondary">{c.sigla}</Badge>)
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Nenhuma</span>
+                    )}
                   </div>
                 </TableCell>
-                <TableCell className="max-w-xs">
-                  <div className="flex flex-wrap gap-1">
-                     {prof.componentes.length > 0 ? (
-                        prof.componentes.map(c => <Badge key={c.id} variant="outline">{c.sigla}</Badge>)
+                <TableCell>
+                   <div className="flex flex-wrap gap-1">
+                     {prof.turnos.length > 0 ? (
+                       prof.turnos.map(t => <Badge key={t.id} variant="outline">{t.nome}</Badge>)
                      ) : (
-                        <span className="text-xs text-muted-foreground">Nenhuma</span>
+                       <span className="text-xs text-muted-foreground">Nenhum</span>
                      )}
-                  </div>
+                   </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu modal={false}>
@@ -104,20 +146,21 @@ export function ProfessoresClient({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                       <DropdownMenuItem onClick={() => handleOpenSheet('edit', prof)}>
+                      <DropdownMenuItem onClick={() => openSheet(prof, 'edit')}>
                         <Pencil className="mr-2 h-4 w-4" />
-                        <span>Editar</span>
+                        <span>Editar Dados</span>
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleOpenSheet('disciplinas', prof)}>
+                      <DropdownMenuItem onClick={() => openSheet(prof, 'disciplinas')}>
                         <BookCopy className="mr-2 h-4 w-4" />
-                        <span>Disciplinas</span>
+                        <span>Gerenciar Disciplinas</span>
                       </DropdownMenuItem>
-                       <DropdownMenuItem onClick={() => handleOpenSheet('restricoes', prof)}>
+                      <DropdownMenuItem onClick={() => openSheet(prof, 'restricoes')}>
                         <CalendarX className="mr-2 h-4 w-4" />
-                        <span>Restrições</span>
+                        <span>Restrições de Horário</span>
                       </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => handleOpenSheet('delete', prof)}
+                        onClick={() => openDialog(prof)}
                         className="text-destructive focus:text-destructive"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -130,48 +173,44 @@ export function ProfessoresClient({
             ))}
           </TableBody>
         </Table>
-        {professores.length === 0 && (
-            <div className="text-center p-8 text-muted-foreground">
-                Nenhum professor cadastrado.
-            </div>
-        )}
       </div>
-
+      
       <EditProfessorSheet
-        isOpen={isEditSheetOpen}
-        setIsOpen={setIsEditSheetOpen}
-        professor={selectedProfessor}
-        escolaId={escolaId}
-        turnosDaEscola={turnosDaEscola}
-        onProfessorUpdated={refreshProfessores}
+          isOpen={isSheetOpenFor('edit')}
+          setIsOpen={setSheetOpenFor('edit')}
+          professor={selectedProfessor}
+          escolaId={escolaId}
+          turnosDaEscola={turnosDaEscola}
+          onProfessorUpdated={fetchAndUpdateProfessores}
       />
       
       {selectedProfessor && (
-        <DisciplinasProfessorSheet
-            isOpen={isDisciplinasSheetOpen}
-            setIsOpen={setIsDisciplinasSheetOpen}
-            professor={selectedProfessor}
-            componentesDaEscola={componentesDaEscola}
-            onDisciplinasUpdated={refreshProfessores}
-        />
-      )}
+          <>
+            <DisciplinasProfessorSheet
+                isOpen={isSheetOpenFor('disciplinas')}
+                setIsOpen={setSheetOpenFor('disciplinas')}
+                professor={selectedProfessor}
+                componentesDaEscola={componentesDaEscola}
+                onDisciplinasUpdated={fetchAndUpdateProfessores}
+            />
 
-      {selectedProfessor && (
-        <RestricoesProfessorSheet
-            isOpen={isRestricoesSheetOpen}
-            setIsOpen={setIsRestricoesSheetOpen}
-            professor={selectedProfessor}
-            onRestricoesUpdated={refreshProfessores}
-        />
-      )}
-      
-      {selectedProfessor && (
-        <DeleteProfessorDialog
-            isOpen={isDeleteDialogOpen}
-            setIsOpen={setIsDeleteDialogOpen}
-            professor={selectedProfessor}
-            onProfessorDeleted={refreshProfessores}
-        />
+            <RestricoesProfessorSheet
+                isOpen={isSheetOpenFor('restricoes')}
+                setIsOpen={setSheetOpenFor('restricoes')}
+                professor={selectedProfessor}
+                onRestricoesUpdated={fetchAndUpdateProfessores}
+            />
+            
+            <DeleteProfessorDialog
+                isOpen={isDialogOpen}
+                setIsOpen={setIsDialogOpen}
+                professor={selectedProfessor}
+                onProfessorDeleted={() => {
+                    onProfessorDeleted();
+                    closeModals();
+                }}
+            />
+          </>
       )}
     </>
   );

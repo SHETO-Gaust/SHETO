@@ -1,22 +1,21 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
-import type { Professor, ProfessorComDados, ComponenteCurricular, Turno } from '@/lib/types';
+import type { ProfessorComDados, ComponenteCurricular, Turno } from '@/lib/types';
 
 /* -------------------------------------------------------------------------- */
-/*                               GET PROFESSORES                              */
+/* GET PROFESSORES                               */
 /* -------------------------------------------------------------------------- */
 export async function getProfessores(escolaId: string): Promise<{
   data?: ProfessorComDados[];
   error?: string;
 }> {
-  const supabase = createClient(cookies());
+  // CORREÇÃO: Não precisa mais passar cookies() se o seu createClient já faz isso internamente
+  const supabase = await createClient();
 
   try {
-    // 1. Fetch all professors for the school
     const { data: professores, error: profError } = await supabase
       .from('professores')
       .select('*')
@@ -24,9 +23,10 @@ export async function getProfessores(escolaId: string): Promise<{
       .order('nome_completo', { ascending: true });
 
     if (profError) throw profError;
+    if (!professores || professores.length === 0) return { data: [] };
 
-    // 2. Fetch all linking table entries for the school's professors
     const professorIds = professores.map(p => p.id);
+    
     const { data: links, error: linkError } = await supabase
       .from('professores_componentes')
       .select('professor_id, componente_id')
@@ -34,7 +34,6 @@ export async function getProfessores(escolaId: string): Promise<{
     
     if (linkError) throw linkError;
 
-    // 3. Fetch all components for the school
     const { data: componentes, error: compError } = await supabase
         .from('componentes_curriculares')
         .select('id, nome, sigla')
@@ -43,7 +42,6 @@ export async function getProfessores(escolaId: string): Promise<{
     if (compError) throw compError;
     const componentesMap = new Map(componentes.map(c => [c.id, c]));
 
-    // 4. Fetch all turnos for the school
     const { data: turnos, error: turnoError } = await supabase
         .from('turnos')
         .select('id, nome')
@@ -52,7 +50,6 @@ export async function getProfessores(escolaId: string): Promise<{
     if (turnoError) throw turnoError;
     const turnosMap = new Map(turnos.map(t => [t.id, t]));
 
-    // 5. Assemble the final data structure
     const professoresComDados: ProfessorComDados[] = professores.map(prof => {
       const professorComponenteIds = links
         .filter(l => l.professor_id === prof.id)
@@ -81,7 +78,7 @@ export async function getProfessores(escolaId: string): Promise<{
 }
 
 /* -------------------------------------------------------------------------- */
-/*                               UPSERT PROFESSOR                             */
+/* UPSERT PROFESSOR                             */
 /* -------------------------------------------------------------------------- */
 const upsertProfessorSchema = z.object({
   id: z.string().optional(),
@@ -93,7 +90,8 @@ const upsertProfessorSchema = z.object({
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
-  const supabase = createClient(cookies());
+  // CORREÇÃO CRÍTICA: Adicionado await
+  const supabase = await createClient(); 
   
   const validated = upsertProfessorSchema.safeParse(formData);
   if (!validated.success) {
@@ -109,10 +107,9 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
     .single();
 
   if (error) {
-    if (error.code === '23505') { // unique_violation
+    if (error.code === '23505') {
         return { error: `Um professor com o nome "${dataToUpsert.nome_completo}" já existe.` };
     }
-    console.error('Error upserting professor:', error);
     return { error: 'Não foi possível salvar o professor.' };
   }
 
@@ -121,39 +118,33 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
 }
 
 /* -------------------------------------------------------------------------- */
-/*                               DELETE PROFESSOR                             */
+/* DELETE PROFESSOR                             */
 /* -------------------------------------------------------------------------- */
 export async function deleteProfessor(id: string) {
-  const supabase = createClient(cookies());
+  // CORREÇÃO: Adicionado await
+  const supabase = await createClient();
   const { error } = await supabase.from('professores').delete().eq('id', id);
 
-  if (error) {
-    console.error('Error deleting professor:', error);
-    return { error: 'Não foi possível deletar o professor.' };
-  }
+  if (error) return { error: 'Não foi possível deletar o professor.' };
 
   revalidatePath('/professores');
   return { success: true };
 }
 
 /* -------------------------------------------------------------------------- */
-/*                        UPDATE COMPONENTES DO PROFESSOR                       */
+/* UPDATE COMPONENTES DO PROFESSOR                     */
 /* -------------------------------------------------------------------------- */
 export async function updateProfessorComponentes(professorId: string, componenteIds: string[]) {
-    const supabase = createClient(cookies());
+    // CORREÇÃO: Adicionado await
+    const supabase = await createClient();
 
-    // 1. Delete existing links for the professor
     const { error: deleteError } = await supabase
         .from('professores_componentes')
         .delete()
         .eq('professor_id', professorId);
     
-    if (deleteError) {
-        console.error('Error deleting professor_componentes links:', deleteError);
-        return { error: 'Não foi possível limpar as disciplinas antigas.' };
-    }
+    if (deleteError) return { error: 'Não foi possível limpar as disciplinas antigas.' };
 
-    // 2. Insert new links if there are any
     if (componenteIds.length > 0) {
         const linksToInsert = componenteIds.map(componente_id => ({
             professor_id: professorId,
@@ -164,10 +155,7 @@ export async function updateProfessorComponentes(professorId: string, componente
             .from('professores_componentes')
             .insert(linksToInsert);
 
-        if (insertError) {
-            console.error('Error inserting professor_componentes links:', insertError);
-            return { error: 'Não foi possível salvar as novas disciplinas.' };
-        }
+        if (insertError) return { error: 'Não foi possível salvar as novas disciplinas.' };
     }
     
     revalidatePath('/professores');
@@ -175,20 +163,18 @@ export async function updateProfessorComponentes(professorId: string, componente
 }
 
 /* -------------------------------------------------------------------------- */
-/*                         UPDATE RESTRIÇÕES DO PROFESSOR                      */
+/* UPDATE RESTRIÇÕES DO PROFESSOR                     */
 /* -------------------------------------------------------------------------- */
 export async function updateProfessorRestricoes(professorId: string, restricoes: any) {
-    const supabase = createClient(cookies());
+    // CORREÇÃO: Adicionado await
+    const supabase = await createClient();
 
     const { error } = await supabase
         .from('professores')
         .update({ restricoes })
         .eq('id', professorId);
 
-    if (error) {
-        console.error('Error updating professor restricoes:', error);
-        return { error: 'Não foi possível salvar as restrições de horário.' };
-    }
+    if (error) return { error: 'Não foi possível salvar as restrições de horário.' };
 
     revalidatePath('/professores');
     return { success: true };
