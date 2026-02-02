@@ -36,11 +36,27 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     const allTurnos = turnosResult.data || [];
     const allProfessores = professoresResult.data || [];
     const allSeries = seriesResult.data || [];
+    
+    // --- Start of new logic ---
+
+    // Calculate assigned classes for each professor
+    const aulasAtribuidasMap = new Map<string, number>();
+    for (const serie of allSeries) {
+        for (const componente of serie.componentes) {
+            if (componente.professor_id) {
+                const currentCount = aulasAtribuidasMap.get(componente.professor_id) || 0;
+                aulasAtribuidasMap.set(componente.professor_id, currentCount + componente.aulas_semanais);
+            }
+        }
+    }
+    
+    const selectedTurno = allTurnos.find(t => t.id === turnoId);
+    const seriesDoTurno = allSeries.filter(s => s.turno_id === turnoId);
+    const professoresDoTurno = allProfessores.filter(p => p.turnos_ids.includes(turnoId));
 
     const checklist: ChecklistReportData = [];
 
     // 1. Turno
-    const selectedTurno = allTurnos.find(t => t.id === turnoId);
     checklist.push({
         id: '1',
         title: 'Turno',
@@ -69,8 +85,6 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
         details: (componentesResult.count ?? 0) > 0 ? '' : 'Nenhuma disciplina (componente) cadastrada.',
         link: '/componentes'
     });
-
-    const seriesDoTurno = allSeries.filter(s => s.turno_id === turnoId);
 
     // 4. Séries
     checklist.push({
@@ -106,7 +120,6 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     });
 
     // 5.1 Professores / Disciplinas
-    const professoresDoTurno = allProfessores.filter(p => p.turnos_ids.includes(turnoId));
     const professoresSemDisciplina = professoresDoTurno.filter(p => p.componentes.length === 0).map(p => p.nome_horario);
     checklist.push({
         id: '5.1',
@@ -117,7 +130,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
         link: '/professores'
     });
 
-    // 6. Turmas
+    // 6. Turmas (Séries do Turno)
     checklist.push({
         id: '6',
         title: 'Turmas',
@@ -141,23 +154,53 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
         link: '/serie'
     });
     
-    // 7. Relatório de Dados Cadastrados (Placeholder)
+    // 7. Relatório de Dados Cadastrados
+    const overbookedProfessors: string[] = [];
+    if (selectedTurno) {
+        const totalSlotsInTurno = selectedTurno.dias_semana.length * selectedTurno.aulas_por_dia;
+        for (const prof of professoresDoTurno) {
+            const aulasAtribuidas = aulasAtribuidasMap.get(prof.id) || 0;
+            let restrictedSlots = 0;
+            if (prof.restricoes && prof.restricoes[turnoId]) {
+                for (const day in prof.restricoes[turnoId]) {
+                    restrictedSlots += Object.keys(prof.restricoes[turnoId][day]).length;
+                }
+            }
+            const availableSlots = totalSlotsInTurno - restrictedSlots;
+            if (aulasAtribuidas > availableSlots) {
+                overbookedProfessors.push(prof.nome_horario);
+            }
+        }
+    }
     checklist.push({
         id: '7',
         title: 'Relatório de Dados Cadastrados',
         description: 'Verifica se existe algum professor com mais restrições no horário que o possível. Exemplo: professor ministra 10 aulas semanais, porém possui apenas 5 horários disponíveis.',
-        status: 'ok',
-        details: 'Lógica de verificação em desenvolvimento.',
-        link: '/relatorios'
+        status: overbookedProfessors.length > 0 ? 'warning' : 'ok',
+        details: overbookedProfessors.length > 0 ? `Professores com mais aulas do que horários disponíveis: ${overbookedProfessors.join(', ')}` : '',
+        link: '/professores'
     });
     
-    // 8. Relatório de Restrições dos Professores (Placeholder)
+    // 8. Relatório de Restrições dos Professores
+    const bottleneckSlots: string[] = [];
+    if (selectedTurno && seriesDoTurno.length > 0) {
+        const numTurmas = seriesDoTurno.length;
+        for (const dia of selectedTurno.dias_semana) {
+            for (let aulaIndex = 0; aulaIndex < selectedTurno.aulas_por_dia; aulaIndex++) {
+                const professorsRestrictedInSlot = professoresDoTurno.filter(p => p.restricoes?.[turnoId]?.[dia]?.[aulaIndex]).length;
+                const availableProfessors = professoresDoTurno.length - professorsRestrictedInSlot;
+                if (availableProfessors < numTurmas) {
+                    bottleneckSlots.push(`${dia.charAt(0).toUpperCase() + dia.slice(1)}, ${aulaIndex + 1}ª aula`);
+                }
+            }
+        }
+    }
     checklist.push({
         id: '8',
         title: 'Relatório de Restrições dos Professores',
         description: 'Verifica se a quantidade de professores disponíveis em cada horário é suficiente para a quantidade de turmas.',
-        status: 'error',
-        details: 'Lógica de verificação em desenvolvimento.',
+        status: bottleneckSlots.length > 0 ? 'error' : 'ok',
+        details: bottleneckSlots.length > 0 ? `Conflito de disponibilidade. Não há professores suficientes para todas as turmas nos seguintes horários: ${bottleneckSlots.join('; ')}` : '',
         link: '/professores'
     });
 
