@@ -109,6 +109,8 @@ export function ProfessoresClient({
               <TableHead>Nome</TableHead>
               <TableHead>Disciplinas</TableHead>
               <TableHead>Turnos</TableHead>
+              <TableHead className="text-center">Aulas Disponíveis</TableHead>
+              <TableHead className="text-center">Aulas Planejamento</TableHead>
               <TableHead className="w-[200px] text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -137,6 +139,8 @@ export function ProfessoresClient({
                      )}
                    </div>
                 </TableCell>
+                <TableCell className="text-center font-medium">{prof.aulas_disponiveis}</TableCell>
+                <TableCell className="text-center font-medium">{prof.aulas_planejamento}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
                       <Tooltip>
