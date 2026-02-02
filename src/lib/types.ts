@@ -71,6 +71,7 @@ export type ProfessorComDados = Professor & {
     componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
     turnos: Pick<Turno, 'id' | 'nome'>[];
     aulas_atribuidas?: number;
+    alocacoes?: { serie_nome: string; aulas: number }[];
 };
 
 export type Serie = {

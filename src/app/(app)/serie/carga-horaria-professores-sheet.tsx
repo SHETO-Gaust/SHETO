@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import type { ProfessorComDados } from '@/lib/types';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 
 type Props = {
   isOpen: boolean;
@@ -37,7 +38,7 @@ export function CargaHorariaProfessoresSheet({ isOpen, setIsOpen, professores }:
             const saldo = aulasDisponiveis - aulasAtribuidas;
 
             return (
-              <div key={prof.id} className="p-4 border rounded-lg space-y-2">
+              <div key={prof.id} className="p-4 border rounded-lg space-y-3">
                 <div className="flex justify-between items-baseline">
                   <p className="font-semibold">{prof.nome_horario}</p>
                   <p className="text-sm font-medium">
@@ -45,9 +46,22 @@ export function CargaHorariaProfessoresSheet({ isOpen, setIsOpen, professores }:
                   </p>
                 </div>
                 <Progress value={progresso} />
-                <p className="text-xs text-right text-muted-foreground">
-                  {saldo >= 0 ? `${saldo} aulas restantes` : `${Math.abs(saldo)} aulas excedentes`}
-                </p>
+                <div className="flex justify-between items-start pt-1">
+                    <div className="flex flex-wrap gap-1">
+                        {prof.alocacoes && prof.alocacoes.length > 0 ? (
+                            prof.alocacoes.map(aloc => (
+                                <Badge key={aloc.serie_nome} variant="secondary">
+                                    {aloc.serie_nome}: {aloc.aulas} {aloc.aulas > 1 ? 'aulas' : 'aula'}
+                                </Badge>
+                            ))
+                        ) : (
+                            <p className="text-xs text-muted-foreground italic">Nenhuma aula atribuída</p>
+                        )}
+                    </div>
+                    <p className="text-xs text-right text-muted-foreground shrink-0 pl-2">
+                      {saldo >= 0 ? `${saldo} aulas restantes` : `${Math.abs(saldo)} aulas excedentes`}
+                    </p>
+                </div>
               </div>
             );
           })}

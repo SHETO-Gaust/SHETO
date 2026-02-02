@@ -40,21 +40,37 @@ export default async function SeriePage() {
   const { data: series, error } = await getSeries(escolaId);
   const dependencies = await getSerieDependencies(escolaId);
 
-  // Calcula a carga horária atribuída para cada professor
+  // Calcula a carga horária atribuída e as alocações para cada professor
   const assignedClassesMap = new Map<string, number>();
+  const professorAlocacoesMap = new Map<string, { serie_nome: string; aulas: number }[]>();
+
   if (series) {
     for (const s of series) {
       for (const sc of s.componentes) {
         if (sc.professor_id) {
+          // Atualiza o total de aulas atribuídas
           const currentCount = assignedClassesMap.get(sc.professor_id) || 0;
           assignedClassesMap.set(sc.professor_id, currentCount + sc.aulas_semanais);
+
+          // Atualiza o mapa de alocações
+          const currentAlocacoes = professorAlocacoesMap.get(sc.professor_id) || [];
+          const serieIndex = currentAlocacoes.findIndex(aloc => aloc.serie_nome === s.nome);
+
+          if (serieIndex > -1) {
+              currentAlocacoes[serieIndex].aulas += sc.aulas_semanais;
+          } else {
+              currentAlocacoes.push({ serie_nome: s.nome, aulas: sc.aulas_semanais });
+          }
+          professorAlocacoesMap.set(sc.professor_id, currentAlocacoes);
         }
       }
     }
   }
+
   const professoresComCarga = dependencies.professores.map(prof => ({
     ...prof,
     aulas_atribuidas: assignedClassesMap.get(prof.id) || 0,
+    alocacoes: professorAlocacoesMap.get(prof.id) || [],
   }));
 
   const dependenciesComCarga = {
