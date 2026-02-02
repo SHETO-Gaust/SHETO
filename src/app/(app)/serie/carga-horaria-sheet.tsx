@@ -131,7 +131,7 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
                           <Select onValueChange={profField.onChange} value={profField.value || ''} disabled={professoresQualificados.length === 0}>
                               <FormControl><SelectTrigger><SelectValue placeholder={professoresQualificados.length === 0 ? 'Nenhum prof. qualificado' : 'Selecione...'} /></SelectTrigger></FormControl>
                               <SelectContent>
-                                  <SelectItem value="">Nenhum/A definir</SelectItem>
+                                  <SelectItem value="none">Nenhum/A definir</SelectItem>
                                   {professoresQualificados.map(p => (
                                       <SelectItem key={p.id} value={p.id}>{p.nome_horario}</SelectItem>
                                   ))}

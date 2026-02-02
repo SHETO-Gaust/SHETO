@@ -151,7 +151,7 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
             serie_id,
             componente_id: c.componente_id,
             aulas_semanais: c.aulas_semanais,
-            professor_id: c.professor_id || null,
+            professor_id: c.professor_id === 'none' ? null : c.professor_id,
         }));
 
     if (toInsert.length > 0) {
