@@ -60,6 +60,8 @@ export type Professor = {
     nome_horario: string;
     email?: string | null;
     turnos_ids: string[];
+    aulas_disponiveis: number;
+    aulas_planejamento: number;
     restricoes?: any; // JSONB for restrictions
     created_at: string;
 };

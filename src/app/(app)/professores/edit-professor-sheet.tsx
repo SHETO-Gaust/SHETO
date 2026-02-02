@@ -14,7 +14,6 @@ import { Loader2, Users } from 'lucide-react';
 import { upsertProfessor } from './actions';
 import type { ProfessorComDados, Turno } from '@/lib/types';
 
-// O Schema corrigido para aceitar ID numérico ou string e converter para string
 const formSchema = z.object({
   id: z.string().optional(),
   escola_id: z.union([z.string(), z.number()]).transform(val => String(val)),
@@ -22,6 +21,8 @@ const formSchema = z.object({
   nome_horario: z.string().min(2, 'O nome para o horário é obrigatório.'),
   email: z.string().email('Email inválido.').optional().or(z.literal('')),
   turnos_ids: z.array(z.string()).min(1, 'Selecione ao menos um turno.'),
+  aulas_disponiveis: z.coerce.number().min(0, 'As aulas disponíveis não podem ser negativas.'),
+  aulas_planejamento: z.coerce.number().min(0, 'As aulas de planejamento não podem ser negativas.'),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -55,10 +56,11 @@ export function EditProfessorSheet({
       nome_horario: '',
       email: '',
       turnos_ids: [],
+      aulas_disponiveis: 24,
+      aulas_planejamento: 5,
     },
   });
 
-  // Limpa o bloqueio de cliques do Radix e reseta o formulário
   useEffect(() => {
     if (isOpen) {
       document.body.style.pointerEvents = 'auto';
@@ -69,12 +71,13 @@ export function EditProfessorSheet({
         nome_horario: professor?.nome_horario ?? '',
         email: professor?.email ?? '',
         turnos_ids: professor?.turnos_ids ?? [],
+        aulas_disponiveis: professor?.aulas_disponiveis ?? 24,
+        aulas_planejamento: professor?.aulas_planejamento ?? 5,
       });
     }
   }, [isOpen, professor, escolaId, form]);
 
   const onSubmit = async (data: FormValues) => {
-    console.log("🚀 Dados validados e prontos para enviar:", data);
     setLoading(true);
     try {
       const result = await upsertProfessor(data);
@@ -148,6 +151,23 @@ export function EditProfessorSheet({
                   <FormMessage />
                 </FormItem>
               )} />
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField control={form.control} name="aulas_disponiveis" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Aulas Disponíveis</FormLabel>
+                    <FormControl><Input type="number" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="aulas_planejamento" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Aulas de Planejamento</FormLabel>
+                    <FormControl><Input type="number" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
 
               <div className="space-y-3">
                 <FormLabel>Turnos de Atuação</FormLabel>

@@ -87,6 +87,8 @@ const upsertProfessorSchema = z.object({
   nome_horario: z.string().min(2, 'O nome para o horário é obrigatório.'),
   email: z.string().email('Email inválido.').optional().or(z.literal('')),
   turnos_ids: z.array(z.string()).min(1, 'Selecione ao menos um turno.'),
+  aulas_disponiveis: z.coerce.number().min(0, 'As aulas disponíveis não podem ser negativas.'),
+  aulas_planejamento: z.coerce.number().min(0, 'As aulas de planejamento não podem ser negativas.'),
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
