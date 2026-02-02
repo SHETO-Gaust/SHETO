@@ -97,68 +97,70 @@ export function EditProfessorSheet({ isOpen, setIsOpen, professor, escolaId, tur
         </SheetHeader>
 
         <Form {...form}>
-          <form id="professor-form" onSubmit={form.handleSubmit(onSubmit)} className="flex-1 space-y-6 py-6 overflow-y-auto pr-2">
-            <FormField control={form.control} name="nome_completo" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nome Completo</FormLabel>
-                <FormControl><Input {...field} placeholder="Nome completo do professor" /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="nome_horario" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nome (para o horário)</FormLabel>
-                <FormControl><Input {...field} placeholder="Ex: Prof. Silva" /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="email" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email (Opcional)</FormLabel>
-                <FormControl><Input type="email" {...field} value={field.value ?? ''} placeholder="email@exemplo.com" /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="turnos_ids" render={() => (
-              <FormItem>
-                <div className="mb-4">
-                  <FormLabel>Turnos de Atuação</FormLabel>
-                  <p className="text-sm text-muted-foreground">Selecione os turnos em que o professor trabalha.</p>
-                </div>
-                {turnosDaEscola.map((turno) => (
-                  <FormField
-                    key={turno.id}
-                    control={form.control}
-                    name="turnos_ids"
-                    render={({ field }) => (
-                      <FormItem key={turno.id} className="flex flex-row items-start space-x-3 space-y-0">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value?.includes(turno.id)}
-                            onCheckedChange={(checked) => {
-                              return checked
-                                ? field.onChange([...field.value, turno.id])
-                                : field.onChange(field.value?.filter((value) => value !== turno.id));
-                            }}
-                          />
-                        </FormControl>
-                        <FormLabel className="font-normal">{turno.nome}</FormLabel>
-                      </FormItem>
-                    )}
-                  />
-                ))}
-                <FormMessage />
-              </FormItem>
-            )} />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 space-y-6 py-6 overflow-y-auto pr-2">
+                <FormField control={form.control} name="nome_completo" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Nome Completo</FormLabel>
+                    <FormControl><Input {...field} placeholder="Nome completo do professor" /></FormControl>
+                    <FormMessage />
+                </FormItem>
+                )} />
+                <FormField control={form.control} name="nome_horario" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Nome (para o horário)</FormLabel>
+                    <FormControl><Input {...field} placeholder="Ex: Prof. Silva" /></FormControl>
+                    <FormMessage />
+                </FormItem>
+                )} />
+                <FormField control={form.control} name="email" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Email (Opcional)</FormLabel>
+                    <FormControl><Input type="email" {...field} value={field.value ?? ''} placeholder="email@exemplo.com" /></FormControl>
+                    <FormMessage />
+                </FormItem>
+                )} />
+                <FormField control={form.control} name="turnos_ids" render={() => (
+                <FormItem>
+                    <div className="mb-4">
+                    <FormLabel>Turnos de Atuação</FormLabel>
+                    <p className="text-sm text-muted-foreground">Selecione os turnos em que o professor trabalha.</p>
+                    </div>
+                    {turnosDaEscola.map((turno) => (
+                    <FormField
+                        key={turno.id}
+                        control={form.control}
+                        name="turnos_ids"
+                        render={({ field }) => (
+                        <FormItem key={turno.id} className="flex flex-row items-start space-x-3 space-y-0">
+                            <FormControl>
+                            <Checkbox
+                                checked={field.value?.includes(turno.id)}
+                                onCheckedChange={(checked) => {
+                                return checked
+                                    ? field.onChange([...field.value, turno.id])
+                                    : field.onChange(field.value?.filter((value) => value !== turno.id));
+                                }}
+                            />
+                            </FormControl>
+                            <FormLabel className="font-normal">{turno.nome}</FormLabel>
+                        </FormItem>
+                        )}
+                    />
+                    ))}
+                    <FormMessage />
+                </FormItem>
+                )} />
+            </div>
+
+            <SheetFooter className="mt-auto border-t pt-4 bg-background">
+              <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={loading} className="min-w-[100px]">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+              </Button>
+            </SheetFooter>
           </form>
         </Form>
-
-        <SheetFooter className="mt-auto border-t pt-4 bg-background">
-          <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button type="submit" form="professor-form" disabled={loading} className="min-w-[100px]">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-          </Button>
-        </SheetFooter>
       </SheetContent>
     </Sheet>
   );
