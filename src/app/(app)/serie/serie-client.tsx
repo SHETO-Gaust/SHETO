@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, Users } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, Users, BookOpen } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
