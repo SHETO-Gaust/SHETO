@@ -67,5 +67,32 @@ export type Professor = {
 // This will be the type returned by the main get action
 export type ProfessorComDados = Professor & {
     componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
-    turnos: Pick<Turno, 'id' | 'nome'>[];
+    turnos: Turno[];
+};
+
+export type Serie = {
+  id: string;
+  escola_id: string;
+  nome: string;
+  nivel_ensino_id: string;
+  turno_id: string;
+  restricoes?: any; // JSONB for restrictions
+  created_at: string;
+};
+
+export type SerieComponente = {
+  serie_id: string;
+  componente_id: string;
+  aulas_semanais: number;
+};
+
+// This type represents the comprehensive data needed for the client
+export type SerieComDados = Serie & {
+  nivel_ensino: Pick<NivelEnsino, 'id' | 'nome' | 'sigla'>;
+  turno: Turno;
+  componentes: (SerieComponente & {
+      componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>
+  })[];
+  total_aulas_semanais: number;
+  total_aulas_distribuidas: number;
 };
