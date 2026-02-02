@@ -1,5 +1,3 @@
-
-
 export type ProfileRole = 'admin' | 'user';
 
 export type Escola = {
@@ -53,4 +51,21 @@ export type ComponenteCurricular = {
     nome: string;
     sigla: string;
     created_at: string;
+};
+
+export type Professor = {
+    id: string;
+    escola_id: string;
+    nome_completo: string;
+    nome_horario: string;
+    email?: string | null;
+    turnos_ids: string[];
+    restricoes?: any; // JSONB for restrictions
+    created_at: string;
+};
+
+// This will be the type returned by the main get action
+export type ProfessorComDados = Professor & {
+    componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
+    turnos: Pick<Turno, 'id' | 'nome'>[];
 };

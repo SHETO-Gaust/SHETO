@@ -7,7 +7,7 @@ const steps = [
   { step: 1, title: 'Turno', icon: Sun, href: '/turno' },
   { step: 2, title: 'Ensino', icon: GraduationCap, href: '/ensino' },
   { step: 3, title: 'Componentes', icon: BookOpen, href: '/componentes' },
-  { step: 4, title: 'Professores', icon: Users, href: '/formacoes' },
+  { step: 4, title: 'Professores', icon: Users, href: '/professores' },
   { step: 5, title: 'Série', icon: Layers, href: '/serie' },
   { step: 6, title: 'Turmas', icon: Users2, href: '/ensalamentos' },
   { step: 7, title: 'Relatórios', icon: BarChart3, href: '/relatorios' },
