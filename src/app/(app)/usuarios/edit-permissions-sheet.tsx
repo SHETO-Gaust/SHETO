@@ -21,6 +21,7 @@ import { Loader2 } from 'lucide-react';
 type Module = {
     id: string;
     label: string;
+    description: string;
 }
 
 type EditUserPermissionsSheetProps = {
@@ -149,19 +150,23 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
 
                     <div className="space-y-2">
                         <h4 className="font-medium">Módulos Acessíveis</h4>
-                        <div className="space-y-3 rounded-md border p-4">
+                        <div className="space-y-4 rounded-md border p-4">
                             {allModules.map(module => (
-                                <div key={module.id} className="flex items-center space-x-2">
+                                <div key={module.id} className="flex items-start space-x-3">
                                     <Checkbox
                                         id={module.id}
                                         checked={isAdmin || selectedModules.includes(module.id)}
                                         onCheckedChange={() => handleModuleToggle(module.id)}
                                         disabled={isAdmin || module.id === 'dashboard'}
+                                        className="mt-1"
                                     />
-                                    <Label htmlFor={module.id} className="font-normal leading-snug">
-                                        {module.label}
-                                        {module.id === 'dashboard' && <span className="text-muted-foreground text-xs"> (acesso padrão)</span>}
-                                    </Label>
+                                    <div className="grid gap-1.5 leading-none">
+                                        <Label htmlFor={module.id} className="font-medium leading-snug">
+                                            {module.label}
+                                            {module.id === 'dashboard' && <span className="text-muted-foreground text-xs font-normal"> (acesso padrão)</span>}
+                                        </Label>
+                                        {module.description && <p className="text-xs text-muted-foreground">{module.description}</p>}
+                                    </div>
                                 </div>
                             ))}
                         </div>

@@ -31,14 +31,15 @@ const moduleMap: { [key: string]: string } = {
     '/serie': 'serie',
 };
 
-
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
+  // CORREÇÃO 1: No Next 15, cookies() deve ser aguardado
+  // Nota: Se você seguiu a correção no seu src/lib/supabase/server.ts, 
+  // o createClient já faz esse await internamente.
+  const supabase = await createClient();
 
   const {
     data: { user },
@@ -64,8 +65,10 @@ export default async function AppLayout({
     .order('escolar', { ascending: true });
   const allEscolas = allEscolasData as Escola[] || [];
 
-
-  const pathname = headers().get('x-next-url') || '';
+  // CORREÇÃO 2: headers() também deve ser aguardado no Next 15
+  const headerList = await headers();
+  const pathname = headerList.get('x-next-url') || '';
+  
   const requiredModuleKey = Object.keys(moduleMap).find(key => pathname.startsWith(key));
   let hasPermission = true;
 
@@ -104,7 +107,7 @@ export default async function AppLayout({
           <MainNav profile={userProfile} />
         </SidebarContent>
         <SidebarFooter>
-          {/* Can add elements to footer here */}
+          {/* Espaço para elementos adicionais no rodapé do Sidebar */}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>

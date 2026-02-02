@@ -17,7 +17,7 @@ import type { Turno, HorarioAula } from '@/lib/types';
 export async function getTurnos(
   escolaId: string
 ): Promise<{ data?: Turno[]; error?: string }> {
-  const supabase = createClient(cookies());
+  const supabase = await createClient(cookies());
 
   const { data, error } = await supabase
     .from('turnos')
@@ -182,7 +182,7 @@ const updateHorariosSchema = z
 export async function updateTurnoHorarios(
   formData: z.infer<typeof updateHorariosSchema>
 ) {
-  const supabase = createClient(cookies());
+  const supabase = await createClient(cookies());
 
   const validated = updateHorariosSchema.safeParse(formData);
   if (!validated.success) {

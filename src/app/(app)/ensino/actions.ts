@@ -18,7 +18,7 @@ import type { NivelEnsino } from '@/lib/types';
 export async function getNiveisEnsino(
   escolaId: string
 ): Promise<{ data?: NivelEnsino[]; error?: string }> {
-  const supabase = createClient(cookies());
+  const supabase = await createClient(cookies());
 
   const { data, error } = await supabase
     .from('niveis_ensino')

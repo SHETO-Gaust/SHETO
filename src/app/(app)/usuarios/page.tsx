@@ -9,7 +9,7 @@ export default async function UsuariosPage() {
     const users = await getUsers();
     
     const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = await createClient(cookieStore);
     const { data: allEscolasData } = await supabase
         .from('escolas')
         .select('*')

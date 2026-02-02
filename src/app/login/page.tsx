@@ -7,7 +7,7 @@ import { Sun } from 'lucide-react';
 
 export default async function LoginPage() {
   const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = await createClient(cookieStore);
   const {
     data: { session },
   } = await supabase.auth.getSession();

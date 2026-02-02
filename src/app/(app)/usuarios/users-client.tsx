@@ -17,15 +17,10 @@ import { EditUserPermissionsSheet } from './edit-permissions-sheet';
 import { CreateUserSheet } from './create-user-sheet';
 
 const allModules = [
-  { id: 'dashboard', label: 'Painel' },
-  { id: 'formacoes', label: 'Cadastrar Formação' },
-  { id: 'gerenciamento', label: 'Gerenciamento' },
-  { id: 'ensalamentos', label: 'Ensalamentos' },
-  { id: 'metricas-gerais', label: 'Métricas Gerais' },
-  { id: 'relatorios', label: 'Relatório de Frequência' },
-  { id: 'avaliacoes-admin', label: 'Avaliações' },
-  { id: 'emitir-certificado', label: 'Emitir Certificado' },
-  { id: 'usuarios', label: 'Usuários' },
+  { id: 'dashboard', label: 'Painel', description: 'Acesso padrão ao painel inicial.' },
+  { id: 'dados-horario', label: 'Dados do Horário', description: 'Permite gerenciar Turnos, Ensino, Disciplinas, Professores, Séries e Turmas.' },
+  { id: 'horarios', label: 'Horários', description: 'Permite gerar horários e visualizar relatórios.' },
+  { id: 'usuarios', label: 'Gestão de Usuários', description: 'Permite gerenciar usuários e suas permissões.' },
 ];
 
 

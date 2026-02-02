@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 export async function getUsers(): Promise<Profile[]> {
     const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = await createClient(cookieStore);
 
     const { data, error } = await supabase
         .from('profiles')

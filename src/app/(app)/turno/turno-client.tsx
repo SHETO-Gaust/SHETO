@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Turno } from '@/lib/types';
 import {
   Table,
@@ -36,12 +36,20 @@ const defaultTurnosNomes = ['Matutino', 'Vespertino', 'Noturno'];
 
 export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
   const { toast } = useToast();
+  
+  // 1. Hidratação: Estado para garantir montagem no cliente
+  const [mounted, setMounted] = useState(false);
+  
   const [turnos, setTurnos] = useState(initialTurnos);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [isHorariosSheetOpen, setIsHorariosSheetOpen] = useState(false);
   const [selectedTurno, setSelectedTurno] = useState<Turno | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleStatusChange = async (turno: Turno, newStatus: boolean) => {
     setTogglingId(turno.id);
@@ -76,7 +84,16 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
   const handleDelete = (turno: Turno) => {
     setSelectedTurno(turno);
     setIsDeleteDialogOpen(true);
-  }
+  };
+
+  // 2. Correção de Foco: Limpeza segura ao fechar modais
+  const closeAllModals = () => {
+    setIsEditSheetOpen(false);
+    setIsHorariosSheetOpen(false);
+    setIsDeleteDialogOpen(false);
+    // Timeout para esperar a animação de fechamento antes de limpar o objeto
+    setTimeout(() => setSelectedTurno(null), 300);
+  };
 
   const onTurnoUpdated = (updatedTurno: Turno) => {
       const exists = turnos.some(t => t.id === updatedTurno.id);
@@ -93,11 +110,14 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
     }
   };
 
+  // Previne erro de hidratação (SSR mismatch)
+  if (!mounted) return null;
+
   return (
     <>
       <div className="flex justify-end mb-4">
         <Button onClick={() => handleEdit(null)}>
-          <PlusCircle className="mr-2" />
+          <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Turno
         </Button>
       </div>
@@ -129,14 +149,18 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                    <DropdownMenu>
+                    {/* modal={false} resolve o conflito de pointer-events que trava a página */}
+                    <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-8 w-8 p-0">
                                 <span className="sr-only">Abrir menu</span>
                                 <MoreHorizontal className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent 
+                          align="end"
+                          onCloseAutoFocus={(e) => e.preventDefault()}
+                        >
                             <DropdownMenuLabel>Ações</DropdownMenuLabel>
                             <DropdownMenuItem onClick={() => handleEdit(turno)}>
                                 <Pencil className="mr-2 h-4 w-4" />
@@ -169,7 +193,7 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
 
       <EditTurnoSheet
         isOpen={isEditSheetOpen}
-        setIsOpen={setIsEditSheetOpen}
+        setIsOpen={(open) => { if(!open) closeAllModals(); else setIsEditSheetOpen(true); }}
         turno={selectedTurno}
         escolaId={escolaId}
         onTurnoUpdated={onTurnoUpdated}
@@ -178,7 +202,7 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
       {selectedTurno && (
         <HorariosTurnoSheet
             isOpen={isHorariosSheetOpen}
-            setIsOpen={setIsHorariosSheetOpen}
+            setIsOpen={(open) => { if(!open) closeAllModals(); else setIsHorariosSheetOpen(true); }}
             turno={selectedTurno}
             onHorariosUpdated={onTurnoUpdated}
         />
@@ -187,7 +211,7 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
       {selectedTurno && (
         <DeleteTurnoDialog
             isOpen={isDeleteDialogOpen}
-            setIsOpen={setIsDeleteDialogOpen}
+            setIsOpen={(open) => { if(!open) closeAllModals(); else setIsDeleteDialogOpen(true); }}
             turno={selectedTurno}
             onTurnoDeleted={onTurnoDeleted}
         />

@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Adicionado useEffect
 import type { NivelEnsino } from '@/lib/types';
 import {
   Table,
@@ -12,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Pencil, Trash2, Loader2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,10 +27,17 @@ type EnsinoClientProps = {
 };
 
 export function EnsinoClient({ initialNiveisEnsino, escolaId }: EnsinoClientProps) {
+  // 1. Guard de Hidratação
+  const [mounted, setMounted] = useState(false);
+  
   const [niveisEnsino, setNiveisEnsino] = useState(initialNiveisEnsino);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedNivel, setSelectedNivel] = useState<NivelEnsino | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleEdit = (nivel: NivelEnsino | null) => {
     setSelectedNivel(nivel);
@@ -41,6 +47,14 @@ export function EnsinoClient({ initialNiveisEnsino, escolaId }: EnsinoClientProp
   const handleDelete = (nivel: NivelEnsino) => {
     setSelectedNivel(nivel);
     setIsDialogOpen(true);
+  };
+
+  // 2. Função para fechar modais com segurança
+  const closeAllModals = () => {
+    setIsSheetOpen(false);
+    setIsDialogOpen(false);
+    // Delay para respeitar a animação de saída antes de limpar o estado
+    setTimeout(() => setSelectedNivel(null), 300);
   };
 
   const onNivelUpdated = (updatedNivel: NivelEnsino) => {
@@ -58,11 +72,14 @@ export function EnsinoClient({ initialNiveisEnsino, escolaId }: EnsinoClientProp
     }
   };
 
+  // Evita o erro de Hydration Mismatch
+  if (!mounted) return null;
+
   return (
     <>
       <div className="flex justify-end mb-4">
         <Button onClick={() => handleEdit(null)}>
-          <PlusCircle className="mr-2" />
+          <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Etapa
         </Button>
       </div>
@@ -81,14 +98,18 @@ export function EnsinoClient({ initialNiveisEnsino, escolaId }: EnsinoClientProp
                 <TableCell className="font-medium">{nivel.nome}</TableCell>
                 <TableCell>{nivel.sigla}</TableCell>
                 <TableCell className="text-right">
-                  <DropdownMenu>
+                  {/* modal={false} impede que o Dropdown bloqueie cliques após fechar Sheets */}
+                  <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" className="h-8 w-8 p-0">
                         <span className="sr-only">Abrir menu</span>
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent 
+                      align="end"
+                      onCloseAutoFocus={(e) => e.preventDefault()}
+                    >
                       <DropdownMenuItem onClick={() => handleEdit(nivel)}>
                         <Pencil className="mr-2 h-4 w-4" />
                         <span>Editar</span>
@@ -111,7 +132,7 @@ export function EnsinoClient({ initialNiveisEnsino, escolaId }: EnsinoClientProp
 
       <EditEnsinoSheet
         isOpen={isSheetOpen}
-        setIsOpen={setIsSheetOpen}
+        setIsOpen={(open) => { if(!open) closeAllModals(); else setIsSheetOpen(true); }}
         nivelEnsino={selectedNivel}
         escolaId={escolaId}
         onNivelUpdated={onNivelUpdated}
@@ -120,7 +141,7 @@ export function EnsinoClient({ initialNiveisEnsino, escolaId }: EnsinoClientProp
       {selectedNivel && (
         <DeleteEnsinoDialog
           isOpen={isDialogOpen}
-          setIsOpen={setIsDialogOpen}
+          setIsOpen={(open) => { if(!open) closeAllModals(); else setIsDialogOpen(true); }}
           nivelEnsino={selectedNivel}
           onNivelDeleted={onNivelDeleted}
         />

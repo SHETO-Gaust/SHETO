@@ -8,7 +8,7 @@ import { TurnoClient } from "./turno-client";
 
 export default async function TurnoPage() {
   const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = await createClient(cookieStore);
 
   const { data: { user } } = await supabase.auth.getUser();
 
