@@ -1,110 +1,149 @@
 'use client';
 
 import { useState } from 'react';
-import type { Formacao } from '@/lib/types';
+import type { Turno } from '@/lib/types';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
-import { RelatorioCard } from '@/components/relatorios/relatorio-card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Loader2 } from 'lucide-react';
+import { getSituacaoDados, getDadosInstituicao, getRestricoesProfessores, getHorariosTurmas } from './actions';
+import { useToast } from '@/hooks/use-toast';
+import { SituacaoDadosReport } from './_components/situacao-dados-report';
+import { ReportPlaceholder } from './_components/report-placeholder';
 
 type RelatoriosClientProps = {
-    allFormacoes: Pick<Formacao, 'id' | 'name'>[];
+  escolaId: string;
+  turnos: Turno[];
 };
 
-export function RelatoriosClient({ allFormacoes }: RelatoriosClientProps) {
-    const [open, setOpen] = useState(false);
-    const [selectedFormacoes, setSelectedFormacoes] = useState<Pick<Formacao, 'id' | 'name'>[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [formacoesToDisplay, setFormacoesToDisplay] = useState<Pick<Formacao, 'id' | 'name'>[]>([]);
+type ReportType = 'situacao' | 'dados' | 'restricoes' | 'horarios';
 
-    const handleGenerate = async () => {
-        setLoading(true);
-        setFormacoesToDisplay([]); // Clear previous results
-        // This is a "lazy" component, but the data fetching is inside RelatorioCard.
-        // So we can just set the state here. The "loading" state is more of a UX thing.
-        await new Promise(resolve => setTimeout(resolve, 300)); // Simulate loading for better UX
-        setFormacoesToDisplay(selectedFormacoes);
-        setLoading(false);
-    };
+const reportCards = [
+    { id: 'situacao', title: '1. Situação dos Dados Cadastrados', description: 'Exibe o status do cadastro de todas as etapas do sistema.' },
+    { id: 'dados', title: '2. Dados Cadastrados da Instituição', description: 'Exibe os dados cadastrados por Turno: Turmas, Professores, Disciplinas e Número de Aulas.' },
+    { id: 'restricoes', title: '3. Restrições dos Professores', description: 'Exibe as restrições (folgas) dos professores por Turno.' },
+    { id: 'horarios', title: '4. Horários selecionados para as Turmas', description: 'Exibe os horários de aulas definidos para cada Turma.' },
+];
 
-    return (
-        <div className="space-y-6">
+export function RelatoriosClient({ escolaId, turnos }: RelatoriosClientProps) {
+  const [selectedTurnoId, setSelectedTurnoId] = useState<string | null>(null);
+  const [activeReport, setActiveReport] = useState<ReportType | null>(null);
+  const [loadingReport, setLoadingReport] = useState<ReportType | null>(null);
+  const [reportData, setReportData] = useState<any>(null);
+  const { toast } = useToast();
+
+  const handleGenerateReport = async (reportType: ReportType) => {
+    if (reportType !== 'situacao' && !selectedTurnoId) {
+        toast({ title: 'Selecione um turno primeiro', variant: 'destructive' });
+        return;
+    }
+    setLoadingReport(reportType);
+    setActiveReport(null);
+    setReportData(null);
+
+    let result;
+    try {
+        switch (reportType) {
+            case 'situacao':
+                result = await getSituacaoDados(escolaId);
+                break;
+            case 'dados':
+                result = await getDadosInstituicao(escolaId, selectedTurnoId!);
+                break;
+            case 'restricoes':
+                result = await getRestricoesProfessores(escolaId, selectedTurnoId!);
+                break;
+            case 'horarios':
+                result = await getHorariosTurmas(escolaId, selectedTurnoId!);
+                break;
+        }
+
+        if (result.error) {
+            throw new Error(result.error);
+        }
+        
+        setReportData(result.data);
+        setActiveReport(reportType);
+
+    } catch (error: any) {
+        toast({ title: 'Erro ao gerar relatório', description: error.message, variant: 'destructive'});
+    } finally {
+        setLoadingReport(null);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-start gap-8">
+        <div className="flex flex-col items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">1</div>
+            <div className="h-24 w-px bg-border"></div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">2</div>
+        </div>
+        <div className="flex-1 space-y-8">
             <Card>
-                <CardContent className="pt-6 flex flex-col md:flex-row items-center gap-4">
-                    <div className="w-full md:w-auto md:flex-1">
-                        <Popover open={open} onOpenChange={setOpen}>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={open}
-                                    className="w-full justify-between"
-                                >
-                                    <span className="truncate">
-                                        {selectedFormacoes.length > 0 ? `${selectedFormacoes.length} formação(ões) selecionada(s)` : "Selecione as formações..."}
-                                    </span>
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Buscar formação..." />
-                                    <CommandList>
-                                        <CommandEmpty>Nenhuma formação encontrada.</CommandEmpty>
-                                        <CommandGroup>
-                                            {allFormacoes.map((formacao) => (
-                                                <CommandItem
-                                                    key={formacao.id}
-                                                    onSelect={() => {
-                                                        const isSelected = selectedFormacoes.some(sf => sf.id === formacao.id);
-                                                        if (isSelected) {
-                                                            setSelectedFormacoes(selectedFormacoes.filter(sf => sf.id !== formacao.id));
-                                                        } else {
-                                                            setSelectedFormacoes([...selectedFormacoes, formacao]);
-                                                        }
-                                                    }}
-                                                >
-                                                    <Check className={cn("mr-2 h-4 w-4", selectedFormacoes.some(sf => sf.id === formacao.id) ? "opacity-100" : "opacity-0")} />
-                                                    {formacao.name}
-                                                </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
-                         <div className="pt-2 flex flex-wrap gap-1">
-                            {selectedFormacoes.map(f => (
-                                <Badge key={f.id} variant="secondary" className="truncate">{f.name}</Badge>
+                <CardHeader>
+                    <CardTitle>Selecione o Turno</CardTitle>
+                    <CardDescription>Selecione o turno para o qual deseja gerar o relatório.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <RadioGroup value={selectedTurnoId || ''} onValueChange={setSelectedTurnoId}>
+                        <div className="flex flex-wrap gap-4">
+                            {turnos.map(turno => (
+                                <div key={turno.id} className="flex items-center space-x-2">
+                                    <RadioGroupItem value={turno.id} id={`turno-${turno.id}`} />
+                                    <Label htmlFor={`turno-${turno.id}`}>{turno.nome}</Label>
+                                </div>
                             ))}
                         </div>
-                    </div>
-                    <Button onClick={handleGenerate} disabled={loading || selectedFormacoes.length === 0} className="w-full md:w-auto">
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Gerar Relatórios
-                    </Button>
+                    </RadioGroup>
                 </CardContent>
             </Card>
-            
-            {loading && (
-                 <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-                    <Skeleton className="h-96 w-full rounded-xl" />
-                    <Skeleton className="h-96 w-full rounded-xl" />
-                 </div>
-            )}
 
-            {!loading && formacoesToDisplay.length > 0 && (
-                 <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-                    {formacoesToDisplay.map((formacao) => (
-                        <RelatorioCard key={formacao.id} formacaoId={formacao.id} />
-                    ))}
-                </div>
-            )}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Selecione o Relatório</CardTitle>
+                    <CardDescription>Clique no botão para visualizar o relatório desejado.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {reportCards.map(report => {
+                            const isSituacao = report.id === 'situacao';
+                            const isDisabled = !isSituacao && !selectedTurnoId;
+                            const isLoading = loadingReport === report.id;
+                            
+                            return (
+                                <Card key={report.id} className="bg-muted/50 p-4 flex flex-col justify-between">
+                                    <div>
+                                        <h3 className="font-semibold">{report.title}</h3>
+                                        <p className="text-sm text-muted-foreground mt-1">{report.description}</p>
+                                    </div>
+                                    <Button 
+                                        className="mt-4 w-full" 
+                                        onClick={() => handleGenerateReport(report.id as ReportType)}
+                                        disabled={isDisabled || isLoading}
+                                    >
+                                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Gerar Relatório
+                                    </Button>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </CardContent>
+            </Card>
         </div>
-    );
+      </div>
+      
+      {activeReport && reportData && (
+        <div className="mt-8">
+            {activeReport === 'situacao' && <SituacaoDadosReport data={reportData} />}
+            {activeReport === 'dados' && <ReportPlaceholder data={reportData} title="Dados Cadastrados da Instituição" />}
+            {activeReport === 'restricoes' && <ReportPlaceholder data={reportData} title="Restrições dos Professores" />}
+            {activeReport === 'horarios' && <ReportPlaceholder data={reportData} title="Horários Selecionados para as Turmas" />}
+        </div>
+      )}
+    </div>
+  );
 }

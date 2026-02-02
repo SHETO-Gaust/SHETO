@@ -96,3 +96,11 @@ export type SerieComDados = Serie & {
   total_aulas_semanais: number;
   total_aulas_distribuidas: number;
 };
+
+export type SituacaoDados = {
+  turnos: number;
+  niveisEnsino: number;
+  componentes: number;
+  professores: number;
+  series: number;
+};
