@@ -72,13 +72,10 @@ const upsertNivelEnsinoSchema = z.object({
   sigla: z.string().min(1, 'A sigla é obrigatória.'),
 });
 
-/**
- * Cria ou atualiza um nível de ensino.
- */
 export async function upsertNivelEnsino(
   formData: z.infer<typeof upsertNivelEnsinoSchema>
 ) {
-  const supabase = createClient(cookies());
+  const supabase = await createClient(cookies());
 
   const validated = upsertNivelEnsinoSchema.safeParse(formData);
   if (!validated.success) {
@@ -117,12 +114,8 @@ export async function upsertNivelEnsino(
   return { data };
 }
 
-
-/* -------------------------------------------------------------------------- */
-/*                                DELETE NIVEL ENSINO                         */
-/* -------------------------------------------------------------------------- */
 export async function deleteNivelEnsino(id: string) {
-  const supabase = createClient(cookies());
+  const supabase = await createClient(cookies());
 
   const { error } = await supabase.from('niveis_ensino').delete().eq('id', id);
 

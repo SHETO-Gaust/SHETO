@@ -46,3 +46,11 @@ export type NivelEnsino = {
     sigla: string;
     created_at: string;
 };
+
+export type ComponenteCurricular = {
+    id: string;
+    escola_id: string;
+    nome: string;
+    sigla: string;
+    created_at: string;
+};

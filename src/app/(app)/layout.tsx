@@ -21,7 +21,7 @@ import { SchoolSelector } from '@/components/school-selector';
 const moduleMap: { [key: string]: string } = {
     '/dashboard': 'dashboard',
     '/formacoes': 'professores',
-    '/gerenciamento': 'disciplinas',
+    '/componentes': 'disciplinas',
     '/ensalamentos': 'turmas',
     '/avaliacoes-admin': 'horarios',
     '/relatorios': 'horarios',

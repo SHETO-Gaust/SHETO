@@ -6,7 +6,7 @@ import { Sun, GraduationCap, BookOpen, Users, Layers, Users2, Clock, BarChart3 }
 const steps = [
   { step: 1, title: 'Turno', icon: Sun, href: '/turno' },
   { step: 2, title: 'Ensino', icon: GraduationCap, href: '/ensino' },
-  { step: 3, title: 'Disciplinas', icon: BookOpen, href: '/gerenciamento' },
+  { step: 3, title: 'Componentes', icon: BookOpen, href: '/componentes' },
   { step: 4, title: 'Professores', icon: Users, href: '/formacoes' },
   { step: 5, title: 'Série', icon: Layers, href: '/serie' },
   { step: 6, title: 'Turmas', icon: Users2, href: '/ensalamentos' },
