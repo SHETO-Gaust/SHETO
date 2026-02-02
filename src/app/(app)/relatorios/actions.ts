@@ -2,9 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server';
 import type { ChecklistReportData, Turno, SerieComDados, ProfessorComDados } from '@/lib/types';
-import { getSeries } from '../../serie/actions';
-import { getProfessores } from '../../professores/actions';
-import { getTurnos } from '../../turno/actions';
+import { getSeries } from '@/app/(app)/serie/actions';
+import { getProfessores } from '@/app/(app)/professores/actions';
+import { getTurnos } from '@/app/(app)/turno/actions';
 
 
 export async function getChecklistReportData(escolaId: string, turnoId: string): Promise<{ data?: ChecklistReportData; error?: string }> {
