@@ -77,7 +77,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
         id: '4',
         title: 'Séries',
         description: 'Verificar as informações relacionadas as Séries.',
-        status: seriesDoTurno.length > 0 ? 'ok' : 'warning',
+        status: seriesDoTurno.length > 0 ? 'ok' : 'error',
         details: seriesDoTurno.length > 0 ? '' : 'Nenhuma série cadastrada para este turno.',
         link: '/serie'
     });
@@ -117,24 +117,28 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
         link: '/professores'
     });
 
-    // 6. Turmas (Placeholder)
+    // 6. Turmas
     checklist.push({
         id: '6',
         title: 'Turmas',
         description: 'Verificar as informações relacionadas as Turmas.',
-        status: 'ok',
-        details: 'Funcionalidade em desenvolvimento.',
-        link: '/ensalamentos'
+        status: seriesDoTurno.length > 0 ? 'ok' : 'error',
+        details: seriesDoTurno.length > 0 ? '' : 'Nenhuma turma (série) cadastrada para este turno.',
+        link: '/serie'
     });
 
-    // 6.1 Turmas / Professores / Disciplinas (Placeholder)
+    // 6.1 Turmas / Professores / Disciplinas
+    const turmasComEnsalamentoIncompleto = seriesDoTurno
+        .filter(s => s.componentes.some(c => c.aulas_semanais > 0 && !c.professor_id))
+        .map(s => s.nome);
+
     checklist.push({
         id: '6.1',
         title: 'Turmas / Professores / Disciplinas',
         description: 'Verificar nas turmas se os professores estão relacionados com todas as disciplinas.',
-        status: 'ok',
-        details: 'Funcionalidade em desenvolvimento.',
-        link: '/ensalamentos'
+        status: turmasComEnsalamentoIncompleto.length > 0 ? 'warning' : 'ok',
+        details: turmasComEnsalamentoIncompleto.length > 0 ? `Turmas com disciplinas sem professor associado: ${turmasComEnsalamentoIncompleto.join(', ')}` : '',
+        link: '/serie'
     });
     
     // 7. Relatório de Dados Cadastrados (Placeholder)
