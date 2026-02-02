@@ -40,6 +40,28 @@ export default async function SeriePage() {
   const { data: series, error } = await getSeries(escolaId);
   const dependencies = await getSerieDependencies(escolaId);
 
+  // Calcula a carga horária atribuída para cada professor
+  const assignedClassesMap = new Map<string, number>();
+  if (series) {
+    for (const s of series) {
+      for (const sc of s.componentes) {
+        if (sc.professor_id) {
+          const currentCount = assignedClassesMap.get(sc.professor_id) || 0;
+          assignedClassesMap.set(sc.professor_id, currentCount + sc.aulas_semanais);
+        }
+      }
+    }
+  }
+  const professoresComCarga = dependencies.professores.map(prof => ({
+    ...prof,
+    aulas_atribuidas: assignedClassesMap.get(prof.id) || 0,
+  }));
+
+  const dependenciesComCarga = {
+    ...dependencies,
+    professores: professoresComCarga
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -54,7 +76,7 @@ export default async function SeriePage() {
             {series && <SerieClient 
                 initialSeries={series} 
                 escolaId={escolaId}
-                dependencies={dependencies}
+                dependencies={dependenciesComCarga}
             />}
         </CardContent>
       </Card>

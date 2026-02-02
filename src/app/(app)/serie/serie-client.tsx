@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, BookOpen, CalendarX } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, Users } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ import { DuplicateSerieDialog } from './duplicate-serie-dialog';
 import { DeleteSerieDialog } from './delete-serie-dialog';
 import { getSeries } from './actions';
 import { useToast } from '@/hooks/use-toast';
+import { CargaHorariaProfessoresSheet } from './carga-horaria-professores-sheet';
 
 type SerieClientProps = {
   initialSeries: SerieComDados[];
@@ -39,6 +40,7 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
   const [selectedSerie, setSelectedSerie] = useState<SerieComDados | null>(null);
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
   const [activeDialog, setActiveDialog] = useState<DialogType>(null);
+  const [isCargaProfSheetOpen, setIsCargaProfSheetOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchAndUpdateSeries = async () => {
@@ -72,7 +74,11 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end mb-4 gap-2">
+        <Button variant="outline" onClick={() => setIsCargaProfSheetOpen(true)}>
+          <Users className="mr-2 h-4 w-4" />
+          Carga Horária Professores
+        </Button>
         <Button onClick={() => handleOpenSheet(null, 'edit')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Série
@@ -180,6 +186,12 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
           />
         </>
       )}
+
+      <CargaHorariaProfessoresSheet
+        isOpen={isCargaProfSheetOpen}
+        setIsOpen={setIsCargaProfSheetOpen}
+        professores={dependencies.professores}
+      />
     </>
   );
 }

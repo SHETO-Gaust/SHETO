@@ -70,6 +70,7 @@ export type Professor = {
 export type ProfessorComDados = Professor & {
     componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
     turnos: Pick<Turno, 'id' | 'nome'>[];
+    aulas_atribuidas?: number;
 };
 
 export type Serie = {
