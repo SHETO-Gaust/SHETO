@@ -12,13 +12,12 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MoreHorizontal, PlusCircle, BookCopy, CalendarX, Trash2, Pencil } from 'lucide-react';
+import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 import { EditProfessorSheet } from './edit-professor-sheet';
 import { DisciplinasProfessorSheet } from './disciplinas-professor-sheet';
@@ -109,7 +108,7 @@ export function ProfessoresClient({
               <TableHead>Nome</TableHead>
               <TableHead>Disciplinas</TableHead>
               <TableHead>Turnos</TableHead>
-              <TableHead className="w-[80px] text-right">Ações</TableHead>
+              <TableHead className="w-[200px] text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -138,36 +137,44 @@ export function ProfessoresClient({
                    </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <DropdownMenu modal={false}>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <span className="sr-only">Abrir menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-                      <DropdownMenuItem onClick={() => openSheet(prof, 'edit')}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        <span>Editar Dados</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openSheet(prof, 'disciplinas')}>
-                        <BookCopy className="mr-2 h-4 w-4" />
-                        <span>Gerenciar Disciplinas</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openSheet(prof, 'restricoes')}>
-                        <CalendarX className="mr-2 h-4 w-4" />
-                        <span>Restrições de Horário</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => openDialog(prof)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        <span>Deletar</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex items-center justify-end gap-1">
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => openSheet(prof, 'edit')}>
+                                  <Pencil className="h-4 w-4" />
+                                  <span className="sr-only">Editar Dados</span>
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Editar Dados</p></TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => openSheet(prof, 'disciplinas')}>
+                                  <BookCopy className="h-4 w-4" />
+                                  <span className="sr-only">Gerenciar Disciplinas</span>
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Gerenciar Disciplinas</p></TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => openSheet(prof, 'restricoes')}>
+                                  <CalendarX className="h-4 w-4" />
+                                  <span className="sr-only">Restrições de Horário</span>
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Restrições de Horário</p></TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => openDialog(prof)}>
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Deletar</span>
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Deletar Professor</p></TooltipContent>
+                      </Tooltip>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
