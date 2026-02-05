@@ -15,7 +15,7 @@ import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
 import type { Profile, Escola } from '@/lib/types';
 import { AccessDenied } from '@/components/access-denied';
-import { Sun } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { SchoolSelector } from '@/components/school-selector';
 
 const moduleMap: { [key: string]: string } = {
@@ -98,8 +98,8 @@ export default async function AppLayout({
         <SidebarHeader>
           <div className="flex items-center justify-center p-2">
             <div className="flex items-center gap-2 text-xl font-bold text-sidebar-foreground">
-                <Sun className="h-6 w-6 text-orange-400" />
-                <span>RedeGrade TO</span>
+                <Clock className="h-6 w-6 text-orange-400" />
+                <span>SHE</span>
             </div>
           </div>
         </SidebarHeader>

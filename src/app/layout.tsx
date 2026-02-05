@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
-  title: 'RedeGrade Tocantins - Sistema de Geração de Horários Escolar',
-  description: 'Sistema de Geração de Horários Escolares da SEDUC-TO',
+  title: 'SHE - Sistema de Horário Escolar',
+  description: 'SHE - Sistema de Horário Escolar da SEDUC-TO',
 };
 
 export default function RootLayout({

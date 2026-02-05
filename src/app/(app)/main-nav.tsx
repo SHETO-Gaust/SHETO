@@ -21,7 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/types';
 
-// New structure for RedeGrade TO
+// Structure for SHE
 const allLinks = [
   // Main
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard, module: 'dashboard' },

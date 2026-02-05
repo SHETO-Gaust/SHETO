@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
-import { Sun } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 export default async function LoginPage() {
   const cookieStore = cookies();
@@ -22,11 +22,11 @@ export default async function LoginPage() {
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
           <div className="flex flex-col space-y-2 text-center">
              <div className="flex items-center justify-center gap-2 text-2xl font-bold">
-                <Sun className="h-6 w-6 text-orange-500" />
-                <h1 className="font-bold">RedeGrade TO</h1>
+                <Clock className="h-6 w-6 text-orange-500" />
+                <h1 className="font-bold">SHE</h1>
             </div>
             <p className="text-muted-foreground">
-              Entre com seu email para acessar o painel da SEDUC-TO.
+              Entre com seu email para acessar o Sistema de Horário Escolar.
             </p>
           </div>
           <AuthForm />
@@ -42,7 +42,7 @@ export default async function LoginPage() {
         />
         <div className="absolute inset-0 bg-blue-950/60" />
         <div className="absolute bottom-10 left-10 text-white bg-black/30 p-6 rounded-lg backdrop-blur-sm max-w-md">
-          <h2 className="text-3xl font-bold">RedeGrade TO</h2>
+          <h2 className="text-3xl font-bold">SHE - Sistema de Horário Escolar</h2>
           <p className="mt-2 text-white/90">
             Inovando a gestão educacional no Tocantins com tecnologia e inteligência.
           </p>
