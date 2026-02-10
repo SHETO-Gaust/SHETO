@@ -69,7 +69,7 @@ export type Professor = {
 // This will be the type returned by the main get action
 export type ProfessorComDados = Professor & {
     componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
-    turnos: Pick<Turno, 'id' | 'nome'>[];
+    turnos: Turno[];
     aulas_atribuidas?: number;
     alocacoes?: { turma_nome: string; serie_nome: string; aulas: number }[];
 };

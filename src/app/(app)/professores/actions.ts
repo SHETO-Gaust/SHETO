@@ -12,7 +12,6 @@ export async function getProfessores(escolaId: string): Promise<{
   data?: ProfessorComDados[];
   error?: string;
 }> {
-  // CORREÇÃO: Não precisa mais passar cookies() se o seu createClient já faz isso internamente
   const supabase = await createClient();
 
   try {
@@ -44,7 +43,7 @@ export async function getProfessores(escolaId: string): Promise<{
 
     const { data: turnos, error: turnoError } = await supabase
         .from('turnos')
-        .select('id, nome')
+        .select('*')
         .eq('escola_id', escolaId);
         
     if (turnoError) throw turnoError;
@@ -61,7 +60,7 @@ export async function getProfessores(escolaId: string): Promise<{
         
       const professorTurnos = (prof.turnos_ids || [])
         .map(id => turnosMap.get(id))
-        .filter((t): t is Pick<Turno, 'id' | 'nome'> => !!t);
+        .filter((t): t is Turno => !!t);
 
       return {
         ...prof,
@@ -92,7 +91,6 @@ const upsertProfessorSchema = z.object({
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
-  // CORREÇÃO CRÍTICA: Adicionado await
   const supabase = await createClient(); 
   
   const validated = upsertProfessorSchema.safeParse(formData);
@@ -123,7 +121,6 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
 /* DELETE PROFESSOR                             */
 /* -------------------------------------------------------------------------- */
 export async function deleteProfessor(id: string) {
-  // CORREÇÃO: Adicionado await
   const supabase = await createClient();
   const { error } = await supabase.from('professores').delete().eq('id', id);
 
@@ -137,7 +134,6 @@ export async function deleteProfessor(id: string) {
 /* UPDATE COMPONENTES DO PROFESSOR                     */
 /* -------------------------------------------------------------------------- */
 export async function updateProfessorComponentes(professorId: string, componenteIds: string[]) {
-    // CORREÇÃO: Adicionado await
     const supabase = await createClient();
 
     const { error: deleteError } = await supabase
@@ -168,7 +164,6 @@ export async function updateProfessorComponentes(professorId: string, componente
 /* UPDATE RESTRIÇÕES DO PROFESSOR                     */
 /* -------------------------------------------------------------------------- */
 export async function updateProfessorRestricoes(professorId: string, restricoes: any) {
-    // CORREÇÃO: Adicionado await
     const supabase = await createClient();
 
     const { error } = await supabase

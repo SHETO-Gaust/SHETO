@@ -103,16 +103,21 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                                 <table className="w-full text-sm text-center">
                                     <thead>
                                         <tr className="bg-muted/50 border-b">
-                                            <th className="p-2 font-medium border-r w-16">Aula</th>
+                                            <th className="p-2 font-medium border-r w-24">Aula</th>
                                             {DIAS_SEMANA_MAP.map(dia => (
                                                 <th key={dia.id} className="p-2 font-medium min-w-[60px]">{dia.label}</th>
                                             ))}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {Array.from({ length: 5 }).map((_, aulaIndex) => (
+                                        {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIndex) => (
                                             <tr key={aulaIndex} className="border-b last:border-0">
-                                                <td className="p-2 font-medium bg-muted/20 border-r">{aulaIndex + 1}ª</td>
+                                                <td className="p-2 font-medium bg-muted/20 border-r">
+                                                    <div className="font-semibold">{aulaIndex + 1}ª</div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {turno.horarios?.[aulaIndex]?.inicio || '--:--'} - {turno.horarios?.[aulaIndex]?.fim || '--:--'}
+                                                    </div>
+                                                </td>
                                                 {DIAS_SEMANA_MAP.map(dia => {
                                                     const status = restricoes[turno.id]?.[dia.id]?.[aulaIndex];
                                                     return (
@@ -120,7 +125,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                                                             <div 
                                                                 onClick={() => handleCellClick(turno.id, dia.id, aulaIndex)}
                                                                 className={cn(
-                                                                    "h-12 w-full flex items-center justify-center cursor-pointer transition-colors",
+                                                                    "h-14 w-full flex items-center justify-center cursor-pointer transition-colors",
                                                                     status === 'indisponivel' ? 'bg-red-100 dark:bg-red-900/30' : 
                                                                     status === 'planejamento' ? 'bg-blue-100 dark:bg-blue-900/30' : 'hover:bg-accent'
                                                                 )}
