@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, BookOpen, Users2 } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, BookOpen, Users2, CheckCircle2, AlertCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,8 +85,9 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {series.map((serie) => {
-            const aulasRestantes = serie.total_aulas_semanais - serie.total_aulas_distribuidas;
-            const progresso = serie.total_aulas_semanais > 0 ? (serie.total_aulas_distribuidas / serie.total_aulas_semanais) * 100 : 0;
+            const aulasPresenciaisRestantes = serie.total_aulas_presenciais_semanais - serie.total_aulas_presenciais_distribuidas;
+            const progressoPresencial = serie.total_aulas_presenciais_semanais > 0 ? (serie.total_aulas_presenciais_distribuidas / serie.total_aulas_presenciais_semanais) * 100 : 0;
+            const aulasNPRestantes = serie.aulas_nao_presenciais_semanais - serie.total_aulas_nao_presenciais_distribuidas;
             
             return (
               <Card key={serie.id} className="flex flex-col">
@@ -115,15 +116,22 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
                 <CardContent className="flex-grow space-y-3">
                   <div>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-muted-foreground">Aulas distribuídas</span>
-                      <span>{serie.total_aulas_distribuidas} / {serie.total_aulas_semanais}</span>
+                      <span className="text-muted-foreground">Aulas presenciais</span>
+                      <span>{serie.total_aulas_presenciais_distribuidas} / {serie.total_aulas_presenciais_semanais}</span>
                     </div>
-                    <Progress value={progresso} />
+                    <Progress value={progressoPresencial} />
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={aulasRestantes === 0 ? 'secondary' : 'destructive'}>
-                        {aulasRestantes > 0 ? `${aulasRestantes} aulas a distribuir` : aulasRestantes < 0 ? `${Math.abs(aulasRestantes)} aulas excedentes` : 'Carga horária completa'}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge variant={aulasPresenciaisRestantes === 0 ? 'secondary' : 'destructive'} className="gap-1">
+                      {aulasPresenciaisRestantes === 0 ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                      {aulasPresenciaisRestantes > 0 ? `${aulasPresenciaisRestantes} a distribuir` : aulasPresenciaisRestantes < 0 ? `${Math.abs(aulasPresenciaisRestantes)} excedentes` : 'C.H. Presencial OK'}
                     </Badge>
+                     {serie.aulas_nao_presenciais_semanais > 0 && (
+                        <Badge variant={aulasNPRestantes === 0 ? 'secondary' : 'destructive'} className="gap-1">
+                          {aulasNPRestantes === 0 ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                           {aulasNPRestantes > 0 ? `${aulasNPRestantes} NP a distribuir` : aulasNPRestantes < 0 ? `${Math.abs(aulasNPRestantes)} NP excedentes` : 'C.H. Não Presencial OK'}
+                        </Badge>
+                     )}
                      <Badge variant="outline" className="flex items-center gap-1">
                         <Users2 className="h-3 w-3"/>
                         {serie.turmas_count} {serie.turmas_count === 1 ? 'turma' : 'turmas'}

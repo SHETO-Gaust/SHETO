@@ -52,7 +52,7 @@ export default async function EnsalamentoPage() {
       for (const ensalamento of turma.professores) {
         const componenteDaSerie = serie.componentes.find(c => c.componente_id === ensalamento.componente_id);
         if (componenteDaSerie) {
-            const aulas = componenteDaSerie.aulas_semanais;
+            const aulas = (componenteDaSerie.aulas_presenciais || 0) + (componenteDaSerie.aulas_nao_presenciais || 0);
             const profId = ensalamento.professor_id;
             
             // Atualiza total de aulas

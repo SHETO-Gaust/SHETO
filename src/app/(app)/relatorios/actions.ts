@@ -25,7 +25,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
       supabase.from('componentes_curriculares').select('id', { count: 'exact', head: true }).eq('escola_id', escolaId),
       getProfessores(escolaId),
       getTurmas(escolaId),
-      supabase.from('series').select('id, nome, turno_id, series_componentes(aulas_semanais, componente_id)').eq('escola_id', escolaId),
+      supabase.from('series').select('id, nome, turno_id, series_componentes(aulas_presenciais, componente_id)').eq('escola_id', escolaId),
     ]);
 
     // Handle potential errors from fetches
@@ -50,7 +50,8 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
         const comp = turma.serie.componentes.find(c => c.componente_id === prof.componente_id);
         if (comp) {
           const currentCount = aulasAtribuidasMap.get(prof.professor_id) || 0;
-          aulasAtribuidasMap.set(prof.professor_id, currentCount + comp.aulas_semanais);
+          const totalAulas = (comp.aulas_presenciais || 0) + (comp.aulas_nao_presenciais || 0);
+          aulasAtribuidasMap.set(prof.professor_id, currentCount + totalAulas);
         }
       }
     }
@@ -95,7 +96,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     // 4. Séries
     const seriesComProblemaCarga = seriesDoTurno
         .filter(s => {
-          const totalAulasDistribuidas = s.series_componentes.reduce((sum, item) => sum + item.aulas_semanais, 0);
+          const totalAulasDistribuidas = s.series_componentes.reduce((sum, item) => sum + item.aulas_presenciais, 0);
           const turnoDaSerie = allTurnos.find(t => t.id === s.turno_id);
           const totalAulasSemanais = (turnoDaSerie?.aulas_por_dia || 0) * (turnoDaSerie?.dias_semana?.length || 0);
           return totalAulasSemanais !== totalAulasDistribuidas;
@@ -104,8 +105,8 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
 
     checklist.push({
         id: '4',
-        title: 'Carga Horária das Séries',
-        description: 'Verificar se a soma das aulas das disciplinas bate com o total de aulas semanais do turno.',
+        title: 'Carga Horária Presencial das Séries',
+        description: 'Verificar se a soma das aulas presenciais das disciplinas bate com o total de aulas semanais do turno.',
         status: seriesComProblemaCarga.length > 0 ? 'warning' : 'ok',
         details: seriesComProblemaCarga.length > 0 ? `Séries com carga horária inconsistente: ${seriesComProblemaCarga.join(', ')}` : '',
         link: '/serie'
@@ -125,7 +126,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     // 6. Turmas e Ensalamento
     const turmasComEnsalamentoIncompleto = turmasDoTurno
         .filter(t => {
-            const componentesDaSerie = t.serie.componentes.filter(c => c.aulas_semanais > 0);
+            const componentesDaSerie = t.serie.componentes.filter(c => (c.aulas_presenciais + c.aulas_nao_presenciais) > 0);
             const professoresAlocados = t.professores.map(p => p.componente_id);
             return componentesDaSerie.some(c => !professoresAlocados.includes(c.componente_id));
         })

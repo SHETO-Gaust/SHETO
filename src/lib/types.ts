@@ -80,6 +80,7 @@ export type Serie = {
   nome: string;
   nivel_ensino_id: string;
   turno_id: string;
+  aulas_nao_presenciais_semanais: number;
   restricoes?: any; // JSONB for restrictions
   created_at: string;
 };
@@ -87,7 +88,8 @@ export type Serie = {
 export type SerieComponente = {
   serie_id: string;
   componente_id: string;
-  aulas_semanais: number;
+  aulas_presenciais: number;
+  aulas_nao_presenciais: number;
 };
 
 // This type represents the comprehensive data needed for the /serie page
@@ -97,8 +99,9 @@ export type SerieComDados = Serie & {
   componentes: (SerieComponente & {
       componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
   })[];
-  total_aulas_semanais: number;
-  total_aulas_distribuidas: number;
+  total_aulas_presenciais_semanais: number;
+  total_aulas_presenciais_distribuidas: number;
+  total_aulas_nao_presenciais_distribuidas: number;
   turmas_count: number;
 };
 

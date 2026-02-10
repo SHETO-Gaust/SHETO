@@ -1,3 +1,4 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -32,16 +33,18 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
 
     const seriesComDados: SerieComDados[] = series.map(serie => {
         const componentesDaSerie = seriesComponentes?.filter(sc => sc.serie_id === serie.id) || [];
-        const total_aulas_distribuidas = componentesDaSerie.reduce((sum, item) => sum + item.aulas_semanais, 0);
-        const total_aulas_semanais = (serie.turno?.aulas_por_dia || 0) * (serie.turno?.dias_semana?.length || 0);
+        const total_aulas_presenciais_distribuidas = componentesDaSerie.reduce((sum, item) => sum + item.aulas_presenciais, 0);
+        const total_aulas_nao_presenciais_distribuidas = componentesDaSerie.reduce((sum, item) => sum + item.aulas_nao_presenciais, 0);
+        const total_aulas_presenciais_semanais = (serie.turno?.aulas_por_dia || 0) * (serie.turno?.dias_semana?.length || 0);
 
         return {
             ...serie,
             nivel_ensino: serie.nivel_ensino as any,
             turno: serie.turno as any,
             componentes: componentesDaSerie as any,
-            total_aulas_semanais,
-            total_aulas_distribuidas,
+            total_aulas_presenciais_semanais,
+            total_aulas_presenciais_distribuidas,
+            total_aulas_nao_presenciais_distribuidas,
             turmas_count: serie.turmas[0]?.count ?? 0,
         }
     });
@@ -119,9 +122,11 @@ export async function upsertSerie(formData: z.infer<typeof upsertSerieSchema>) {
 /* -------------------------------------------------------------------------- */
 const cargaHorariaSchema = z.object({
     serie_id: z.string(),
+    aulas_nao_presenciais_semanais: z.coerce.number().min(0),
     componentes: z.array(z.object({
         componente_id: z.string(),
-        aulas_semanais: z.coerce.number().min(0),
+        aulas_presenciais: z.coerce.number().min(0),
+        aulas_nao_presenciais: z.coerce.number().min(0),
     }))
 });
 
@@ -130,8 +135,18 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
     const validated = cargaHorariaSchema.safeParse(formData);
     if (!validated.success) return { error: 'Dados inválidos.' };
 
-    const { serie_id, componentes } = validated.data;
+    const { serie_id, componentes, aulas_nao_presenciais_semanais } = validated.data;
     
+    const { error: serieUpdateError } = await supabase
+        .from('series')
+        .update({ aulas_nao_presenciais_semanais })
+        .eq('id', serie_id);
+        
+    if (serieUpdateError) {
+        console.error("Error updating series total non-presential classes:", serieUpdateError);
+        return { error: 'Erro ao salvar o total de aulas não presenciais.' };
+    }
+
     const { error: deleteError } = await supabase
         .from('series_componentes')
         .delete()
@@ -143,11 +158,12 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
     }
     
     const toInsert = componentes
-        .filter(c => c.aulas_semanais > 0)
+        .filter(c => c.aulas_presenciais > 0 || c.aulas_nao_presenciais > 0)
         .map(c => ({
             serie_id,
             componente_id: c.componente_id,
-            aulas_semanais: c.aulas_semanais,
+            aulas_presenciais: c.aulas_presenciais,
+            aulas_nao_presenciais: c.aulas_nao_presenciais,
         }));
 
     if (toInsert.length > 0) {
@@ -195,7 +211,7 @@ export async function duplicateSerie(serieId: string, newName: string) {
 
     const { data: originalComponentes, error: compError } = await supabase
         .from('series_componentes')
-        .select('componente_id, aulas_semanais')
+        .select('componente_id, aulas_presenciais, aulas_nao_presenciais')
         .eq('serie_id', serieId);
 
     if (compError) {

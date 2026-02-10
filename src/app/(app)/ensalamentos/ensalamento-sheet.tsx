@@ -67,7 +67,7 @@ export function EnsalamentoSheet({ isOpen, setIsOpen, turma, dependencies, onEns
     if (isOpen) {
       const ensalamentoExistente = new Map(turma.professores.map(p => [p.componente_id, p.professor_id]));
       const formAssignments = turma.serie.componentes
-        .filter(c => c.aulas_semanais > 0)
+        .filter(c => (c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0) > 0)
         .map(comp => ({
           componente_id: comp.componente_id,
           professor_id: ensalamentoExistente.get(comp.componente_id) || 'none',
@@ -99,7 +99,7 @@ export function EnsalamentoSheet({ isOpen, setIsOpen, turma, dependencies, onEns
 
     const aulasPorComponente = new Map<string, number>();
     turma.serie.componentes.forEach(c => {
-        aulasPorComponente.set(c.componente_id, c.aulas_semanais);
+        aulasPorComponente.set(c.componente_id, (c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0));
     });
 
     const professorLoadDelta = new Map<string, number>();
@@ -158,12 +158,13 @@ export function EnsalamentoSheet({ isOpen, setIsOpen, turma, dependencies, onEns
 
           <Form {...form}>
             <form id="ensalamento-form" onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto pr-2 -mr-4 space-y-4 py-4">
-              {turma.serie.componentes.filter(c => c.aulas_semanais > 0).map((serieComp, index) => {
+              {turma.serie.componentes.filter(c => (c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0) > 0).map((serieComp, index) => {
                 const professoresQualificados = getProfessoresQualificados(serieComp.componente_id);
+                const totalAulas = (serieComp.aulas_presenciais || 0) + (serieComp.aulas_nao_presenciais || 0);
 
                 return (
                   <div key={serieComp.componente_id} className="p-4 border rounded-lg bg-card">
-                    <p className="font-semibold">{serieComp.componente.nome} ({serieComp.aulas_semanais} aulas/sem)</p>
+                    <p className="font-semibold">{serieComp.componente.nome} ({totalAulas} aulas/sem)</p>
                     <div className="mt-2">
                       <FormField
                         control={form.control}
