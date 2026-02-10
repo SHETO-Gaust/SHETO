@@ -53,12 +53,18 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
     resolver: zodResolver(formSchema),
     defaultValues: {
       escola_id: escolaId,
+      nome: '',
+      serie_id: undefined,
     },
   });
 
   useEffect(() => {
-    if (!isOpen) {
-      form.reset({ escola_id: escolaId });
+    if (isOpen) {
+      form.reset({
+        escola_id: escolaId,
+        nome: '',
+        serie_id: undefined
+      });
     }
   }, [isOpen, form, escolaId]);
 
@@ -86,7 +92,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <form id="create-turma-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
             <FormField
               control={form.control}
               name="serie_id"
@@ -125,7 +131,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button onClick={form.handleSubmit(onSubmit)} disabled={loading}>
+          <Button type="submit" form="create-turma-form" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Criar Turma
           </Button>
