@@ -167,6 +167,7 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
             setIsOpen={(open) => { if (!open) closeModals(); else setActiveDialog('duplicate'); }}
             serie={selectedSerie}
             onSerieDuplicated={fetchAndUpdateSeries}
+            turnos={dependencies.turnos}
           />
           <DeleteSerieDialog
             isOpen={activeDialog === 'delete'}

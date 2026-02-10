@@ -186,7 +186,7 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
 /* -------------------------------------------------------------------------- */
 /*                              DUPLICATE SERIE                               */
 /* -------------------------------------------------------------------------- */
-export async function duplicateSerie(serieId: string, newName: string) {
+export async function duplicateSerie(serieId: string, newName: string, newTurnoId: string) {
     const supabase = await createClient();
     
     const { data: originalSerie, error: fetchError } = await supabase
@@ -200,7 +200,11 @@ export async function duplicateSerie(serieId: string, newName: string) {
     const { id: _, created_at: __, ...serieToCopy } = originalSerie;
     const { data: newSerie, error: createError } = await supabase
         .from('series')
-        .insert({ ...serieToCopy, nome: newName })
+        .insert({ 
+            ...serieToCopy, 
+            nome: newName,
+            turno_id: newTurnoId
+        })
         .select()
         .single();
     
