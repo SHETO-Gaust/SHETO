@@ -212,7 +212,7 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
 
       <div className="mt-12">
         <h2 className="text-xl font-bold mb-4">Horários dos Turnos Ativos</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {turnosAtivos.length > 0 ? (
             turnosAtivos.map(turno => (
               <Card key={`horario-${turno.id}`}>
