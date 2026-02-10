@@ -160,7 +160,7 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                             <table className="w-full text-sm text-center">
                                 <thead>
                                     <tr className="bg-muted/50 border-b">
-                                        <th className="p-2 font-medium border-r w-16">Aula</th>
+                                        <th className="p-2 font-medium border-r w-24">Aula</th>
                                         {DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id)).map(dia => (
                                             <th key={dia.id} className="p-2 font-medium min-w-[60px]">{dia.label}</th>
                                         ))}
@@ -169,14 +169,19 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                                 <tbody>
                                     {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => (
                                         <tr key={aulaIndex} className="border-b last:border-0">
-                                            <td className="p-2 font-medium bg-muted/20 border-r">{aulaIndex + 1}ª</td>
+                                            <td className="p-2 font-medium bg-muted/20 border-r">
+                                                <div className="font-semibold">{aulaIndex + 1}ª</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} - {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
+                                                </div>
+                                            </td>
                                             {DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id)).map(dia => {
                                                 const restricoes = form.watch('restricoes') || {};
                                                 const status = restricoes[dia.id]?.[aulaIndex];
                                                 return (
                                                     <td key={dia.id} className="p-0">
                                                         <div onClick={() => handleCellClick(dia.id, aulaIndex)}
-                                                            className={cn("h-12 w-full flex items-center justify-center cursor-pointer transition-colors",
+                                                            className={cn("h-14 w-full flex items-center justify-center cursor-pointer transition-colors",
                                                                 status === 'proibido' ? 'bg-red-100 dark:bg-red-900/30' : 'hover:bg-accent'
                                                             )}>
                                                             {status === 'proibido' && <Ban className="h-5 w-5 text-red-600" />}
