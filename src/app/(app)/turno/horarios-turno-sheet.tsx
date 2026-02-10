@@ -132,48 +132,50 @@ export function HorariosTurnoSheet({ isOpen, setIsOpen, turno, onHorariosUpdated
                 </SheetHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col">
-                         <div className="flex-1 overflow-y-auto p-1 space-y-4">
-                            {fields.map((field, index) => (
-                                <div key={field.id} className="flex items-end gap-3 p-3 border rounded-lg">
-                                    <div className="flex-none font-medium w-16 text-center text-sm pt-7">
-                                        {index + 1}ª Aula
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 flex-1">
-                                        <FormField
-                                            control={form.control}
-                                            name={`horarios.${index}.inicio`}
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Início</FormLabel>
-                                                    <FormControl><Input type="time" {...field} /></FormControl>
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name={`horarios.${index}.fim`}
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Fim</FormLabel>
-                                                    <FormControl><Input type="time" {...field} /></FormControl>
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
+                    <form 
+                        id="horarios-form"
+                        onSubmit={form.handleSubmit(onSubmit)} 
+                        className="flex-1 overflow-y-auto p-1 space-y-4"
+                    >
+                        {fields.map((field, index) => (
+                            <div key={field.id} className="flex items-end gap-3 p-3 border rounded-lg">
+                                <div className="flex-none font-medium w-16 text-center text-sm pt-7">
+                                    {index + 1}ª Aula
                                 </div>
-                            ))}
+                                <div className="grid grid-cols-2 gap-2 flex-1">
+                                    <FormField
+                                        control={form.control}
+                                        name={`horarios.${index}.inicio`}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Início</FormLabel>
+                                                <FormControl><Input type="time" {...field} /></FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name={`horarios.${index}.fim`}
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Fim</FormLabel>
+                                                <FormControl><Input type="time" {...field} /></FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            </div>
+                        ))}
 
-                             {errors.horarios?.root && (
-                                <p className="text-sm font-medium text-destructive px-1">{errors.horarios.root.message}</p>
-                            )}
-                         </div>
+                         {errors.horarios?.root && (
+                            <p className="text-sm font-medium text-destructive px-1">{errors.horarios.root.message}</p>
+                        )}
                     </form>
                 </Form>
                 
-                <SheetFooter className="mt-auto border-t pt-4">
+                <SheetFooter className="border-t pt-4">
                     <Button variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
-                    <Button onClick={form.handleSubmit(onSubmit)} disabled={loading}>
+                    <Button type="submit" form="horarios-form" disabled={loading}>
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Salvar Horários
                     </Button>
