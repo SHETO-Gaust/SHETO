@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { getTurmas } from './actions';
 import { useToast } from '@/hooks/use-toast';
 import { CreateTurmaDialog } from './create-turma-dialog';
-import { EnsalamentoSheet } from './ensalamento-sheet';
+import { AlocacaoProfessoresSheet } from './ensalamento-sheet';
 import { DeleteTurmaDialog } from './delete-turma-dialog';
 import { CargaHorariaProfessoresSheet } from './carga-horaria-professores-sheet';
 
@@ -23,7 +23,7 @@ type Props = {
   };
 };
 
-type SheetType = 'ensalamento' | 'carga-prof' | null;
+type SheetType = 'alocacao' | 'carga-prof' | null;
 type DialogType = 'create-turma' | 'delete-turma' | null;
 
 export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
@@ -105,14 +105,14 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
                                     <CardContent className="flex-grow space-y-3">
                                         <div>
                                             <p className="text-sm font-medium text-muted-foreground">
-                                                {isCompleto ? "Ensalamento completo" : `Ensalamento: ${componentesEnsalados} de ${totalComponentes} disciplinas`}
+                                                {isCompleto ? "Alocação completa" : `Alocação: ${componentesEnsalados} de ${totalComponentes} disciplinas`}
                                             </p>
                                         </div>
                                     </CardContent>
                                     <CardFooter className="flex gap-2">
-                                        <Button className="flex-1" onClick={() => handleOpenSheet(turma, 'ensalamento')}>
+                                        <Button className="flex-1" onClick={() => handleOpenSheet(turma, 'alocacao')}>
                                             <BookOpen className="mr-2 h-4 w-4" />
-                                            Ensalamento
+                                            Alocar Professores
                                         </Button>
                                         <Button variant="destructive" size="icon" onClick={() => handleOpenDialog(turma, 'delete-turma')}>
                                             <Trash2 className="h-4 w-4" />
@@ -139,12 +139,12 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
 
       {selectedTurma && (
         <>
-            <EnsalamentoSheet
-                isOpen={activeSheet === 'ensalamento'}
+            <AlocacaoProfessoresSheet
+                isOpen={activeSheet === 'alocacao'}
                 setIsOpen={(open) => { if (!open) closeModals(); }}
                 turma={selectedTurma}
                 dependencies={dependencies}
-                onEnsalamentoUpdated={fetchAndUpdateTurmas}
+                onAlocacaoUpdated={fetchAndUpdateTurmas}
             />
             <DeleteTurmaDialog
                 isOpen={activeDialog === 'delete-turma'}

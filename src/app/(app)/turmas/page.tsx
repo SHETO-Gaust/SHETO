@@ -89,7 +89,7 @@ export default async function TurmasPage() {
         <CardHeader>
             <CardTitle>Turmas</CardTitle>
             <CardDescription>
-                Crie as turmas de cada série e aloque os professores para as disciplinas correspondentes.
+                Gerencie as turmas de cada série e aloque os professores para as disciplinas correspondentes.
             </CardDescription>
         </CardHeader>
         <CardContent>

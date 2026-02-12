@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { updateEnsalamento } from './actions';
+import { updateAlocacaoProfessores } from './actions';
 import type { TurmaComDados, ProfessorComDados, ComponenteCurricular } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -48,10 +48,10 @@ type Props = {
       professores: ProfessorComDados[],
       componentes: ComponenteCurricular[],
   };
-  onEnsalamentoUpdated: () => void;
+  onAlocacaoUpdated: () => void;
 };
 
-export function EnsalamentoSheet({ isOpen, setIsOpen, turma, dependencies, onEnsalamentoUpdated }: Props) {
+export function AlocacaoProfessoresSheet({ isOpen, setIsOpen, turma, dependencies, onAlocacaoUpdated }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [isOverloadDialogOpen, setIsOverloadDialogOpen] = useState(false);
@@ -78,7 +78,7 @@ export function EnsalamentoSheet({ isOpen, setIsOpen, turma, dependencies, onEns
 
   const executeSave = async (data: FormValues) => {
     setLoading(true);
-    const result = await updateEnsalamento(data);
+    const result = await updateAlocacaoProfessores(data);
     setLoading(false);
 
     if (result.error) {
@@ -86,8 +86,8 @@ export function EnsalamentoSheet({ isOpen, setIsOpen, turma, dependencies, onEns
       return;
     }
 
-    toast({ title: 'Sucesso', description: 'Ensalamento salvo.' });
-    onEnsalamentoUpdated();
+    toast({ title: 'Sucesso', description: 'Alocação salva.' });
+    onAlocacaoUpdated();
     setIsOpen(false);
   };
   
@@ -152,7 +152,7 @@ export function EnsalamentoSheet({ isOpen, setIsOpen, turma, dependencies, onEns
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetContent className="sm:max-w-2xl flex flex-col">
           <SheetHeader>
-            <SheetTitle>Ensalamento: {turma.serie.nome} - Turma {turma.nome}</SheetTitle>
+            <SheetTitle>Alocar Professores: {turma.serie.nome} - Turma {turma.nome}</SheetTitle>
             <SheetDescription>Aloque um professor para cada disciplina desta turma.</SheetDescription>
           </SheetHeader>
 

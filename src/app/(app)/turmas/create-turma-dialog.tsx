@@ -28,9 +28,10 @@ import { useToast } from '@/hooks/use-toast';
 import { upsertTurma } from './actions';
 import type { Serie } from '@/lib/types';
 
+// CORREÇÃO: Schema flexível para aceitar string ou number e transformar em string
 const formSchema = z.object({
   id: z.string().optional(),
-  escola_id: z.string(),
+  escola_id: z.union([z.string(), z.number()]).transform(val => String(val)),
   serie_id: z.string({ required_error: 'Selecione um modelo de série.' }),
   nome: z.string().min(1, 'O nome/letra da turma é obrigatório.'),
 });
@@ -40,7 +41,7 @@ type FormValues = z.infer<typeof formSchema>;
 type Props = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  escolaId: string;
+  escolaId: string | number;
   series: Serie[];
   onTurmaCreated: () => void;
 };
@@ -52,16 +53,18 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      escola_id: escolaId,
+      escola_id: String(escolaId),
       nome: '',
       serie_id: undefined,
     },
   });
 
+  // CORREÇÃO: Destrava pointer-events e garante reset com tipo correto
   useEffect(() => {
     if (isOpen) {
+      document.body.style.pointerEvents = 'auto';
       form.reset({
-        escola_id: escolaId,
+        escola_id: String(escolaId),
         nome: '',
         serie_id: undefined
       });
@@ -69,30 +72,42 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
   }, [isOpen, form, escolaId]);
 
   const onSubmit = async (data: FormValues) => {
+    console.log("🚀 Enviando dados da turma:", data);
     setLoading(true);
-    const result = await upsertTurma(data);
-    setLoading(false);
+    try {
+      const result = await upsertTurma(data);
+      
+      if (result.error) {
+        toast({ title: 'Erro', description: result.error, variant: 'destructive' });
+        return;
+      }
 
-    if (result.error) {
-      toast({ title: 'Erro', description: result.error, variant: 'destructive' });
-      return;
+      toast({ title: 'Sucesso', description: `Turma criada com sucesso.` });
+      onTurmaCreated();
+      setIsOpen(false);
+    } catch (error) {
+      console.error("❌ Erro ao criar turma:", error);
+      toast({ title: 'Erro', description: 'Erro interno ao salvar.', variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
-
-    toast({ title: 'Sucesso', description: `Turma criada com sucesso.` });
-    onTurmaCreated();
-    setIsOpen(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent>
+      {/* pointer-events-auto garante que o clique passe para os inputs/botões */}
+      <DialogContent className="sm:max-w-[425px] pointer-events-auto">
         <DialogHeader>
           <DialogTitle>Nova Turma</DialogTitle>
           <DialogDescription>Crie uma nova turma a partir de um modelo de série.</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form id="create-turma-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <form 
+            id="create-turma-form" 
+            onSubmit={form.handleSubmit(onSubmit, (err) => console.log("⚠️ Erros de validação:", err))} 
+            className="space-y-4 py-4"
+          >
             <FormField
               control={form.control}
               name="serie_id"
@@ -101,7 +116,9 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
                   <FormLabel>Modelo de Série</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {series.map(s => (
@@ -130,9 +147,15 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
         </Form>
 
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button type="submit" form="create-turma-form" disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
+            Cancelar
+          </Button>
+          <Button 
+            type="submit" 
+            form="create-turma-form" 
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Criar Turma
           </Button>
         </DialogFooter>

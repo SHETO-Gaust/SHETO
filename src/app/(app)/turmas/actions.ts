@@ -106,9 +106,9 @@ export async function deleteTurma(id: string) {
 
 
 /* -------------------------------------------------------------------------- */
-/*                             UPDATE ENSALAMENTO                             */
+/*                        UPDATE ALOCAÇÃO DE PROFESSORES                      */
 /* -------------------------------------------------------------------------- */
-const ensalamentoSchema = z.object({
+const alocacaoSchema = z.object({
     turma_id: z.string(),
     assignments: z.array(z.object({
         componente_id: z.string(),
@@ -116,10 +116,10 @@ const ensalamentoSchema = z.object({
     }))
 });
 
-export async function updateEnsalamento(formData: z.infer<typeof ensalamentoSchema>) {
+export async function updateAlocacaoProfessores(formData: z.infer<typeof alocacaoSchema>) {
     const supabase = await createClient();
-    const validated = ensalamentoSchema.safeParse(formData);
-    if (!validated.success) return { error: 'Dados de ensalamento inválidos.' };
+    const validated = alocacaoSchema.safeParse(formData);
+    if (!validated.success) return { error: 'Dados de alocação inválidos.' };
     
     const { turma_id, assignments } = validated.data;
 
@@ -130,8 +130,8 @@ export async function updateEnsalamento(formData: z.infer<typeof ensalamentoSche
         .eq('turma_id', turma_id);
 
     if (deleteError) {
-        console.error("Error deleting old ensalamento:", deleteError);
-        return { error: 'Erro ao limpar ensalamento antigo.' };
+        console.error("Error deleting old allocation:", deleteError);
+        return { error: 'Erro ao limpar alocação antiga.' };
     }
 
     const toInsert = assignments
@@ -148,8 +148,8 @@ export async function updateEnsalamento(formData: z.infer<typeof ensalamentoSche
             .insert(toInsert);
         
         if (insertError) {
-            console.error("Error inserting new ensalamento:", insertError);
-            return { error: 'Erro ao salvar o novo ensalamento.' };
+            console.error("Error inserting new allocation:", insertError);
+            return { error: 'Erro ao salvar a nova alocação.' };
         }
     }
 
