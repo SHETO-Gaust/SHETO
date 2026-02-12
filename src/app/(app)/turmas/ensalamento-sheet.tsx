@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import Link from 'next/link';
 import {
   Sheet,
   SheetContent,
@@ -181,6 +182,14 @@ export function AlocacaoProfessoresSheet({ isOpen, setIsOpen, turma, dependencie
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {professoresQualificados.length === 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    Não há professores qualificados.
+                                    <Link href="/professores" className="font-semibold text-primary hover:underline ml-1">
+                                        Gerenciar Professores
+                                    </Link>
+                                </p>
+                            )}
                           </FormItem>
                         )}
                       />
