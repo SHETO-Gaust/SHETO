@@ -25,7 +25,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
       supabase.from('componentes_curriculares').select('id', { count: 'exact', head: true }).eq('escola_id', escolaId),
       getProfessores(escolaId),
       getTurmas(escolaId),
-      supabase.from('series').select('id, nome, turno_id, series_componentes(aulas_presenciais, componente_id)').eq('escola_id', escolaId),
+      supabase.from('series').select('id, nome, turno_id, series_componentes(aulas_presenciais, aulas_nao_presenciais, componente_id)').eq('escola_id', escolaId),
     ]);
 
     // Handle potential errors from fetches
@@ -96,7 +96,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     // 4. Séries
     const seriesComProblemaCarga = seriesDoTurno
         .filter(s => {
-          const totalAulasDistribuidas = s.series_componentes.reduce((sum, item) => sum + item.aulas_presenciais, 0);
+          const totalAulasDistribuidas = s.series_componentes.reduce((sum, item) => sum + (item.aulas_presenciais || 0), 0);
           const turnoDaSerie = allTurnos.find(t => t.id === s.turno_id);
           const totalAulasSemanais = (turnoDaSerie?.aulas_por_dia || 0) * (turnoDaSerie?.dias_semana?.length || 0);
           return totalAulasSemanais !== totalAulasDistribuidas;
@@ -126,7 +126,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     // 6. Turmas e Ensalamento
     const turmasComEnsalamentoIncompleto = turmasDoTurno
         .filter(t => {
-            const componentesDaSerie = t.serie.componentes.filter(c => (c.aulas_presenciais + c.aulas_nao_presenciais) > 0);
+            const componentesDaSerie = t.serie.componentes.filter(c => ((c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0)) > 0);
             const professoresAlocados = t.professores.map(p => p.componente_id);
             return componentesDaSerie.some(c => !professoresAlocados.includes(c.componente_id));
         })
