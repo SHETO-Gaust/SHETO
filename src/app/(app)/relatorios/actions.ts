@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import type { ChecklistReportData, TurmaComDados, ProfessorComDados } from '@/lib/types';
-import { getTurmas } from '@/app/(app)/ensalamentos/actions';
+import { getTurmas } from '@/app/(app)/turmas/actions';
 import { getProfessores } from '@/app/(app)/professores/actions';
 import { getTurnos } from '@/app/(app)/turno/actions';
 
@@ -138,7 +138,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
         description: 'Verificar nas turmas se os professores estão relacionados com todas as disciplinas.',
         status: turmasDoTurno.length === 0 ? 'error' : turmasComEnsalamentoIncompleto.length > 0 ? 'warning' : 'ok',
         details: turmasDoTurno.length === 0 ? 'Nenhuma turma criada para este turno.' : turmasComEnsalamentoIncompleto.length > 0 ? `Turmas com disciplinas sem professor: ${turmasComEnsalamentoIncompleto.join('; ')}` : '',
-        link: '/ensalamentos'
+        link: '/turmas'
     });
     
     // 7. Carga Horária dos Professores
@@ -157,7 +157,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
         description: 'Verifica se algum professor foi alocado em mais aulas do que sua carga horária disponível permite.',
         status: overbookedProfessors.length > 0 ? 'error' : 'ok',
         details: overbookedProfessors.length > 0 ? `Professores com mais aulas do que o disponível: ${overbookedProfessors.join(', ')}` : '',
-        link: '/ensalamentos'
+        link: '/turmas'
     });
     
     // 8. Relatório de Restrições dos Professores

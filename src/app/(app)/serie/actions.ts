@@ -113,7 +113,7 @@ export async function upsertSerie(formData: z.infer<typeof upsertSerieSchema>) {
     }
 
     revalidatePath('/serie');
-    revalidatePath('/ensalamentos');
+    revalidatePath('/turmas');
     return { data };
 }
 
@@ -178,7 +178,7 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
     }
 
     revalidatePath('/serie');
-    revalidatePath('/ensalamentos');
+    revalidatePath('/turmas');
     return { success: true };
 }
 
@@ -255,6 +255,6 @@ export async function deleteSerie(id: string) {
     }
 
     revalidatePath('/serie');
-    revalidatePath('/ensalamentos');
+    revalidatePath('/turmas');
     return { success: true };
 }
