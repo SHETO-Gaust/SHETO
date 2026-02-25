@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import type { TurmaComDados, Serie, ProfessorComDados, ComponenteCurricular } from '@/lib/types';
+import type { TurmaComDados, Serie, ProfessorComDados, ComponenteCurricular, Turno } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, PlusCircle, Edit, Trash2, Users, BookOpen } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
@@ -17,9 +17,9 @@ type Props = {
   initialTurmas: TurmaComDados[];
   escolaId: string;
   dependencies: {
-    series: Serie[],
-    professores: ProfessorComDados[],
-    componentes: ComponenteCurricular[],
+    series: (Serie & { turno: Pick<Turno, 'id' | 'nome'> | null; })[];
+    professores: ProfessorComDados[];
+    componentes: ComponenteCurricular[];
   };
 };
 

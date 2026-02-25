@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getProfessores } from '@/app/(app)/professores/actions';
-import type { TurmaComDados, Serie, ComponenteCurricular, ProfessorComDados } from '@/lib/types';
+import type { TurmaComDados, Serie, ComponenteCurricular, ProfessorComDados, Turno } from '@/lib/types';
 
 /* -------------------------------------------------------------------------- */
 /*                                  GET TURMAS                                */
@@ -37,13 +37,13 @@ export async function getTurmas(escolaId: string): Promise<{ data?: TurmaComDado
 /*                              GET DEPENDENCIES                              */
 /* -------------------------------------------------------------------------- */
 export async function getEnsalamentoDependencies(escolaId: string): Promise<{
-    series: (Serie & { componentes: { componente_id: string, aulas_presenciais: number, aulas_nao_presenciais: number }[] })[],
+    series: (Serie & { turno: Turno | null, componentes: { componente_id: string, aulas_presenciais: number, aulas_nao_presenciais: number }[] })[],
     professores: ProfessorComDados[],
     componentes: ComponenteCurricular[],
 }> {
     const supabase = await createClient();
     const [seriesResult, professoresResult, componentesResult] = await Promise.all([
-        supabase.from('series').select('*, componentes:series_componentes(componente_id, aulas_presenciais, aulas_nao_presenciais)').eq('escola_id', escolaId),
+        supabase.from('series').select('*, turno:turnos(id, nome), componentes:series_componentes(componente_id, aulas_presenciais, aulas_nao_presenciais)').eq('escola_id', escolaId),
         getProfessores(escolaId),
         supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId)
     ]);
