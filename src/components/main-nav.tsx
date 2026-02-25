@@ -32,7 +32,7 @@ const allLinks = [
   { href: '/componentes', label: 'Componentes', icon: BookOpen, module: 'disciplinas', group: 'dados-horario' },
   { href: '/professores', label: 'Professores', icon: Users, module: 'professores', group: 'dados-horario' },
   { href: '/serie', label: 'Série', icon: Layers, module: 'serie', group: 'dados-horario' },
-  { href: '/ensalamentos', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados-horario' },
+  { href: '/turmas', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados-horario' },
   
   // Horários
   { href: '/avaliacoes-admin', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios' },
