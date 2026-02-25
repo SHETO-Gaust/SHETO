@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -156,7 +157,7 @@ export function UploadInscritosDialog({ isOpen, setIsOpen, formacao, onUpdate }:
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Importar Inscritos</DialogTitle>
           <DialogDescription>

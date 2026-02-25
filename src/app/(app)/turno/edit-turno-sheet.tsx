@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -122,7 +123,7 @@ export function EditTurnoSheet({ isOpen, setIsOpen, turno, escolaId, onTurnoUpda
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-2xl flex flex-col h-full overflow-hidden">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-2xl flex flex-col h-full overflow-hidden">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5" />

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -94,7 +95,7 @@ export function EditComponenteSheet({ isOpen, setIsOpen, componente, escolaId, o
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-lg flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-lg flex flex-col">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <BookOpen className="h-5 w-5" />

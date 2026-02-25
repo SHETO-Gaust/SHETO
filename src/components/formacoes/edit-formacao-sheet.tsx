@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -176,7 +177,7 @@ export function EditFormacaoSheet({ isOpen, setIsOpen, formacao }: EditFormacaoS
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent className="w-full sm:max-w-2xl flex flex-col">
+        <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="w-full sm:max-w-2xl flex flex-col">
             <SheetHeader>
                 <SheetTitle>Editar Formação</SheetTitle>
                 <SheetDescription>

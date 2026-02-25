@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
@@ -133,7 +134,7 @@ export function FormadoresSheet({ isOpen, setIsOpen, formacao, formadores: initi
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-xl w-full flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-xl w-full flex flex-col">
         <SheetHeader>
           <SheetTitle>Gerenciar Formadores</SheetTitle>
           <SheetDescription>

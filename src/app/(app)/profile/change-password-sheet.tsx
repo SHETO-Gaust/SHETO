@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -78,7 +79,7 @@ export function ChangePasswordSheet({ isOpen, setIsOpen }: ChangePasswordSheetPr
 
     return (
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetContent className="sm:max-w-lg flex flex-col">
+            <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-lg flex flex-col">
                 <SheetHeader>
                     <SheetTitle>Alterar Senha</SheetTitle>
                     <SheetDescription>

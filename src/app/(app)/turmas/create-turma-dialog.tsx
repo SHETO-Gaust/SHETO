@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -22,11 +23,11 @@ import {
 } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { upsertTurma } from './actions';
-import type { Serie, Turno } from '@/lib/types';
+import type { Serie } from '@/lib/types';
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -41,7 +42,7 @@ type Props = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   escolaId: string | number;
-  series: (Serie & { turno: Pick<Turno, 'id' | 'nome'> | null })[];
+  series: Serie[];
   onTurmaCreated: () => void;
 };
 
@@ -58,18 +59,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
     },
   });
 
-  const seriesAgrupadas = useMemo(() => {
-    if (!series) return {};
-    return series.reduce((acc, s) => {
-        const turnoNome = s.turno?.nome || 'Sem Turno Associado';
-        if (!acc[turnoNome]) {
-            acc[turnoNome] = [];
-        }
-        acc[turnoNome].push(s);
-        return acc;
-    }, {} as Record<string, typeof series>);
-  }, [series]);
-
+  // CORREÇÃO 1: Destrava o mouse no Next 15/Radix
   useEffect(() => {
     if (isOpen) {
       document.body.style.pointerEvents = 'auto';
@@ -82,23 +72,28 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
   }, [isOpen, form, escolaId]);
 
   const onSubmit = async (data: FormValues) => {
+    console.log("🚀 Submit disparado:", data);
     setLoading(true);
-    const result = await upsertTurma(data);
-    setLoading(false);
-
-    if (result.error) {
-      toast({ title: 'Erro', description: result.error, variant: 'destructive' });
-      return;
+    try {
+      const result = await upsertTurma(data);
+      if (result.error) {
+        toast({ title: 'Erro', description: result.error, variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Sucesso', description: `Turma criada com sucesso.` });
+      onTurmaCreated();
+      setIsOpen(false);
+    } catch (err) {
+      console.error("❌ Erro na Action:", err);
+    } finally {
+      setLoading(false);
     }
-
-    toast({ title: 'Sucesso', description: `Turma criada com sucesso.` });
-    onTurmaCreated();
-    setIsOpen(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-[425px] pointer-events-auto">
+      {/* CORREÇÃO 2: pointer-events-auto forçado na camada do Dialog */}
+      <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-[425px] pointer-events-auto">
         <DialogHeader>
           <DialogTitle>Nova Turma</DialogTitle>
           <DialogDescription>Crie uma nova turma a partir de um modelo de série.</DialogDescription>
@@ -107,7 +102,8 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
         <Form {...form}>
           <form 
             id="create-turma-form" 
-            onSubmit={form.handleSubmit(onSubmit)} 
+            // CORREÇÃO 3: Log de erros para debug caso o Zod bloqueie
+            onSubmit={form.handleSubmit(onSubmit, (errors) => console.log("⚠️ Erros de validação:", errors))} 
             className="space-y-4 py-4"
           >
             <FormField
@@ -121,13 +117,8 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
                       <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {Object.entries(seriesAgrupadas).map(([turnoNome, seriesDoTurno]) => (
-                        <SelectGroup key={turnoNome}>
-                          <SelectLabel>{turnoNome}</SelectLabel>
-                          {seriesDoTurno.map(s => (
-                            <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                          ))}
-                        </SelectGroup>
+                      {series.map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -153,10 +144,12 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
+          {/* Botão com clique físico logado para teste */}
           <Button 
             type="submit" 
             form="create-turma-form" 
             disabled={loading}
+            onClick={() => console.log("🖱️ Botão clicado")}
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Criar Turma'}
           </Button>

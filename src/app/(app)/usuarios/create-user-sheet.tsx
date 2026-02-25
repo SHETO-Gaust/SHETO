@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -113,7 +114,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: C
 
     return (
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetContent className="sm:max-w-lg flex flex-col">
+            <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-lg flex flex-col">
                 <SheetHeader>
                     <SheetTitle>Criar Novo Usuário</SheetTitle>
                     <SheetDescription>

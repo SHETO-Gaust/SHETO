@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -72,7 +73,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-4xl w-full flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-4xl w-full flex flex-col">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <CalendarX className="h-5 w-5" />

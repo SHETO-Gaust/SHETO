@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -23,7 +24,7 @@ type InscritosSheetProps = {
 export function InscritosSheet({ isOpen, setIsOpen, formacao, inscricoes, onUpdate }: InscritosSheetProps) {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-4xl w-full flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-4xl w-full flex flex-col">
         <SheetHeader>
           <SheetTitle>Inscritos: {formacao.name}</SheetTitle>
           <SheetDescription>

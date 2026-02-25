@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -184,7 +185,7 @@ export function FrequenciaConfigSheet({ isOpen, setIsOpen, formacao, onUpdate }:
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-xl w-full flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-xl w-full flex flex-col">
         <SheetHeader>
           <SheetTitle>Configurar Frequência</SheetTitle>
           <SheetDescription>

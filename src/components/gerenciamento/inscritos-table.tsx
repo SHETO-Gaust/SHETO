@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -231,7 +232,7 @@ export function InscritosTable({ data, formacao, onUpdate }: InscritosTableProps
       </div>
 
        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-            <AlertDialogContent>
+            <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -253,7 +254,7 @@ export function InscritosTable({ data, formacao, onUpdate }: InscritosTableProps
         </AlertDialog>
 
         <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
-            <AlertDialogContent>
+            <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
                     <AlertDialogDescription>

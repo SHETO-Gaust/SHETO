@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -137,7 +138,7 @@ export function FormBuilderSheet({ isOpen, setIsOpen, formacao, onUpdate }: Form
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-3xl w-full flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-3xl w-full flex flex-col">
         <SheetHeader>
           <SheetTitle>Construtor de Formulário de Inscrição</SheetTitle>
           <SheetDescription>

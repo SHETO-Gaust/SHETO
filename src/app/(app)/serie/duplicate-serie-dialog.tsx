@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -57,7 +58,7 @@ export function DuplicateSerieDialog({ isOpen, setIsOpen, serie, onSerieDuplicat
 
   return (
     <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
-      <AlertDialogContent>
+      <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
         <AlertDialogHeader>
           <AlertDialogTitle>Duplicar Série "{serie.nome}"</AlertDialogTitle>
           <AlertDialogDescription>

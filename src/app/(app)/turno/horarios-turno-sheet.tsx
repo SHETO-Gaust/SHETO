@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -123,7 +124,7 @@ export function HorariosTurnoSheet({ isOpen, setIsOpen, turno, onHorariosUpdated
 
     return (
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetContent className="w-full sm:max-w-lg flex flex-col">
+            <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="w-full sm:max-w-lg flex flex-col">
                 <SheetHeader>
                     <SheetTitle>Configurar Horários</SheetTitle>
                     <SheetDescription>

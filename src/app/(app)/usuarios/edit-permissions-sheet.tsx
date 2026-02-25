@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -92,7 +93,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
 
     return (
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetContent className="sm:max-w-lg flex flex-col">
+            <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-lg flex flex-col">
                 <SheetHeader>
                     <SheetTitle>Gerenciar Permissões</SheetTitle>
                     <SheetDescription>

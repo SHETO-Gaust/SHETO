@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -117,7 +118,7 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
 
   return (
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent className="sm:max-w-2xl flex flex-col">
+        <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-2xl flex flex-col">
           <SheetHeader>
             <SheetTitle>Carga Horária da Série: {serie.nome}</SheetTitle>
             <SheetDescription>Defina a quantidade de aulas para cada disciplina deste modelo de série.</SheetDescription>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -22,7 +23,7 @@ type Props = {
 export function CargaHorariaProfessoresSheet({ isOpen, setIsOpen, professores }: Props) {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-xl flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-xl flex flex-col">
         <SheetHeader>
           <SheetTitle>Carga Horária dos Professores</SheetTitle>
           <SheetDescription>

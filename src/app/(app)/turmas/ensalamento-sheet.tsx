@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -151,7 +152,7 @@ export function AlocacaoProfessoresSheet({ isOpen, setIsOpen, turma, dependencie
   return (
     <>
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent className="sm:max-w-2xl flex flex-col">
+        <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-2xl flex flex-col">
           <SheetHeader>
             <SheetTitle>Alocar Professores: {turma.serie.nome} - Turma {turma.nome}</SheetTitle>
             <SheetDescription>Aloque um professor para cada disciplina desta turma.</SheetDescription>
@@ -210,7 +211,7 @@ export function AlocacaoProfessoresSheet({ isOpen, setIsOpen, turma, dependencie
       </Sheet>
 
       <AlertDialog open={isOverloadDialogOpen} onOpenChange={setIsOverloadDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
           <AlertDialogHeader>
             <AlertDialogTitle>Professor com Carga Horária Excedida</AlertDialogTitle>
             <AlertDialogDescription>

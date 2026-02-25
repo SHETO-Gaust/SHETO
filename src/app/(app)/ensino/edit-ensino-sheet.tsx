@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -108,14 +109,14 @@ export function EditEnsinoSheet({ isOpen, setIsOpen, nivelEnsino, escolaId, onNi
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-lg flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-lg flex flex-col">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <GraduationCap className="h-5 w-5" />
             {isEdit ? 'Editar Etapa' : 'Nova Etapa'}
           </SheetTitle>
           <SheetDescription>
-            {isEdit ? 'Atualize as informações da etapa de ensino.' : 'Crie uma nova etapa de ensino.'}
+            {isEdit ? 'Atualize as informações da etapa de ensino.' : 'Crie um nova etapa de ensino.'}
           </SheetDescription>
         </SheetHeader>
 

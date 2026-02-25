@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -71,7 +72,7 @@ export function DetailsInscricaoDialog({ isOpen, setIsOpen, inscricao, formacao 
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Detalhes da Inscrição</DialogTitle>
           <DialogDescription>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -112,7 +113,7 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent className="sm:max-w-2xl flex flex-col h-full pointer-events-auto">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-2xl flex flex-col h-full pointer-events-auto">
         <SheetHeader>
           <SheetTitle>{isEdit ? 'Editar Série' : 'Nova Série'}</SheetTitle>
           <SheetDescription>{isEdit ? 'Edite as informações da série e suas restrições.' : 'Preencha os dados da nova série.'}</SheetDescription>
