@@ -70,7 +70,6 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
     }, {} as Record<string, typeof series>);
   }, [series]);
 
-  // CORREÇÃO 1: Destrava o mouse no Next 15/Radix
   useEffect(() => {
     if (isOpen) {
       document.body.style.pointerEvents = 'auto';
@@ -83,27 +82,22 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
   }, [isOpen, form, escolaId]);
 
   const onSubmit = async (data: FormValues) => {
-    console.log("🚀 Submit disparado:", data);
     setLoading(true);
-    try {
-      const result = await upsertTurma(data);
-      if (result.error) {
-        toast({ title: 'Erro', description: result.error, variant: 'destructive' });
-        return;
-      }
-      toast({ title: 'Sucesso', description: `Turma criada com sucesso.` });
-      onTurmaCreated();
-      setIsOpen(false);
-    } catch (err) {
-      console.error("❌ Erro na Action:", err);
-    } finally {
-      setLoading(false);
+    const result = await upsertTurma(data);
+    setLoading(false);
+
+    if (result.error) {
+      toast({ title: 'Erro', description: result.error, variant: 'destructive' });
+      return;
     }
+
+    toast({ title: 'Sucesso', description: `Turma criada com sucesso.` });
+    onTurmaCreated();
+    setIsOpen(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      {/* CORREÇÃO 2: pointer-events-auto forçado na camada do Dialog */}
       <DialogContent className="sm:max-w-[425px] pointer-events-auto">
         <DialogHeader>
           <DialogTitle>Nova Turma</DialogTitle>
@@ -113,8 +107,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
         <Form {...form}>
           <form 
             id="create-turma-form" 
-            // CORREÇÃO 3: Log de erros para debug caso o Zod bloqueie
-            onSubmit={form.handleSubmit(onSubmit, (errors) => console.log("⚠️ Erros de validação:", errors))} 
+            onSubmit={form.handleSubmit(onSubmit)} 
             className="space-y-4 py-4"
           >
             <FormField
@@ -160,12 +153,10 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          {/* Botão com clique físico logado para teste */}
           <Button 
             type="submit" 
             form="create-turma-form" 
             disabled={loading}
-            onClick={() => console.log("🖱️ Botão clicado")}
           >
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Criar Turma'}
           </Button>
