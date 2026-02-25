@@ -1,10 +1,11 @@
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 import type { Profile } from "@/lib/types";
 import { getTurnosAtivos } from "./actions";
 import { AlertTriangle } from "lucide-react";
 import { GeradorHorarioClient } from "./gerador-horario-client";
+import { StepNavigation } from "@/components/step-navigation";
 
 export default async function GerarHorarioPage() {
   const cookieStore = cookies();
@@ -71,6 +72,13 @@ export default async function GerarHorarioPage() {
   }
 
   return (
-    <GeradorHorarioClient escolaId={escolaId} turnosAtivos={turnosAtivos} />
+    <div className="space-y-6">
+        <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Passo 7: Gerar Horário</h1>
+            <p className="text-sm text-muted-foreground">Use o assistente de IA para gerar propostas de horário com base nos dados cadastrados.</p>
+        </div>
+        <GeradorHorarioClient escolaId={escolaId} turnosAtivos={turnosAtivos} />
+        <StepNavigation currentStep={7} />
+    </div>
   );
 }

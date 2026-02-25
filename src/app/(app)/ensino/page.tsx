@@ -5,6 +5,7 @@ import type { Profile } from "@/lib/types";
 import { getNiveisEnsino } from "./actions";
 import { AlertTriangle } from "lucide-react";
 import { EnsinoClient } from "./ensino-client";
+import { StepNavigation } from "@/components/step-navigation";
 
 export default async function EnsinoPage() {
   const cookieStore = cookies();
@@ -50,7 +51,7 @@ export default async function EnsinoPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-            <CardTitle>Etapas de Ensino</CardTitle>
+            <CardTitle>Passo 2: Etapas de Ensino</CardTitle>
             <CardDescription>
                 Gerencie as etapas de ensino e suas siglas para a escola selecionada.
             </CardDescription>
@@ -60,6 +61,7 @@ export default async function EnsinoPage() {
             {niveisEnsino && <EnsinoClient initialNiveisEnsino={niveisEnsino} escolaId={escolaId} />}
         </CardContent>
       </Card>
+      <StepNavigation currentStep={2} />
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
-import type { Profile, Turno } from "@/lib/types";
+import type { Profile } from "@/lib/types";
 import { getTurnos } from "./actions";
 import { AlertTriangle } from "lucide-react";
 import { TurnoClient } from "./turno-client";
+import { StepNavigation } from "@/components/step-navigation";
 
 export default async function TurnoPage() {
   const cookieStore = cookies();
@@ -50,7 +51,7 @@ export default async function TurnoPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-            <CardTitle>Turnos</CardTitle>
+            <CardTitle>Passo 1: Turnos</CardTitle>
             <CardDescription>
                 Gerencie os turnos e seus respectivos horários de aula para a escola selecionada.
             </CardDescription>
@@ -60,6 +61,7 @@ export default async function TurnoPage() {
             {turnos && <TurnoClient initialTurnos={turnos} escolaId={escolaId} />}
         </CardContent>
       </Card>
+      <StepNavigation currentStep={1} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import type { Profile } from "@/lib/types";
 import { getSeries, getSerieDependencies } from "./actions";
 import { AlertTriangle } from "lucide-react";
 import { SerieClient } from "./serie-client";
+import { StepNavigation } from "@/components/step-navigation";
 
 export default async function SeriePage() {
   const supabase = await createClient();
@@ -44,7 +45,7 @@ export default async function SeriePage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-            <CardTitle>Séries (Modelos)</CardTitle>
+            <CardTitle>Passo 5: Séries (Modelos)</CardTitle>
             <CardDescription>
                 Gerencie os modelos de série da sua unidade escolar. Defina a carga horária de cada disciplina. A criação das turmas e a alocação de professores é feita na tela de "Turmas".
             </CardDescription>
@@ -58,6 +59,7 @@ export default async function SeriePage() {
             />}
         </CardContent>
       </Card>
+      <StepNavigation currentStep={5} />
     </div>
   );
 }

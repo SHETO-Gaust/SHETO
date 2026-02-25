@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { Profile, Turno } from "@/lib/types";
 import { AlertTriangle } from "lucide-react";
 import { RelatoriosClient } from "./relatorios-client";
+import { StepNavigation } from "@/components/step-navigation";
 
 export default async function RelatoriosPage() {
   const cookieStore = cookies();
@@ -54,7 +55,7 @@ export default async function RelatoriosPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Relatórios</CardTitle>
+          <CardTitle>Passo 8: Relatórios</CardTitle>
           <CardDescription>
             Selecione o turno e o tipo de relatório que deseja visualizar.
           </CardDescription>
@@ -63,6 +64,7 @@ export default async function RelatoriosPage() {
             <RelatoriosClient escolaId={escolaId} turnos={turnos as Turno[] || []} />
         </CardContent>
       </Card>
+      <StepNavigation currentStep={8} />
     </div>
   );
 }

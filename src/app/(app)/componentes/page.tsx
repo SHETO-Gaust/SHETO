@@ -5,6 +5,7 @@ import type { Profile } from "@/lib/types";
 import { getComponentes } from "./actions";
 import { AlertTriangle } from "lucide-react";
 import { ComponentesClient } from "./componentes-client";
+import { StepNavigation } from "@/components/step-navigation";
 
 export default async function ComponentesPage() {
   const cookieStore = cookies();
@@ -50,7 +51,7 @@ export default async function ComponentesPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-            <CardTitle>Componentes Curriculares</CardTitle>
+            <CardTitle>Passo 3: Componentes Curriculares</CardTitle>
             <CardDescription>
                 Gerencie os componentes curriculares (disciplinas) e suas siglas para a escola selecionada.
             </CardDescription>
@@ -60,6 +61,7 @@ export default async function ComponentesPage() {
             {componentes && <ComponentesClient initialComponentes={componentes} escolaId={escolaId} />}
         </CardContent>
       </Card>
+      <StepNavigation currentStep={3} />
     </div>
   );
 }

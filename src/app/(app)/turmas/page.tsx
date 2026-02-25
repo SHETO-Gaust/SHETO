@@ -4,6 +4,7 @@ import type { Profile } from "@/lib/types";
 import { getTurmas, getEnsalamentoDependencies } from "./actions";
 import { AlertTriangle } from "lucide-react";
 import { TurmasClient } from "./turmas-client";
+import { StepNavigation } from "@/components/step-navigation";
 
 export default async function TurmasPage() {
   const supabase = await createClient();
@@ -87,7 +88,7 @@ export default async function TurmasPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-            <CardTitle>Turmas</CardTitle>
+            <CardTitle>Passo 6: Turmas</CardTitle>
             <CardDescription>
                 Gerencie as turmas de cada série e aloque os professores para as disciplinas correspondentes.
             </CardDescription>
@@ -101,6 +102,7 @@ export default async function TurmasPage() {
             />}
         </CardContent>
       </Card>
+      <StepNavigation currentStep={6} />
     </div>
   );
 }

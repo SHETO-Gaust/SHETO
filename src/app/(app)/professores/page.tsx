@@ -4,14 +4,10 @@ import { cookies } from "next/headers";
 import type { Profile, ComponenteCurricular, Turno } from "@/lib/types";
 import { getProfessores } from "./actions";
 import { AlertTriangle } from "lucide-react";
-
-// CORREÇÃO DO NOME DO ARQUIVO:
-// Adicionado o "es" para bater com o nome do arquivo que você possui na pasta.
 import { ProfessoresClient } from "./professores-client";
+import { StepNavigation } from "@/components/step-navigation";
 
 export default async function ProfessoresPage() {
-  // No Next 15, cookies() deve ser aguardado se for passado como argumento,
-  // mas o ideal é que o createClient() já faça isso internamente.
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -56,7 +52,7 @@ export default async function ProfessoresPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-            <CardTitle>Professores</CardTitle>
+            <CardTitle>Passo 4: Professores</CardTitle>
             <CardDescription>
                 Gerencie os professores da sua escola, suas disciplinas e restrições de horário.
             </CardDescription>
@@ -72,6 +68,7 @@ export default async function ProfessoresPage() {
             />
         </CardContent>
       </Card>
+      <StepNavigation currentStep={4} />
     </div>
   );
 }
