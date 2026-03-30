@@ -124,7 +124,7 @@ export type TurmaProfessor = {
 };
 
 export type TurmaComDados = Turma & {
-    serie: Pick<Serie, 'id' | 'nome' | 'turno_id'> & {
+    serie: Pick<Serie, 'id' | 'nome' | 'turno_id' | 'restricoes'> & {
         componentes: (SerieComponente & {
             componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
         })[];
@@ -198,4 +198,10 @@ export type HorarioCompleto = Horario & {
         turma: Pick<Turma, 'id' | 'nome'>;
     })[];
     turmas_config: TurmaConfigHorario[];
+};
+
+export type ConfiguracaoGerminacao = {
+    componente_id: string;
+    geminar: boolean;
+    tamanho_bloco: number;
 };

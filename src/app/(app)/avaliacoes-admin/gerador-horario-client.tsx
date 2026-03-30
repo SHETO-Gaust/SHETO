@@ -1,11 +1,12 @@
+
 'use client';
 
-import { useState, useTransition } from 'react';
-import type { Turno, Horario } from '@/lib/types';
+import { useState, useTransition, useMemo } from 'react';
+import type { Turno, Horario, ConfiguracaoGerminacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, Users2, AlertTriangle } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario } from './actions';
 import { format } from 'date-fns';
@@ -33,6 +34,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import { createClient } from '@/lib/supabase/client';
 
 type GeradorHorarioClientProps = {
   escolaId: string;
@@ -47,8 +50,11 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
   
-  const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
+  const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
+  const [dialogStep, setDialogStep] = useState<'name' | 'germination'>('name');
   const [nomeHorarioInput, setNomeHorarioInput] = useState('');
+  const [disciplinasParaConfig, setDisciplinasParaConfig] = useState<{ id: string, nome: string, sigla: string, maxAulas: number }[]>([]);
+  const [configGerminacao, setConfigGerminacao] = useState<ConfiguracaoGerminacao[]>([]);
   
   const { toast } = useToast();
 
@@ -70,7 +76,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     setIsLoadingHorarios(false);
   };
 
-  const handleGerarHorarioClick = () => {
+  const handleGerarHorarioClick = async () => {
     if (!selectedTurnoId) {
         toast({ title: 'Selecione um turno primeiro', variant: 'destructive' });
         return;
@@ -79,7 +85,44 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     setGenError(null);
     const nextVersion = horarios.length + 1;
     setNomeHorarioInput(`Horário V${nextVersion}`);
-    setIsNameDialogOpen(true);
+    
+    // Buscar disciplinas do turno para configurar geminação
+    const supabase = createClient();
+    const { data: series } = await supabase
+        .from('series')
+        .select(`
+            id, 
+            series_componentes(
+                aulas_presenciais, 
+                aulas_nao_presenciais, 
+                componente:componentes_curriculares(id, nome, sigla)
+            )
+        `)
+        .eq('turno_id', selectedTurnoId);
+
+    if (series) {
+        const discMap = new Map<string, { id: string, nome: string, sigla: string, maxAulas: number }>();
+        series.forEach((s: any) => {
+            s.series_componentes.forEach((sc: any) => {
+                const total = (sc.aulas_presenciais || 0) + (sc.aulas_nao_presenciais || 0);
+                if (total >= 2) {
+                    const existing = discMap.get(sc.componente.id);
+                    discMap.set(sc.componente.id, {
+                        id: sc.componente.id,
+                        nome: sc.componente.nome,
+                        sigla: sc.componente.sigla,
+                        maxAulas: Math.max(total, existing?.maxAulas || 0)
+                    });
+                }
+            });
+        });
+        const list = Array.from(discMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
+        setDisciplinasParaConfig(list);
+        setConfigGerminacao(list.map(d => ({ componente_id: d.id, geminar: true, tamanho_bloco: 2 })));
+    }
+
+    setDialogStep('name');
+    setIsConfigDialogOpen(true);
   };
 
   const handleConfirmGeracao = (force: boolean = false) => {
@@ -88,18 +131,26 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         return;
     }
 
-    setIsNameDialogOpen(false);
+    setIsConfigDialogOpen(false);
     startGenerating(async () => {
-        const result = await iniciarGeracaoHorario(escolaId, selectedTurnoId, nomeHorarioInput, force);
+        const result = await iniciarGeracaoHorario(escolaId, selectedTurnoId, nomeHorarioInput, configGerminacao, force);
         if (result.error) {
             setGenError(result.error);
-            toast({ title: 'Problema na Grade', description: 'A grade possui conflitos que impedem a conclusão ideal.', variant: 'destructive' });
+            toast({ title: 'Problema na Grade', description: 'Ocorreram conflitos lógicos durante a organização.', variant: 'destructive' });
         } else {
             setGenError(null);
             toast({ title: 'Geração Concluída!', description: force ? 'A grade foi salva com pendências para ajuste manual.' : 'A grade foi organizada e salva com sucesso.'});
             handleTurnoChange(selectedTurnoId);
         }
     });
+  };
+
+  const toggleGerminacao = (id: string, checked: boolean) => {
+    setConfigGerminacao(prev => prev.map(c => c.componente_id === id ? { ...c, geminar: checked } : c));
+  };
+
+  const setTamanhoBloco = (id: string, size: number) => {
+    setConfigGerminacao(prev => prev.map(c => c.componente_id === id ? { ...c, tamanho_bloco: size } : c));
   };
 
   const handleDelete = async (id: string) => {
@@ -228,7 +279,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
           <CardFooter className="bg-muted/30 py-4 px-6 border-t">
              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <Settings2 className="h-4 w-4" />
-                <p>O algoritmo tenta encaixar todas as aulas respeitando as folgas dos professores e restrições das séries.</p>
+                <p>O algoritmo realiza até 100 tentativas para encontrar o melhor encaixe respeitando as restrições.</p>
              </div>
           </CardFooter>
         </Card>
@@ -303,36 +354,112 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         </Card>
       )}
 
-      {/* DIÁLOGO PARA DEFINIR O NOME DO HORÁRIO */}
-      <Dialog open={isNameDialogOpen} onOpenChange={setIsNameDialogOpen}>
-        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-[450px]">
-            <DialogHeader>
+      {/* DIÁLOGO CONFIGURAÇÃO PRÉ-GERAÇÃO */}
+      <Dialog open={isConfigDialogOpen} onOpenChange={setIsConfigDialogOpen}>
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-[600px] max-h-[90vh] flex flex-col p-0">
+            <DialogHeader className="p-6 pb-2">
                 <DialogTitle className="text-xl font-bold flex items-center gap-2">
                     <Zap className="h-5 w-5 text-primary" />
-                    Iniciar Processamento
+                    {dialogStep === 'name' ? 'Iniciar Processamento' : 'Configurar Geminação'}
                 </DialogTitle>
                 <DialogDescription>
-                    Dê um nome para esta nova versão da grade (ex: Grade Principal V1).
+                    {dialogStep === 'name' 
+                        ? 'Dê um nome para esta nova versão da grade.' 
+                        : 'Defina como as aulas com carga horária alta devem ser distribuídas.'}
                 </DialogDescription>
             </DialogHeader>
-            <div className="py-6 space-y-4">
-                <div className="space-y-3">
-                    <Label htmlFor="nome-horario" className="font-bold">Nome da Versão</Label>
-                    <Input 
-                        id="nome-horario" 
-                        value={nomeHorarioInput} 
-                        onChange={(e) => setNomeHorarioInput(e.target.value)}
-                        placeholder="Ex: Grade 2026 Semestre 1"
-                        className="h-12 text-lg"
-                        autoFocus
-                    />
-                </div>
+
+            <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-6">
+                {dialogStep === 'name' ? (
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-3">
+                            <Label htmlFor="nome-horario" className="font-bold text-base">Nome da Versão</Label>
+                            <Input 
+                                id="nome-horario" 
+                                value={nomeHorarioInput} 
+                                onChange={(e) => setNomeHorarioInput(e.target.value)}
+                                placeholder="Ex: Grade 2026 Semestre 1"
+                                className="h-12 text-lg"
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <Alert className="bg-primary/5 border-primary/20">
+                            <Settings2 className="h-4 w-4 text-primary" />
+                            <AlertTitle className="text-xs uppercase font-bold text-primary">Dica de Otimização</AlertTitle>
+                            <AlertDescription className="text-xs">
+                                Aulas geminadas (seguidas) são mais difíceis de encaixar. Se o algoritmo falhar, tente desativar a geminação em algumas matérias.
+                            </AlertDescription>
+                        </Alert>
+
+                        <div className="space-y-2">
+                            {disciplinasParaConfig.map(disc => {
+                                const config = configGerminacao.find(c => c.componente_id === disc.id);
+                                return (
+                                    <div key={disc.id} className="flex flex-col p-4 border rounded-xl bg-card shadow-sm hover:border-primary/30 transition-colors gap-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="space-y-0.5">
+                                                <p className="font-bold text-sm">{disc.nome} ({disc.sigla})</p>
+                                                <p className="text-xs text-muted-foreground">{disc.maxAulas} aulas por semana</p>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <Label htmlFor={`gem-${disc.id}`} className="text-xs font-semibold cursor-pointer">Geminar?</Label>
+                                                <Switch 
+                                                    id={`gem-${disc.id}`}
+                                                    checked={config?.geminar}
+                                                    onCheckedChange={(checked) => toggleGerminacao(disc.id, checked)}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {config?.geminar && (
+                                            <div className="flex items-center gap-4 pt-2 border-t border-dashed">
+                                                <Label className="text-xs text-muted-foreground">Tamanho do Bloco:</Label>
+                                                <div className="flex gap-2">
+                                                    {[2, 3, 4, 5].filter(n => n <= disc.maxAulas).map(n => (
+                                                        <Button 
+                                                            key={n}
+                                                            size="sm"
+                                                            variant={config.tamanho_bloco === n ? 'default' : 'outline'}
+                                                            className="h-8 w-12 text-xs font-bold"
+                                                            onClick={() => setTamanhoBloco(disc.id, n)}
+                                                        >
+                                                            {n}x
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="outline" onClick={() => setIsNameDialogOpen(false)} className="h-11">Cancelar</Button>
-                <Button onClick={() => handleConfirmGeracao(false)} disabled={!nomeHorarioInput.trim()} className="h-11 font-bold px-8">
-                    Começar Agora
-                </Button>
+
+            <DialogFooter className="p-6 border-t bg-muted/20 gap-2 sm:gap-0">
+                {dialogStep === 'name' ? (
+                    <>
+                        <Button variant="outline" onClick={() => setIsConfigDialogOpen(false)} className="h-11">Cancelar</Button>
+                        <Button 
+                            onClick={() => setDialogStep('germination')} 
+                            disabled={!nomeHorarioInput.trim()} 
+                            className="h-11 font-bold px-8"
+                        >
+                            Próximo Passo <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                    </>
+                ) : (
+                    <>
+                        <Button variant="ghost" onClick={() => setDialogStep('name')} className="h-11">Voltar</Button>
+                        <Button onClick={() => handleConfirmGeracao(false)} className="h-11 font-bold px-8 shadow-lg">
+                            Começar Processamento <Zap className="ml-2 h-4 w-4" />
+                        </Button>
+                    </>
+                )}
             </DialogFooter>
         </DialogContent>
       </Dialog>

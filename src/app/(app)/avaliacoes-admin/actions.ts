@@ -3,7 +3,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import type { Turno, Horario, HorarioCompleto, TurmaConfigHorario } from '@/lib/types';
+import type { Turno, Horario, HorarioCompleto, ConfiguracaoGerminacao } from '@/lib/types';
 import { gerarHorarioAlgoritmico } from '@/lib/timetabling';
 import { getTurmas } from '../turmas/actions';
 import { getProfessores } from '../professores/actions';
@@ -43,7 +43,13 @@ export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horar
 }
 
 // Action to start the generation process
-export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, nomeHorario: string, force: boolean = false) {
+export async function iniciarGeracaoHorario(
+    escolaId: string, 
+    turnoId: string, 
+    nomeHorario: string, 
+    configGerminacao: ConfiguracaoGerminacao[] = [],
+    force: boolean = false
+) {
     const supabase = await createClient();
 
     if (!nomeHorario || nomeHorario.trim() === '') {
@@ -77,6 +83,7 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, n
         turmasDoTurno as any[],
         allProfessores as any[],
         allTurnos || [],
+        configGerminacao,
         force
     );
 
