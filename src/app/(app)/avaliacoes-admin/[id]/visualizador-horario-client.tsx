@@ -1,13 +1,13 @@
 
 'use client';
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useEffect } from 'react';
 import type { HorarioCompleto, Turno } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario } from '../actions';
@@ -24,7 +24,7 @@ const DIAS_SEMANA_MAP = [
 ];
 
 export function VisualizadorHorarioClient({ horario }: Props) {
-  const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
+  const [viewMode, setViewMode] = useState<'single' | 'all' | 'teachers'>('single');
   const [isConsolidating, startConsolidating] = useTransition();
   const { toast } = useToast();
 
@@ -38,7 +38,23 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [horario.aulas]);
 
-  const [selectedTurmaId, setSelectedTurmaId] = useState<string>(turmas[0]?.id || '');
+  const professores = useMemo(() => {
+    const map = new Map();
+    horario.aulas.forEach(aula => {
+      if (aula.professor_id && !map.has(aula.professor_id)) {
+        map.set(aula.professor_id, aula.professor);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.nome_horario.localeCompare(b.nome_horario));
+  }, [horario.aulas]);
+
+  const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
+  const [selectedProfessorId, setSelectedProfessorId] = useState<string>('');
+
+  useEffect(() => {
+    if (turmas.length > 0 && !selectedTurmaId) setSelectedTurmaId(turmas[0].id);
+    if (professores.length > 0 && !selectedProfessorId) setSelectedProfessorId(professores[0].id);
+  }, [turmas, professores]);
 
   const diasAtivos = useMemo(() => 
     DIAS_SEMANA_MAP.filter(d => horario.turno.dias_semana.includes(d.id)),
@@ -119,23 +135,23 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     );
   };
 
-  const GradeHoraria = ({ turmaId, tipo, label, turnoInfo }: { turmaId: string, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null }) => {
+  const GradeHoraria = ({ targetId, isProfessorView, tipo, label, turnoInfo }: { targetId: string, isProfessorView: boolean, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null }) => {
     if (!turnoInfo) return null;
 
     const getAulaNoSlot = (dia: string, index: number) => {
         return horario.aulas.find(a => 
-            a.turma_id === turmaId && 
+            (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && 
             a.dia_semana === dia && 
             a.aula_index === index &&
             a.tipo === tipo
         );
     };
 
-    const hasAulas = horario.aulas.some(a => a.turma_id === turmaId && a.tipo === tipo);
+    const hasAulas = horario.aulas.some(a => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial') return null;
 
     const isInconsistent = (dia: string, index: number) => {
-        if (tipo !== 'presencial') return false;
+        if (tipo !== 'presencial' || isProfessorView) return false;
         const aula = getAulaNoSlot(dia, index);
         return !aula;
     };
@@ -182,8 +198,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                     )}>
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground font-medium truncate w-full" title={aula.professor?.nome_horario}>
-                                    {aula.professor?.nome_horario || 'SEM PROF.'}
+                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase" title={isProfessorView ? `Turma ${aula.turma.nome}` : aula.professor?.nome_horario}>
+                                        {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
                                     </div>
                                 </div>
                                 ) : hole ? (
@@ -227,7 +243,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             <CardDescription>Visualize o horário gerado para as turmas do turno {horario.turno.nome}.</CardDescription>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             {horario.status !== 'publicado' && (
                 <Button 
                     onClick={handleConsolidar} 
@@ -243,6 +259,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 <TabsList>
                     <TabsTrigger value="single">Turma por Turma</TabsTrigger>
                     <TabsTrigger value="all">Todas as Turmas</TabsTrigger>
+                    <TabsTrigger value="teachers">Por Professor</TabsTrigger>
                 </TabsList>
             </Tabs>
 
@@ -258,6 +275,19 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     </SelectContent>
                 </Select>
             )}
+
+            {viewMode === 'teachers' && (
+                <Select value={selectedProfessorId} onValueChange={setSelectedProfessorId}>
+                    <SelectTrigger className="w-[220px]">
+                        <SelectValue placeholder="Selecione o professor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {professores.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.nome_horario}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            )}
           </div>
         </CardHeader>
         
@@ -266,15 +296,45 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             <div className="space-y-8 pt-4">
                 <RenderPendencias turmaId={selectedTurmaId} />
                 <GradeHoraria 
-                    turmaId={selectedTurmaId} 
+                    targetId={selectedTurmaId} 
+                    isProfessorView={false}
                     tipo="presencial" 
                     label="Grade Regular" 
                     turnoInfo={horario.turno} 
                 />
                 <GradeHoraria 
-                    turmaId={selectedTurmaId} 
+                    targetId={selectedTurmaId} 
+                    isProfessorView={false}
                     tipo="nao_presencial" 
                     label="Grade do Contraturno" 
+                    turnoInfo={horario.turno_oposto || null} 
+                />
+            </div>
+          ) : viewMode === 'teachers' ? (
+            <div className="space-y-8 pt-4">
+                <div className="flex items-center gap-3 border-b pb-4">
+                    <div className="h-12 w-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                        <User className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold tracking-tight">
+                            {professores.find(p => p.id === selectedProfessorId)?.nome_horario || 'Selecione um professor'}
+                        </h2>
+                        <p className="text-sm text-muted-foreground">Visualizando grade individual do docente.</p>
+                    </div>
+                </div>
+                <GradeHoraria 
+                    targetId={selectedProfessorId} 
+                    isProfessorView={true}
+                    tipo="presencial" 
+                    label="Horário Regular" 
+                    turnoInfo={horario.turno} 
+                />
+                <GradeHoraria 
+                    targetId={selectedProfessorId} 
+                    isProfessorView={true}
+                    tipo="nao_presencial" 
+                    label="Horário no Contraturno" 
                     turnoInfo={horario.turno_oposto || null} 
                 />
             </div>
@@ -293,13 +353,15 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                             <GradeHoraria 
-                                turmaId={turma.id} 
+                                targetId={turma.id} 
+                                isProfessorView={false}
                                 tipo="presencial" 
                                 label="Grade Regular" 
                                 turnoInfo={horario.turno} 
                             />
                             <GradeHoraria 
-                                turmaId={turma.id} 
+                                targetId={turma.id} 
+                                isProfessorView={false}
                                 tipo="nao_presencial" 
                                 label="Grade do Contraturno" 
                                 turnoInfo={horario.turno_oposto || null} 
