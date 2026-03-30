@@ -106,7 +106,7 @@ export type SerieComDados = Serie & {
 };
 
 
-// --- NEW TYPES FOR TURMAS ---
+// --- TURMAS ---
 
 export type Turma = {
     id: string;
@@ -134,7 +134,7 @@ export type TurmaComDados = Turma & {
 };
 
 
-// --- HORARIO TYPES ---
+// --- HORARIO ---
 
 export type ChecklistItemStatus = 'ok' | 'warning' | 'error';
 
@@ -163,7 +163,17 @@ export type HorarioAulaGerada = {
   horario_id: string;
   turma_id: string;
   componente_id: string;
-  professor_id: string;
+  professor_id: string | null;
   dia_semana: string;
   aula_index: number;
+  tipo: 'presencial' | 'nao_presencial';
+};
+
+export type HorarioCompleto = Horario & {
+    turno: Turno;
+    aulas: (HorarioAulaGerada & {
+        componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
+        professor: Pick<Professor, 'id' | 'nome_horario'> | null;
+        turma: Pick<Turma, 'id' | 'nome'>;
+    })[];
 };

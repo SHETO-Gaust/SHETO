@@ -5,11 +5,23 @@ import type { Turno, Horario } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Bot, PlusCircle, Loader2, List, FileText } from 'lucide-react';
+import { Clock, Bot, PlusCircle, Loader2, List, FileText, Trash2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getHorariosSalvos, iniciarGeracaoHorario } from './actions';
+import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario } from './actions';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import Link from 'next/link';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 type GeradorHorarioClientProps = {
   escolaId: string;
@@ -21,6 +33,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [isLoadingHorarios, setIsLoadingHorarios] = useState(false);
   const [isGenerating, startGenerating] = useTransition();
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleTurnoChange = async (turnoId: string) => {
@@ -46,11 +59,23 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         if (result.error) {
             toast({ title: 'Erro ao iniciar geração', description: result.error, variant: 'destructive' });
         } else {
-            toast({ title: 'Geração Iniciada!', description: 'Um novo rascunho de horário foi criado.'});
-            // Refetch horarios list
+            toast({ title: 'Geração Concluída!', description: 'A IA organizou as aulas e o rascunho está pronto.'});
             handleTurnoChange(selectedTurnoId);
         }
     });
+  };
+
+  const handleDelete = async (id: string) => {
+    setIsDeleting(id);
+    const result = await deleteHorario(id);
+    setIsDeleting(null);
+
+    if (result.error) {
+        toast({ title: 'Erro ao deletar', description: result.error, variant: 'destructive' });
+    } else {
+        toast({ title: 'Horário removido' });
+        setHorarios(prev => prev.filter(h => h.id !== id));
+    }
   };
 
   const selectedTurno = turnosAtivos.find(t => t.id === selectedTurnoId);
@@ -91,23 +116,25 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row gap-4">
-              <Button size="lg" className="flex-1">
-                <List className="mr-2 h-4 w-4" />
-                Verificar Dados (Checklist)
-              </Button>
+              <Link href="/relatorios" className="flex-1">
+                <Button size="lg" variant="outline" className="w-full">
+                    <List className="mr-2 h-4 w-4" />
+                    Verificar Dados (Checklist)
+                </Button>
+              </Link>
               <Button size="lg" onClick={handleGerarHorario} disabled={isGenerating} className="flex-1">
                 {isGenerating ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                     <PlusCircle className="mr-2 h-4 w-4" />
                 )}
-                Gerar Novo Horário
+                Gerar com IA
               </Button>
             </div>
           </CardContent>
           <CardFooter>
              <p className="text-xs text-muted-foreground">
-                Ao clicar em "Gerar", nosso assistente de IA criará uma nova proposta de horário. Esse processo pode levar alguns minutos.
+                Ao clicar em "Gerar com IA", nosso assistente organizará as aulas respeitando as restrições dos professores e turmas.
              </p>
           </CardFooter>
         </Card>
@@ -127,29 +154,54 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 ) : horarios.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {horarios.map(h => (
-                            <Card key={h.id} className="bg-muted/50">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center justify-between">
-                                        {h.nome}
-                                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${h.status === 'publicado' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            <Card key={h.id} className="bg-muted/50 overflow-hidden border-none shadow-sm">
+                                <CardHeader className="pb-2">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-lg">{h.nome}</CardTitle>
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${h.status === 'publicado' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
                                             {h.status === 'publicado' ? 'Publicado' : 'Rascunho'}
                                         </span>
-                                    </CardTitle>
+                                    </div>
                                     <CardDescription>
-                                        Criado em {format(new Date(h.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                        {format(new Date(h.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                                     </CardDescription>
                                 </CardHeader>
-                                <CardFooter>
-                                    <Button className="w-full">
-                                        <FileText className="mr-2 h-4 w-4" />
-                                        Visualizar e Editar
-                                    </Button>
+                                <CardFooter className="flex gap-2">
+                                    <Link href={`/avaliacoes-admin/${h.id}`} className="flex-1">
+                                        <Button variant="secondary" className="w-full" size="sm">
+                                            <FileText className="mr-2 h-4 w-4" />
+                                            Visualizar
+                                        </Button>
+                                    </Link>
+                                    
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={isDeleting === h.id}>
+                                                {isDeleting === h.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Excluir Horário?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Isso apagará permanentemente o rascunho <strong>{h.nome}</strong> e todas as alocações de aula associadas a ele.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => handleDelete(h.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
                                 </CardFooter>
                             </Card>
                         ))}
                     </div>
                 ) : (
-                    <p className="text-center text-muted-foreground p-8">Nenhum horário gerado para este turno ainda.</p>
+                    <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed rounded-lg bg-muted/20">
+                        <Clock className="h-12 w-12 text-muted-foreground/40 mb-4" />
+                        <p className="text-muted-foreground">Nenhum horário gerado para este turno ainda.</p>
+                    </div>
                 )}
             </CardContent>
         </Card>

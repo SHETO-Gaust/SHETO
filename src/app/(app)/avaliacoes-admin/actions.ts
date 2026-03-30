@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import type { Turno, Horario } from '@/lib/types';
+import type { Turno, Horario, HorarioCompleto } from '@/lib/types';
+import { gerarHorarioIA } from '@/ai/flows/gerar-horario-flow';
 
 // Get only active turns for the generator
 export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[], error?: string }> {
@@ -42,8 +43,8 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
     const supabase = await createClient();
 
     // Check for required data: turmas
-    const { data: turmas } = await supabase.from('turmas').select('id, series(turno_id)').eq('escola_id', escolaId);
-    const turmasDoTurno = turmas?.filter(t => t.series?.turno_id === turnoId) || [];
+    const { data: turmas } = await supabase.from('turmas').select('id, series!inner(turno_id)').eq('escola_id', escolaId);
+    const turmasDoTurno = turmas?.filter(t => (t.series as any)?.turno_id === turnoId) || [];
 
     if (turmasDoTurno.length === 0) {
         return { error: 'Não há turmas cadastradas para este turno. Verifique a página de Turmas.' };
@@ -57,7 +58,7 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
     const newVersion = (countResult.count || 0) + 1;
     const nomeHorario = `Horário V${newVersion}`;
 
-    // For now, we will just create the record. The AI generation will be added later.
+    // 1. Create the record
     const { data: novoHorario, error } = await supabase
         .from('horarios')
         .insert({
@@ -71,9 +72,73 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
 
     if (error) {
         console.error('Error creating new horario:', error);
-        return { error: 'Não foi possível iniciar a geração do horário.' };
+        return { error: 'Não foi possível iniciar a geração do rascunho.' };
     }
 
-    revalidatePath('/avaliacoes-admin'); // The page route
+    // 2. Call AI Flow
+    try {
+        const resultIA = await gerarHorarioIA(escolaId, turnoId);
+        
+        if (resultIA && resultIA.aulas.length > 0) {
+            const aulasToInsert = resultIA.aulas.map(aula => ({
+                ...aula,
+                horario_id: novoHorario.id,
+            }));
+
+            const { error: insertError } = await supabase
+                .from('horario_aulas')
+                .insert(aulasToInsert);
+
+            if (insertError) {
+                console.error("Error inserting generated classes:", insertError);
+                return { error: 'O rascunho foi criado, mas houve um erro ao salvar as aulas geradas pela IA.' };
+            }
+        }
+    } catch (err) {
+        console.error("AI Generation Error:", err);
+        return { error: 'O rascunho foi criado, mas a IA falhou ao organizar as aulas. Você pode tentar novamente ou editar manualmente.' };
+    }
+
+    revalidatePath('/avaliacoes-admin');
     return { data: novoHorario };
+}
+
+export async function deleteHorario(id: string) {
+    const supabase = await createClient();
+    const { error } = await supabase.from('horarios').delete().eq('id', id);
+    
+    if (error) {
+        console.error('Error deleting horario:', error);
+        return { error: 'Não foi possível deletar o horário.' };
+    }
+
+    revalidatePath('/avaliacoes-admin');
+    return { success: true };
+}
+
+export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioCompleto, error?: string }> {
+    const supabase = await createClient();
+    
+    const { data: horario, error: hError } = await supabase
+        .from('horarios')
+        .select('*, turno:turnos(*)')
+        .eq('id', id)
+        .single();
+
+    if (hError || !horario) return { error: 'Horário não encontrado.' };
+
+    const { data: aulas, error: aError } = await supabase
+        .from('horario_aulas')
+        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario), turma:turmas(id, nome)')
+        .eq('horario_id', id);
+
+    if (aError) return { error: 'Erro ao buscar as aulas do horário.' };
+
+    return { 
+        data: {
+            ...horario,
+            turno: horario.turno as any,
+            aulas: (aulas || []) as any[],
+        }
+    };
 }
