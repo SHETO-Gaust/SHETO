@@ -5,7 +5,7 @@ import type { Turno, Horario } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Zap, PlusCircle, Loader2, List, FileText, Trash2 } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario } from './actions';
 import { format } from 'date-fns';
@@ -126,7 +126,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 {isGenerating ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                    <PlusCircle className="mr-2 h-4 w-4" />
+                    <Zap className="mr-2 h-4 w-4" />
                 )}
                 Gerar Grade
               </Button>

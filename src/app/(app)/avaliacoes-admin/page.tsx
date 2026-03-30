@@ -8,8 +8,7 @@ import { GeradorHorarioClient } from "./gerador-horario-client";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function GerarHorarioPage() {
-  const cookieStore = cookies();
-  const supabase = await createClient(cookieStore);
+  const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -75,7 +74,7 @@ export default async function GerarHorarioPage() {
     <div className="space-y-6">
         <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">Passo 7: Gerar Horário</h1>
-            <p className="text-sm text-muted-foreground">Use o assistente de IA para gerar propostas de horário com base nos dados cadastrados.</p>
+            <p className="text-sm text-muted-foreground">Utilize o algoritmo de otimização para organizar as aulas com base nos dados e restrições cadastrados.</p>
         </div>
         <GeradorHorarioClient escolaId={escolaId} turnosAtivos={turnosAtivos} />
         <StepNavigation currentStep={7} />
