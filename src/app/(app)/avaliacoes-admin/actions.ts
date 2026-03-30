@@ -1,4 +1,3 @@
-
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -86,7 +85,7 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
 
     if (hError) return { error: 'Falha ao criar rascunho de horário.' };
 
-    // 3. Executar o Algoritmo de Geração Lógica
+    // 3. Executar o Algoritmo de Geração Lógica (Timetabling)
     try {
         const result = gerarHorarioAlgoritmico(
             turno as any,
@@ -96,21 +95,27 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
         
         if (result.aulas.length > 0) {
             const aulasToInsert = result.aulas.map(aula => ({
-                ...aula,
                 horario_id: novoHorario.id,
+                turma_id: aula.turma_id,
+                componente_id: aula.componente_id,
+                professor_id: aula.professor_id,
+                dia_semana: aula.dia_semana,
+                aula_index: aula.aula_index,
+                tipo: aula.tipo
             }));
 
+            // Inserção em lote para performance e atomicidade
             const { error: insertError } = await supabase
                 .from('horario_aulas')
                 .insert(aulasToInsert);
 
             if (insertError) {
-                console.error("Error inserting classes:", insertError);
-                return { error: 'O rascunho foi criado, mas houve um erro ao salvar as aulas na grade.' };
+                console.error("❌ Erro ao salvar aulas no banco:", insertError);
+                return { error: `Erro ao salvar a grade: ${insertError.message}` };
             }
         }
-    } catch (err) {
-        console.error("Timetabling Engine Error:", err);
+    } catch (err: any) {
+        console.error("❌ Erro no algoritmo de timetabling:", err);
         return { error: 'Ocorreu um erro lógico ao organizar as aulas. Verifique as restrições dos professores.' };
     }
 

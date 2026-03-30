@@ -5,7 +5,7 @@ import type { Turno, Horario } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Bot, PlusCircle, Loader2, List, FileText, Trash2, AlertTriangle } from 'lucide-react';
+import { Clock, Zap, PlusCircle, Loader2, List, FileText, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario } from './actions';
 import { format } from 'date-fns';
@@ -59,7 +59,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         if (result.error) {
             toast({ title: 'Erro ao iniciar geração', description: result.error, variant: 'destructive' });
         } else {
-            toast({ title: 'Geração Concluída!', description: 'A IA organizou as aulas e o rascunho está pronto.'});
+            toast({ title: 'Geração Concluída!', description: 'O algoritmo organizou as aulas e o rascunho está pronto.'});
             handleTurnoChange(selectedTurnoId);
         }
     });
@@ -107,11 +107,11 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Bot className="h-6 w-6 text-primary" />
+              <Zap className="h-6 w-6 text-primary" />
               Passo 2: Geração do Horário
             </CardTitle>
             <CardDescription>
-              Verifique a consistência dos dados e gere uma nova versão do horário para o turno <span className="font-semibold text-foreground">{selectedTurno.nome}</span>.
+              Verifique a consistência dos dados e processe uma nova grade horária para o turno <span className="font-semibold text-foreground">{selectedTurno.nome}</span>.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -128,13 +128,13 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 ) : (
                     <PlusCircle className="mr-2 h-4 w-4" />
                 )}
-                Gerar com IA
+                Gerar Grade
               </Button>
             </div>
           </CardContent>
           <CardFooter>
              <p className="text-xs text-muted-foreground">
-                Ao clicar em "Gerar com IA", nosso assistente organizará as aulas respeitando as restrições dos professores e turmas.
+                Ao clicar em "Gerar Grade", o sistema organizará as aulas respeitando as restrições de horários dos professores e modelos de série.
              </p>
           </CardFooter>
         </Card>
@@ -170,7 +170,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                     <Link href={`/avaliacoes-admin/${h.id}`} className="flex-1">
                                         <Button variant="secondary" className="w-full" size="sm">
                                             <FileText className="mr-2 h-4 w-4" />
-                                            Visualizar
+                                            Visualizar e Editar
                                         </Button>
                                     </Link>
                                     
