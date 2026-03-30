@@ -197,6 +197,12 @@ export type HorarioCompleto = Horario & {
         professor: Pick<Professor, 'id' | 'nome_horario'> | null;
         turma: Pick<Turma, 'id' | 'nome'>;
     })[];
+    outras_aulas_publicadas?: (HorarioAulaGerada & {
+        componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
+        professor: Pick<Professor, 'id' | 'nome_horario'> | null;
+        turma: Pick<Turma, 'id' | 'nome'>;
+        horario: { turno: Turno };
+    })[];
     turmas_config: TurmaConfigHorario[];
 };
 

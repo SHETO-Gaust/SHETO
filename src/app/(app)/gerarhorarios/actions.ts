@@ -175,11 +175,26 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
         return false;
     }) || allTurnos?.find(t => t.id !== (horario.turno as any).id);
 
+    // Aulas do horário específico sendo visualizado
     const { data: aulas } = await supabase
         .from('horario_aulas')
         .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario), turma:turmas(id, nome)')
         .eq('horario_id', id)
         .order('aula_index', { ascending: true });
+
+    // Aulas publicadas em OUTROS turnos (para concatenar na visão do professor)
+    const { data: outrasAulasPublicadas } = await supabase
+        .from('horario_aulas')
+        .select(`
+            *, 
+            componente:componentes_curriculares(id, nome, sigla), 
+            professor:professores(id, nome_horario), 
+            turma:turmas(id, nome),
+            horario:horarios!inner(id, status, turno_id, turno:turnos(*))
+        `)
+        .eq('horarios.escola_id', horario.escola_id)
+        .eq('horarios.status', 'publicado')
+        .neq('horario_id', id);
 
     const { data: turmasConfig } = await supabase
         .from('turmas')
@@ -196,6 +211,7 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
             turno: horario.turno as any,
             turno_oposto: turnoOposto as any,
             aulas: (aulas || []) as any[],
+            outras_aulas_publicadas: (outrasAulasPublicadas || []) as any[],
             turmas_config: (turmasConfig || []) as any[]
         }
     };

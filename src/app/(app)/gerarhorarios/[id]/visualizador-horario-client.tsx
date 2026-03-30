@@ -41,13 +41,20 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
   const professores = useMemo(() => {
     const map = new Map();
+    // Docentes do horário atual
     horario.aulas.forEach(aula => {
       if (aula.professor_id && !map.has(aula.professor_id)) {
         map.set(aula.professor_id, aula.professor);
       }
     });
+    // Docentes de outros horários publicados (para concatenar)
+    horario.outras_aulas_publicadas?.forEach(aula => {
+        if (aula.professor_id && !map.has(aula.professor_id)) {
+            map.set(aula.professor_id, aula.professor);
+        }
+    });
     return Array.from(map.values()).sort((a, b) => a.nome_horario.localeCompare(b.nome_horario));
-  }, [horario.aulas]);
+  }, [horario.aulas, horario.outras_aulas_publicadas]);
 
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [selectedProfessorId, setSelectedProfessorId] = useState<string>('');
@@ -57,7 +64,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     if (professores.length > 0 && !selectedProfessorId) setSelectedProfessorId(professores[0].id);
   }, [turmas, professores]);
 
-  const diasAtivos = useMemo(() => 
+  const diasAtivosNoHorario = useMemo(() => 
     DIAS_SEMANA_MAP.filter(d => horario.turno.dias_semana.includes(d.id)),
     [horario.turno.dias_semana]
   );
@@ -111,36 +118,13 @@ export function VisualizadorHorarioClient({ horario }: Props) {
       });
   };
 
-  const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
-    const pendencias = getPendencias(turmaId);
-    if (pendencias.length === 0) return null;
-
-    return (
-        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
-            <AlertDescription className="text-xs mt-2">
-                <div className="flex flex-wrap gap-3">
-                    {pendencias.map((p, i) => (
-                        <div key={i} className="bg-destructive/10 text-destructive px-3 py-2 rounded font-medium border border-destructive/20 flex flex-col items-center text-center min-w-[120px] shadow-sm">
-                            <span className="font-bold text-[11px] leading-tight">{p.componente}</span>
-                            <span className="text-[10px] opacity-90">{p.missing} aula(s) {p.tipo}</span>
-                            <div className="mt-1.5 pt-1 border-t border-destructive/10 w-full text-[9px] uppercase font-bold text-destructive/70">
-                                {p.professor}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </AlertDescription>
-        </Alert>
-    );
-  };
-
-  const GradeHoraria = ({ targetId, isProfessorView, tipo, label, turnoInfo }: { targetId: string, isProfessorView: boolean, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null }) => {
+  const GradeHoraria = ({ targetId, isProfessorView, tipo, label, turnoInfo, dataset }: { targetId: string, isProfessorView: boolean, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null, dataset?: any[] }) => {
     if (!turnoInfo) return null;
 
+    const sourceData = dataset || horario.aulas;
+
     const getAulaNoSlot = (dia: string, index: number) => {
-        return horario.aulas.find(a => 
+        return sourceData.find(a => 
             (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && 
             a.dia_semana === dia && 
             a.aula_index === index &&
@@ -148,8 +132,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         );
     };
 
-    const hasAulas = horario.aulas.some(a => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
-    if (!hasAulas && tipo === 'nao_presencial') return null;
+    const hasAulas = sourceData.some(a => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
+    if (!hasAulas && tipo === 'nao_presencial' && !isProfessorView) return null;
+    if (!hasAulas && isProfessorView) return null;
+
+    const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
 
     const isInconsistent = (dia: string, index: number) => {
         if (tipo !== 'presencial' || isProfessorView) return false;
@@ -169,7 +156,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     <thead>
                     <tr className="bg-muted/50 border-b">
                         <th className="p-3 text-left font-medium border-r w-32">Horário</th>
-                        {diasAtivos.map(dia => (
+                        {diasAtivosLocal.map(dia => (
                         <th key={dia.id} className="p-3 text-center font-medium min-w-[120px]">
                             {dia.label}
                         </th>
@@ -185,7 +172,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} às {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
                             </div>
                         </td>
-                        {diasAtivos.map(dia => {
+                        {diasAtivosLocal.map(dia => {
                             const aula = getAulaNoSlot(dia.id, aulaIndex);
                             const hole = isInconsistent(dia.id, aulaIndex);
 
@@ -228,6 +215,36 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     const prof = professores.find(p => p.id === professorId);
     if (!prof) return null;
 
+    // Concatenar todas as aulas do docente
+    const allTeacherAulas = [
+        ...horario.aulas.filter(a => a.professor_id === professorId),
+        ...(horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId) || [])
+    ];
+
+    // Agrupar turnos envolvidos
+    const turnosEnvolvidos = useMemo(() => {
+        const turnosMap = new Map<string, Turno>();
+        
+        // Aulas do horário que estamos visualizando
+        horario.aulas.filter(a => a.professor_id === professorId).forEach(a => {
+            if (a.tipo === 'presencial') {
+                turnosMap.set(horario.turno.id, horario.turno);
+            } else if (a.tipo === 'nao_presencial' && horario.turno_oposto) {
+                turnosMap.set(horario.turno_oposto.id, horario.turno_oposto);
+            }
+        });
+
+        // Aulas de outros horários publicados
+        horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId).forEach(a => {
+            const turnoAula = a.horario?.turno;
+            if (turnoAula) {
+                turnosMap.set(turnoAula.id, turnoAula);
+            }
+        });
+
+        return Array.from(turnosMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
+    }, [professorId]);
+
     return (
         <div className="space-y-8 pt-4">
             <div className="flex items-center gap-3 border-b pb-4">
@@ -238,23 +255,37 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     <h2 className="text-xl font-bold tracking-tight">
                         {prof.nome_horario}
                     </h2>
-                    <p className="text-sm text-muted-foreground">Visualizando grade individual do docente.</p>
+                    <p className="text-sm text-muted-foreground">Visualizando grade docente global (atuais + publicados).</p>
                 </div>
             </div>
-            <GradeHoraria 
-                targetId={professorId} 
-                isProfessorView={true}
-                tipo="presencial" 
-                label="Horário Regular" 
-                turnoInfo={horario.turno} 
-            />
-            <GradeHoraria 
-                targetId={professorId} 
-                isProfessorView={true}
-                tipo="nao_presencial" 
-                label="Horário no Contraturno" 
-                turnoInfo={horario.turno_oposto || null} 
-            />
+
+            {turnosEnvolvidos.map(turno => (
+                <div key={turno.id} className="space-y-6">
+                    <GradeHoraria 
+                        targetId={professorId} 
+                        isProfessorView={true}
+                        tipo="presencial" 
+                        label={`Grade: ${turno.nome}`} 
+                        turnoInfo={turno} 
+                        dataset={allTeacherAulas.filter(a => (a.tipo === 'presencial' && (a.horario_id === horario.id ? horario.turno_id === turno.id : a.horario.turno_id === turno.id)))}
+                    />
+                    <GradeHoraria 
+                        targetId={professorId} 
+                        isProfessorView={true}
+                        tipo="nao_presencial" 
+                        label={`Atividades no turno: ${turno.nome}`} 
+                        turnoInfo={turno} 
+                        dataset={allTeacherAulas.filter(a => (a.tipo === 'nao_presencial' && (a.horario_id === horario.id ? horario.turno_oposto?.id === turno.id : false)))}
+                    />
+                </div>
+            ))}
+
+            {turnosEnvolvidos.length === 0 && (
+                <div className="p-12 text-center border-2 border-dashed rounded-xl bg-muted/10">
+                    <AlertCircle className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-muted-foreground">Este professor não possui aulas alocadas.</p>
+                </div>
+            )}
         </div>
     );
   }
