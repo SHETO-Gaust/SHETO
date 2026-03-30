@@ -212,6 +212,7 @@ export function ProfessoresClient({
           professor={selectedProfessor}
           escolaId={escolaId}
           turnosDaEscola={turnosDaEscola}
+          componentesDaEscola={componentesDaEscola}
           onProfessorUpdated={fetchAndUpdateProfessores}
       />
       

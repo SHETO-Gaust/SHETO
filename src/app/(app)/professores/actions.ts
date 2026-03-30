@@ -88,6 +88,7 @@ const upsertProfessorSchema = z.object({
   turnos_ids: z.array(z.string()).min(1, 'Selecione ao menos um turno.'),
   aulas_disponiveis: z.coerce.number().min(0, 'As aulas disponíveis não podem ser negativas.'),
   aulas_planejamento: z.coerce.number().min(0, 'As aulas de planejamento não podem ser negativas.'),
+  componente_ids: z.array(z.string()).optional(),
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
@@ -98,9 +99,9 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
     return { error: 'Dados inválidos.', errors: validated.error.flatten().fieldErrors };
   }
   
-  const { id, ...dataToUpsert } = validated.data;
+  const { id, componente_ids, ...dataToUpsert } = validated.data;
   
-  const { data, error } = await supabase
+  const { data: professor, error } = await supabase
     .from('professores')
     .upsert(id ? { id, ...dataToUpsert } : dataToUpsert, { onConflict: 'id' })
     .select()
@@ -113,8 +114,26 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
     return { error: 'Não foi possível salvar o professor.' };
   }
 
+  // Sincroniza componentes se fornecidos
+  if (componente_ids !== undefined) {
+    // Remove antigos
+    await supabase
+        .from('professores_componentes')
+        .delete()
+        .eq('professor_id', professor.id);
+    
+    // Insere novos
+    if (componente_ids.length > 0) {
+        const linksToInsert = componente_ids.map(componente_id => ({
+            professor_id: professor.id,
+            componente_id,
+        }));
+        await supabase.from('professores_componentes').insert(linksToInsert);
+    }
+  }
+
   revalidatePath('/professores');
-  return { data };
+  return { data: professor };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -124,7 +143,7 @@ export async function deleteProfessor(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from('professores').delete().eq('id', id);
 
-  if (error) return { error: 'Não foi possível deletar o professor.' };
+  if (error) return { error: 'Não foi possível deletar the professor.' };
 
   revalidatePath('/professores');
   return { success: true };
