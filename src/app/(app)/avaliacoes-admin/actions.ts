@@ -7,6 +7,7 @@ import type { Turno, Horario, HorarioCompleto } from '@/lib/types';
 import { gerarHorarioAlgoritmico } from '@/lib/timetabling';
 import { getTurmas } from '../turmas/actions';
 import { getProfessores } from '../professores/actions';
+import { getTurnos } from '../turno/actions';
 
 // Get only active turns for the generator
 export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[], error?: string }> {
@@ -53,10 +54,12 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, n
     const [
         { data: allTurmas },
         { data: allProfessores },
+        { data: allTurnos },
         { data: turno }
     ] = await Promise.all([
         getTurmas(escolaId),
         getProfessores(escolaId),
+        getTurnos(escolaId),
         supabase.from('turnos').select('*').eq('id', turnoId).single()
     ]);
 
@@ -87,7 +90,8 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, n
         const result = gerarHorarioAlgoritmico(
             turno as any,
             turmasDoTurno as any[],
-            allProfessores as any[]
+            allProfessores as any[],
+            allTurnos || []
         );
         
         if (result.aulas.length > 0) {
@@ -147,6 +151,15 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
 
     if (hError || !horario) return { error: 'Horário não encontrado.' };
 
+    // Buscar Turno Oposto para exibir horários do contraturno
+    const { data: allTurnos } = await supabase.from('turnos').select('*').eq('escola_id', horario.escola_id);
+    const nomeTurno = (horario.turno as any).nome.toLowerCase();
+    const turnoOposto = allTurnos?.find(t => {
+        if (nomeTurno.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
+        if (nomeTurno.includes('vespertino')) return t.nome.toLowerCase().includes('matutino');
+        return false;
+    }) || allTurnos?.find(t => t.id !== (horario.turno as any).id);
+
     const { data: aulas, error: aError } = await supabase
         .from('horario_aulas')
         .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario), turma:turmas(id, nome)')
@@ -159,6 +172,7 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
         data: {
             ...horario,
             turno: horario.turno as any,
+            turno_oposto: turnoOposto as any,
             aulas: (aulas || []) as any[],
         }
     };

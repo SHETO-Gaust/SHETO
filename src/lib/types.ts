@@ -1,3 +1,4 @@
+
 export type ProfileRole = 'admin' | 'user';
 
 export type Escola = {
@@ -171,6 +172,7 @@ export type HorarioAulaGerada = {
 
 export type HorarioCompleto = Horario & {
     turno: Turno;
+    turno_oposto?: Turno;
     aulas: (HorarioAulaGerada & {
         componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
         professor: Pick<Professor, 'id' | 'nome_horario'> | null;
