@@ -51,8 +51,10 @@ export function CargaHorariaProfessoresSheet({ isOpen, setIsOpen, professores }:
                     <div className="flex flex-wrap gap-1.5">
                         {prof.alocacoes && prof.alocacoes.length > 0 ? (
                             prof.alocacoes.map((aloc, i) => (
-                                <Badge key={`${prof.id}-${aloc.serie_nome}-${i}`} variant="secondary" className="text-[10px] py-0 px-2 h-6">
-                                    {aloc.serie_nome} '{aloc.turma_nome}' - {aloc.componente_nome}: {aloc.aulas} {aloc.aulas > 1 ? 'aulas' : 'aula'}
+                                <Badge key={`${prof.id}-${aloc.serie_nome}-${i}`} variant="secondary" className="text-[10px] py-1 px-2 h-auto flex flex-col items-start gap-0.5 max-w-[250px]">
+                                    <span className="font-bold text-foreground">Turma: {aloc.turma_nome}</span>
+                                    <span className="opacity-80">{aloc.aulas} {aloc.aulas > 1 ? 'aulas' : 'aula'} • {aloc.componente_nome}</span>
+                                    <span className="text-[9px] italic opacity-60">({aloc.serie_nome})</span>
                                 </Badge>
                             ))
                         ) : (

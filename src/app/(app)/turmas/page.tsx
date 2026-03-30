@@ -61,13 +61,13 @@ export default async function TurmasPage() {
             const currentTotal = assignedClassesMap.get(profId) || 0;
             assignedClassesMap.set(profId, currentTotal + aulas);
 
-            // Atualiza mapa de alocações
+            // Atualiza mapa de alocações - Capturando o nome real da disciplina
             const currentAlocacoes = professorAlocacoesMap.get(profId) || [];
             currentAlocacoes.push({
                 serie_nome: serie.nome,
                 turma_nome: turma.nome,
                 aulas: aulas,
-                componente_nome: (componenteDaSerie as any).componente?.sigla || (componenteDaSerie as any).componente?.nome || 'Disc.'
+                componente_nome: (componenteDaSerie as any).componente?.nome || (componenteDaSerie as any).componente?.sigla || 'Disciplina'
             });
             professorAlocacoesMap.set(profId, currentAlocacoes);
         }
