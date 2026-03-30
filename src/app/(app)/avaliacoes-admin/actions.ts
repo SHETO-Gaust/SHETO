@@ -1,4 +1,3 @@
-
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -71,7 +70,19 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, n
 
     if (!turno) return { error: 'Turno não encontrado.' };
 
-    // 2. Criar o registro do horário
+    // 2. Executar o Algoritmo de Geração Lógica (Timetabling)
+    const result = gerarHorarioAlgoritmico(
+        turno as any,
+        turmasDoTurno as any[],
+        allProfessores as any[],
+        allTurnos || []
+    );
+
+    if (!result.success) {
+        return { error: result.error || 'Erro lógico ao organizar as aulas.' };
+    }
+
+    // 3. Criar o registro do horário apenas se o algoritmo teve sucesso
     const { data: novoHorario, error: hError } = await supabase
         .from('horarios')
         .insert({
@@ -83,17 +94,9 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, n
         .select()
         .single();
 
-    if (hError) return { error: 'Falha ao criar rascunho de horário.' };
+    if (hError) return { error: 'Falha ao criar registro de horário.' };
 
-    // 3. Executar o Algoritmo de Geração Lógica (Timetabling)
     try {
-        const result = gerarHorarioAlgoritmico(
-            turno as any,
-            turmasDoTurno as any[],
-            allProfessores as any[],
-            allTurnos || []
-        );
-        
         if (result.aulas.length > 0) {
             const aulasToInsert = result.aulas.map(aula => ({
                 horario_id: novoHorario.id,
@@ -105,22 +108,20 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, n
                 tipo: aula.tipo
             }));
 
-            // Inserção em lote para performance e atomicidade
             const { error: insertError } = await supabase
                 .from('horario_aulas')
                 .insert(aulasToInsert);
 
             if (insertError) {
                 console.error("❌ Erro ao salvar aulas no banco:", insertError);
-                // Se der erro nas aulas, removemos o registro do horário para não deixar sujeira
                 await supabase.from('horarios').delete().eq('id', novoHorario.id);
                 return { error: `Erro ao salvar a grade: ${insertError.message}` };
             }
         }
     } catch (err: any) {
-        console.error("❌ Erro no algoritmo de timetabling:", err);
+        console.error("❌ Erro no salvamento das aulas:", err);
         await supabase.from('horarios').delete().eq('id', novoHorario.id);
-        return { error: 'Ocorreu um erro lógico ao organizar as aulas. Verifique as restrições dos professores.' };
+        return { error: 'Ocorreu um erro inesperado ao salvar os horários.' };
     }
 
     revalidatePath('/avaliacoes-admin');

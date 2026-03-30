@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useTransition } from 'react';
@@ -6,7 +5,7 @@ import type { Turno, Horario } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Zap, Loader2, List, FileText, Trash2 } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario } from './actions';
 import { format } from 'date-fns';
@@ -33,6 +32,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type GeradorHorarioClientProps = {
   escolaId: string;
@@ -45,6 +45,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   const [isLoadingHorarios, setIsLoadingHorarios] = useState(false);
   const [isGenerating, startGenerating] = useTransition();
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
   
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const [nomeHorarioInput, setNomeHorarioInput] = useState('');
@@ -59,6 +60,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     }
     setSelectedTurnoId(turnoId);
     setIsLoadingHorarios(true);
+    setGenError(null);
     const { data, error } = await getHorariosSalvos(turnoId);
     if (error) {
       toast({ title: 'Erro ao buscar horários', description: error, variant: 'destructive' });
@@ -74,7 +76,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         return;
     }
     
-    // Sugere um nome baseado na versão atual
+    setGenError(null);
     const nextVersion = horarios.length + 1;
     setNomeHorarioInput(`Horário V${nextVersion}`);
     setIsNameDialogOpen(true);
@@ -90,8 +92,10 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     startGenerating(async () => {
         const result = await iniciarGeracaoHorario(escolaId, selectedTurnoId, nomeHorarioInput);
         if (result.error) {
-            toast({ title: 'Erro ao iniciar geração', description: result.error, variant: 'destructive' });
+            setGenError(result.error);
+            toast({ title: 'Falha na Geração', description: 'O horário não pôde ser gerado completamente.', variant: 'destructive' });
         } else {
+            setGenError(null);
             toast({ title: 'Geração Concluída!', description: 'A grade foi organizada e salva com sucesso.'});
             handleTurnoChange(selectedTurnoId);
         }
@@ -147,7 +151,17 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
               Verifique a consistência dos dados e processe uma nova grade horária para o turno <span className="font-semibold text-foreground">{selectedTurno.nome}</span>.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {genError && (
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Erro de Consistência</AlertTitle>
+                    <AlertDescription>
+                        {genError}
+                    </AlertDescription>
+                </Alert>
+            )}
+
             <div className="flex flex-col md:flex-row gap-4">
               <Link href="/relatorios" className="flex-1">
                 <Button size="lg" variant="outline" className="w-full">
@@ -167,7 +181,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
           </CardContent>
           <CardFooter>
              <p className="text-xs text-muted-foreground">
-                Ao clicar em "Gerar Grade", o sistema organizará as aulas respeitando as restrições de horários dos professores e modelos de série.
+                O sistema só permitirá o salvamento se for possível alocar todas as aulas previstas respeitando as restrições.
              </p>
           </CardFooter>
         </Card>

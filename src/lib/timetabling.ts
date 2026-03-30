@@ -1,4 +1,3 @@
-
 import type { Turno, TurmaComDados, ProfessorComDados, HorarioAulaGerada } from './types';
 
 /**
@@ -10,7 +9,7 @@ export function gerarHorarioAlgoritmico(
   turmas: TurmaComDados[],
   professores: ProfessorComDados[],
   todosTurnos: Turno[]
-): { aulas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[] } {
+): { success: boolean; aulas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[]; error?: string } {
   
   const aulasGeradas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[] = [];
   const diasAtivos = turno.dias_semana;
@@ -22,7 +21,7 @@ export function gerarHorarioAlgoritmico(
     if (nomeTurnoLower.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
     if (nomeTurnoLower.includes('vespertino')) return t.nome.toLowerCase().includes('matutino');
     return false;
-  }) || todosTurnos.find(t => t.id !== turno.id); // Fallback para qualquer outro se não achar pelo nome
+  }) || todosTurnos.find(t => t.id !== turno.id);
 
   const numAulasOposto = turnoOposto?.aulas_por_dia || 5;
 
@@ -30,8 +29,8 @@ export function gerarHorarioAlgoritmico(
   const ocupacaoProfessores = new Set<string>();
 
   // 3. Preparar lista de aulas pendentes por turma
-  const pendenciasPresenciais: { turma_id: string, componente_id: string, professor_id: string | null }[] = [];
-  const pendenciasNP: { turma_id: string, componente_id: string, professor_id: string | null }[] = [];
+  const pendenciasPresenciais: { turma_id: string, turma_nome: string, componente_id: string, componente_nome: string, professor_id: string | null }[] = [];
+  const pendenciasNP: { turma_id: string, turma_nome: string, componente_id: string, componente_nome: string, professor_id: string | null }[] = [];
 
   for (const turma of turmas) {
     for (const comp of turma.serie.componentes) {
@@ -41,7 +40,9 @@ export function gerarHorarioAlgoritmico(
       for (let i = 0; i < comp.aulas_presenciais; i++) {
         pendenciasPresenciais.push({
           turma_id: turma.id,
+          turma_nome: turma.nome,
           componente_id: comp.componente_id,
+          componente_nome: comp.componente.nome,
           professor_id: profAlocado?.professor_id || null,
         });
       }
@@ -50,7 +51,9 @@ export function gerarHorarioAlgoritmico(
       for (let i = 0; i < comp.aulas_nao_presenciais; i++) {
         pendenciasNP.push({
           turma_id: turma.id,
+          turma_nome: turma.nome,
           componente_id: comp.componente_id,
+          componente_nome: comp.componente.nome,
           professor_id: profAlocado?.professor_id || null,
         });
       }
@@ -111,17 +114,13 @@ export function gerarHorarioAlgoritmico(
   }
 
   // 5. Alocar Aulas Não Presenciais (No Turno Oposto)
-  // Usamos os mesmos dias ativos, mas os slots do turno oposto
   for (const dia of diasAtivos) {
     for (let aulaIdx = 0; aulaIdx < numAulasOposto; aulaIdx++) {
       for (const turma of turmas) {
         const indexPendente = npOrdenadas.findIndex(p => {
           if (p.turma_id !== turma.id) return false;
-          // No contraturno, a restrição da série não se aplica da mesma forma, 
-          // mas o professor não pode estar ocupado no turno oposto se ele também der aula lá
           if (p.professor_id) {
             if (ocupacaoProfessores.has(`${dia}-oposto-${aulaIdx}-${p.professor_id}`)) return false;
-            // Verifica se o professor tem restrição no turno oposto
             if (turnoOposto) {
                 const prof = professores.find(pr => pr.id === p.professor_id);
                 if (prof?.restricoes?.[turnoOposto.id]?.[dia]?.[aulaIdx] === 'indisponivel') return false;
@@ -148,5 +147,18 @@ export function gerarHorarioAlgoritmico(
     }
   }
 
-  return { aulas: aulasGeradas };
+  // 6. Verificação Final: Carga Horária Completa?
+  if (presenciaisOrdenadas.length > 0 || npOrdenadas.length > 0) {
+    const pendenciasRestantes = [...presenciaisOrdenadas, ...npOrdenadas];
+    const turmasAfetadas = Array.from(new Set(pendenciasRestantes.map(p => p.turma_nome)));
+    const componentesAfetados = Array.from(new Set(pendenciasRestantes.map(p => p.componente_nome)));
+    
+    return {
+      success: false,
+      aulas: [],
+      error: `Não foi possível alocar toda a carga horária. Verifique as restrições dos professores ou choque de horários. Turmas com pendências: ${turmasAfetadas.join(', ')}. Disciplinas afetadas: ${componentesAfetados.join(', ')}.`
+    };
+  }
+
+  return { success: true, aulas: aulasGeradas };
 }
