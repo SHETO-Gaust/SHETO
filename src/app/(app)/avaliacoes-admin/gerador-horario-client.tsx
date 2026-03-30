@@ -5,7 +5,7 @@ import type { Turno, Horario } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, Users2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario } from './actions';
 import { format } from 'date-fns';
@@ -151,25 +151,63 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
               Verifique a consistência dos dados e processe uma nova grade horária para o turno <span className="font-semibold text-foreground">{selectedTurno.nome}</span>.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             {genError && (
-                <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Erro de Consistência</AlertTitle>
-                    <AlertDescription>
-                        {genError}
+                <Alert variant="destructive" className="bg-destructive/5 border-destructive/20">
+                    <AlertCircle className="h-5 w-5" />
+                    <AlertTitle className="text-lg font-bold">Impossível concluir a grade horária</AlertTitle>
+                    <AlertDescription className="mt-4 space-y-4">
+                        <p className="font-medium text-foreground">{genError}</p>
+                        
+                        <div className="rounded-lg bg-background/50 p-4 border border-destructive/10 space-y-3">
+                            <p className="text-xs uppercase font-bold tracking-wider text-muted-foreground">Como corrigir este problema?</p>
+                            <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                <li className="flex items-start gap-2">
+                                    <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Users className="h-3 w-3 text-primary"/></div>
+                                    <div>
+                                        <p className="font-semibold">Restrições de Professores</p>
+                                        <p className="text-xs text-muted-foreground">Verifique se muitos professores estão de folga no mesmo dia.</p>
+                                        <Link href="/professores" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Ajustar Professores <ArrowRight className="h-3 w-3 ml-1"/></Link>
+                                    </div>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Users2 className="h-3 w-3 text-primary"/></div>
+                                    <div>
+                                        <p className="font-semibold">Falta de Professores</p>
+                                        <p className="text-xs text-muted-foreground">Confira se todas as disciplinas das turmas têm professores alocados.</p>
+                                        <Link href="/turmas" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Verificar Alocações <ArrowRight className="h-3 w-3 ml-1"/></Link>
+                                    </div>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Layers className="h-3 w-3 text-primary"/></div>
+                                    <div>
+                                        <p className="font-semibold">Carga Horária das Séries</p>
+                                        <p className="text-xs text-muted-foreground">O total de aulas presenciais deve preencher exatamente o turno.</p>
+                                        <Link href="/serie" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Revisar Carga Horária <ArrowRight className="h-3 w-3 ml-1"/></Link>
+                                    </div>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><List className="h-3 w-3 text-primary"/></div>
+                                    <div>
+                                        <p className="font-semibold">Diagnóstico Completo</p>
+                                        <p className="text-xs text-muted-foreground">Use o relatório de situação para encontrar erros de cadastro.</p>
+                                        <Link href="/relatorios" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Abrir Checklist <ArrowRight className="h-3 w-3 ml-1"/></Link>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
                     </AlertDescription>
                 </Alert>
             )}
 
             <div className="flex flex-col md:flex-row gap-4">
               <Link href="/relatorios" className="flex-1">
-                <Button size="lg" variant="outline" className="w-full">
+                <Button size="lg" variant="outline" className="w-full h-12">
                     <List className="mr-2 h-4 w-4" />
                     Verificar Dados (Checklist)
                 </Button>
               </Link>
-              <Button size="lg" onClick={handleGerarHorarioClick} disabled={isGenerating} className="flex-1">
+              <Button size="lg" onClick={handleGerarHorarioClick} disabled={isGenerating} className="flex-1 h-12 shadow-md">
                 {isGenerating ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -179,8 +217,9 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
               </Button>
             </div>
           </CardContent>
-          <CardFooter>
-             <p className="text-xs text-muted-foreground">
+          <CardFooter className="bg-muted/30 py-3">
+             <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Settings2 className="h-3.5 w-3.5" />
                 O sistema só permitirá o salvamento se for possível alocar todas as aulas previstas respeitando as restrições.
              </p>
           </CardFooter>
@@ -201,7 +240,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 ) : horarios.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {horarios.map(h => (
-                            <Card key={h.id} className="bg-muted/50 overflow-hidden border-none shadow-sm">
+                            <Card key={h.id} className="bg-muted/50 overflow-hidden border-none shadow-sm group">
                                 <CardHeader className="pb-2">
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="text-lg">{h.nome}</CardTitle>
@@ -217,13 +256,13 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                     <Link href={`/avaliacoes-admin/${h.id}`} className="flex-1">
                                         <Button variant="secondary" className="w-full" size="sm">
                                             <FileText className="mr-2 h-4 w-4" />
-                                            Visualizar e Editar
+                                            Visualizar Grade
                                         </Button>
                                     </Link>
                                     
                                     <AlertDialog>
                                         <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={isDeleting === h.id}>
+                                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity" disabled={isDeleting === h.id}>
                                                 {isDeleting === h.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                             </Button>
                                         </AlertDialogTrigger>

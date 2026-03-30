@@ -156,7 +156,7 @@ export function gerarHorarioAlgoritmico(
     return {
       success: false,
       aulas: [],
-      error: `Não foi possível alocar toda a carga horária. Verifique as restrições dos professores ou choque de horários. Turmas com pendências: ${turmasAfetadas.join(', ')}. Disciplinas afetadas: ${componentesAfetados.join(', ')}.`
+      error: `Restaram ${pendenciasRestantes.length} aula(s) sem alocação possível devido a conflitos de professores ou excesso de restrições. Turmas com pendências: ${turmasAfetadas.join(', ')}. Disciplinas afetadas: ${componentesAfetados.join(', ')}.`
     };
   }
 
