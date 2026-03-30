@@ -1,3 +1,4 @@
+
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
@@ -43,7 +44,7 @@ export default async function TurmasPage() {
   
   // Calcula a carga horária atribuída e as alocações para cada professor
   const assignedClassesMap = new Map<string, number>();
-  const professorAlocacoesMap = new Map<string, { turma_nome: string, serie_nome: string; aulas: number }[]>();
+  const professorAlocacoesMap = new Map<string, { turma_nome: string, serie_nome: string; aulas: number; componente_nome: string }[]>();
 
   if (turmas && dependencies.series) {
     for (const turma of turmas) {
@@ -65,7 +66,8 @@ export default async function TurmasPage() {
             currentAlocacoes.push({
                 serie_nome: serie.nome,
                 turma_nome: turma.nome,
-                aulas: aulas
+                aulas: aulas,
+                componente_nome: (componenteDaSerie as any).componente?.sigla || (componenteDaSerie as any).componente?.nome || 'Disc.'
             });
             professorAlocacoesMap.set(profId, currentAlocacoes);
         }

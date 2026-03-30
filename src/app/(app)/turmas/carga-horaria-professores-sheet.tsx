@@ -48,11 +48,11 @@ export function CargaHorariaProfessoresSheet({ isOpen, setIsOpen, professores }:
                 </div>
                 <Progress value={progresso} />
                 <div className="flex justify-between items-start pt-1">
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                         {prof.alocacoes && prof.alocacoes.length > 0 ? (
                             prof.alocacoes.map((aloc, i) => (
-                                <Badge key={`${prof.id}-${aloc.serie_nome}-${i}`} variant="secondary">
-                                    {aloc.serie_nome} '{aloc.turma_nome}': {aloc.aulas} {aloc.aulas > 1 ? 'aulas' : 'aula'}
+                                <Badge key={`${prof.id}-${aloc.serie_nome}-${i}`} variant="secondary" className="text-[10px] py-0 px-2 h-6">
+                                    {aloc.serie_nome} '{aloc.turma_nome}' - {aloc.componente_nome}: {aloc.aulas} {aloc.aulas > 1 ? 'aulas' : 'aula'}
                                 </Badge>
                             ))
                         ) : (

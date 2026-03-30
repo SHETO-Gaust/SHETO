@@ -72,7 +72,7 @@ export type ProfessorComDados = Professor & {
     componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
     turnos: Turno[];
     aulas_atribuidas?: number;
-    alocacoes?: { turma_nome: string; serie_nome: string; aulas: number }[];
+    alocacoes?: { turma_nome: string; serie_nome: string; aulas: number; componente_nome: string }[];
 };
 
 export type Serie = {
