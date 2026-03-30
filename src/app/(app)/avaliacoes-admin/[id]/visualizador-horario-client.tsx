@@ -2,12 +2,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import type { HorarioCompleto, HorarioAulaGerada, Turno } from '@/lib/types';
+import type { HorarioCompleto, Turno } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type Props = {
@@ -31,14 +31,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         map.set(aula.turma_id, aula.turma);
       }
     });
-    // Se a grade estiver vazia mas tivermos turmas configuradas, usá-las
-    if (map.size === 0 && horario.turmas_config) {
-        horario.turmas_config.forEach(tc => {
-            const matchedTurma = horario.turmas_config.find(t => t.id === tc.id);
-            // Aqui precisaríamos do nome da turma, que infelizmente não está no config simplificado.
-            // Para garantir que a lista apareça mesmo vazia, vamos manter a lógica atual baseada nas aulas salvas.
-        });
-    }
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [horario.aulas]);
 
@@ -55,19 +47,33 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     if (!config) return [];
 
     const aulasDestaTurma = horario.aulas.filter(a => a.turma_id === turmaId);
-    const pendencias: { componente: string, missing: number, tipo: string }[] = [];
+    const pendencias: { componente: string, missing: number, tipo: string, professor: string }[] = [];
 
     config.serie.componentes.forEach((sc: any) => {
+        // Encontrar nome do professor alocado
+        const profInfo = config.professores?.find((p: any) => p.componente_id === sc.componente.id);
+        const professorNome = profInfo?.professor?.nome_horario || 'SEM PROFESSOR';
+
         const alocadasPresencial = aulasDestaTurma.filter(a => a.componente_id === sc.componente.id && a.tipo === 'presencial').length;
         const faltamPresencial = sc.aulas_presenciais - alocadasPresencial;
         if (faltamPresencial > 0) {
-            pendencias.push({ componente: sc.componente.sigla || sc.componente.nome, missing: faltamPresencial, tipo: 'Presencial' });
+            pendencias.push({ 
+                componente: sc.componente.sigla || sc.componente.nome, 
+                missing: faltamPresencial, 
+                tipo: 'Presencial',
+                professor: professorNome
+            });
         }
 
         const alocadasNP = aulasDestaTurma.filter(a => a.componente_id === sc.componente.id && a.tipo === 'nao_presencial').length;
         const faltamNP = sc.aulas_nao_presenciais - alocadasNP;
         if (faltamNP > 0) {
-            pendencias.push({ componente: sc.componente.sigla || sc.componente.nome, missing: faltamNP, tipo: 'NP (Contraturno)' });
+            pendencias.push({ 
+                componente: sc.componente.sigla || sc.componente.nome, 
+                missing: faltamNP, 
+                tipo: 'NP (Contraturno)',
+                professor: professorNome
+            });
         }
     });
 
@@ -83,10 +89,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
             <AlertDescription className="text-xs mt-2">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3">
                     {pendencias.map((p, i) => (
-                        <div key={i} className="bg-destructive/10 text-destructive px-2 py-1 rounded font-medium border border-destructive/20">
-                            <span className="font-bold">{p.componente}</span>: {p.missing} aula(s) {p.tipo}
+                        <div key={i} className="bg-destructive/10 text-destructive px-3 py-2 rounded font-medium border border-destructive/20 flex flex-col items-center text-center min-w-[120px] shadow-sm">
+                            <span className="font-bold text-[11px] leading-tight">{p.componente}</span>
+                            <span className="text-[10px] opacity-90">{p.missing} aula(s) {p.tipo}</span>
+                            <div className="mt-1.5 pt-1 border-t border-destructive/10 w-full text-[9px] uppercase font-bold text-destructive/70">
+                                {p.professor}
+                            </div>
                         </div>
                     ))}
                 </div>

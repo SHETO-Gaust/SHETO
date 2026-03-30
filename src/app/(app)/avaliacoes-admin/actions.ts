@@ -171,7 +171,7 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
 
     if (aError) return { error: 'Erro ao buscar as aulas do horário.' };
 
-    // Buscar Configurações das Turmas envolvidas (Carga Horária Almejada)
+    // Buscar Configurações das Turmas envolvidas (Carga Horária Almejada e Professores Alocados)
     const { data: turmasConfig } = await supabase
         .from('turmas')
         .select(`
@@ -183,6 +183,10 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
                     aulas_nao_presenciais, 
                     componente:componentes_curriculares(id, nome, sigla)
                 )
+            ),
+            professores:turmas_professores(
+                componente_id,
+                professor:professores(nome_horario)
             )
         `)
         .eq('escola_id', horario.escola_id);

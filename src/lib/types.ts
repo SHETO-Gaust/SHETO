@@ -181,6 +181,12 @@ export type TurmaConfigHorario = {
             componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
         }[];
     };
+    professores: {
+        componente_id: string;
+        professor: {
+            nome_horario: string;
+        } | null;
+    }[];
 };
 
 export type HorarioCompleto = Horario & {
