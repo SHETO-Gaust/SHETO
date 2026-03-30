@@ -170,6 +170,19 @@ export type HorarioAulaGerada = {
   tipo: 'presencial' | 'nao_presencial';
 };
 
+export type TurmaConfigHorario = {
+    id: string;
+    serie: {
+        id: string;
+        componentes: {
+            componente_id: string;
+            aulas_presenciais: number;
+            aulas_nao_presenciais: number;
+            componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
+        }[];
+    };
+};
+
 export type HorarioCompleto = Horario & {
     turno: Turno;
     turno_oposto?: Turno;
@@ -178,4 +191,5 @@ export type HorarioCompleto = Horario & {
         professor: Pick<Professor, 'id' | 'nome_horario'> | null;
         turma: Pick<Turma, 'id' | 'nome'>;
     })[];
+    turmas_config: TurmaConfigHorario[];
 };

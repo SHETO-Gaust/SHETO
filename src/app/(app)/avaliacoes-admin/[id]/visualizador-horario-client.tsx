@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -6,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type Props = {
   horario: HorarioCompleto;
@@ -29,6 +31,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         map.set(aula.turma_id, aula.turma);
       }
     });
+    // Se a grade estiver vazia mas tivermos turmas configuradas, usá-las
+    if (map.size === 0 && horario.turmas_config) {
+        horario.turmas_config.forEach(tc => {
+            const matchedTurma = horario.turmas_config.find(t => t.id === tc.id);
+            // Aqui precisaríamos do nome da turma, que infelizmente não está no config simplificado.
+            // Para garantir que a lista apareça mesmo vazia, vamos manter a lógica atual baseada nas aulas salvas.
+        });
+    }
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [horario.aulas]);
 
@@ -38,6 +48,52 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     DIAS_SEMANA_MAP.filter(d => horario.turno.dias_semana.includes(d.id)),
     [horario.turno.dias_semana]
   );
+
+  // Lógica para calcular o que falta para cada turma
+  const getPendencias = (turmaId: string) => {
+    const config = horario.turmas_config?.find(c => c.id === turmaId);
+    if (!config) return [];
+
+    const aulasDestaTurma = horario.aulas.filter(a => a.turma_id === turmaId);
+    const pendencias: { componente: string, missing: number, tipo: string }[] = [];
+
+    config.serie.componentes.forEach((sc: any) => {
+        const alocadasPresencial = aulasDestaTurma.filter(a => a.componente_id === sc.componente.id && a.tipo === 'presencial').length;
+        const faltamPresencial = sc.aulas_presenciais - alocadasPresencial;
+        if (faltamPresencial > 0) {
+            pendencias.push({ componente: sc.componente.sigla || sc.componente.nome, missing: faltamPresencial, tipo: 'Presencial' });
+        }
+
+        const alocadasNP = aulasDestaTurma.filter(a => a.componente_id === sc.componente.id && a.tipo === 'nao_presencial').length;
+        const faltamNP = sc.aulas_nao_presenciais - alocadasNP;
+        if (faltamNP > 0) {
+            pendencias.push({ componente: sc.componente.sigla || sc.componente.nome, missing: faltamNP, tipo: 'NP (Contraturno)' });
+        }
+    });
+
+    return pendencias;
+  };
+
+  const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
+    const pendencias = getPendencias(turmaId);
+    if (pendencias.length === 0) return null;
+
+    return (
+        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
+            <AlertDescription className="text-xs mt-2">
+                <div className="flex flex-wrap gap-2">
+                    {pendencias.map((p, i) => (
+                        <div key={i} className="bg-destructive/10 text-destructive px-2 py-1 rounded font-medium border border-destructive/20">
+                            <span className="font-bold">{p.componente}</span>: {p.missing} aula(s) {p.tipo}
+                        </div>
+                    ))}
+                </div>
+            </AlertDescription>
+        </Alert>
+    );
+  };
 
   const GradeHoraria = ({ turmaId, tipo, label, turnoInfo }: { turmaId: string, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null }) => {
     if (!turnoInfo) return null;
@@ -51,17 +107,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         );
     };
 
-    // Verifica se há alguma aula deste tipo para esta turma antes de renderizar
     const hasAulas = horario.aulas.some(a => a.turma_id === turmaId && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial') return null;
 
-    // Lógica para detectar se um slot vazio é uma inconsistência
     const isInconsistent = (dia: string, index: number) => {
         if (tipo !== 'presencial') return false;
-        
-        // Slot proibido pela série não é inconsistência, é regra.
-        // Precisamos dos dados da série para isso, mas como não temos aqui,
-        // vamos considerar inconsistente se estiver vazio num dia ativo do turno.
         const aula = getAulaNoSlot(dia, index);
         return !aula;
     };
@@ -99,21 +149,21 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             const hole = isInconsistent(dia.id, aulaIndex);
 
                             return (
-                            <td key={dia.id} className={cn("p-2 text-center border-r last:border-r-0", hole && "bg-destructive/10")}>
+                            <td key={dia.id} className={cn("p-2 text-center border-r last:border-r-0", hole && "bg-destructive/5")}>
                                 {aula ? (
                                 <div className="flex flex-col items-center justify-center gap-1">
                                     <div className={cn(
-                                        "font-bold text-xs leading-tight uppercase px-2 py-1 rounded w-full line-clamp-2",
-                                        tipo === 'presencial' ? "bg-primary/10 text-primary" : "bg-orange-100 text-orange-700"
+                                        "font-bold text-xs leading-tight uppercase px-2 py-1 rounded w-full line-clamp-2 shadow-sm",
+                                        tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20" : "bg-orange-100 text-orange-700 border border-orange-200"
                                     )}>
-                                    {aula.componente.sigla}
+                                    {aula.componente.sigla || aula.componente.nome}
                                     </div>
                                     <div className="text-[10px] text-muted-foreground font-medium truncate w-full" title={aula.professor?.nome_horario}>
                                     {aula.professor?.nome_horario || 'SEM PROF.'}
                                     </div>
                                 </div>
                                 ) : hole ? (
-                                    <div className="flex flex-col items-center justify-center gap-1 text-destructive animate-pulse">
+                                    <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse">
                                         <AlertCircle className="h-4 w-4" />
                                         <span className="text-[9px] font-bold uppercase">Vago</span>
                                     </div>
@@ -168,6 +218,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         <CardContent>
           {viewMode === 'single' ? (
             <div className="space-y-8">
+                <RenderPendencias turmaId={selectedTurmaId} />
                 <GradeHoraria 
                     turmaId={selectedTurmaId} 
                     tipo="presencial" 
@@ -191,6 +242,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             </div>
                             <h2 className="text-xl font-bold tracking-tight">Turma {turma.nome}</h2>
                         </div>
+                        
+                        <RenderPendencias turmaId={turma.id} />
+
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                             <GradeHoraria 
                                 turmaId={turma.id} 

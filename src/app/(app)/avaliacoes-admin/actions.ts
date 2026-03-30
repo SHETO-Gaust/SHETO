@@ -1,8 +1,9 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import type { Turno, Horario, HorarioCompleto } from '@/lib/types';
+import type { Turno, Horario, HorarioCompleto, TurmaConfigHorario } from '@/lib/types';
 import { gerarHorarioAlgoritmico } from '@/lib/timetabling';
 import { getTurmas } from '../turmas/actions';
 import { getProfessores } from '../professores/actions';
@@ -170,12 +171,29 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
 
     if (aError) return { error: 'Erro ao buscar as aulas do horário.' };
 
+    // Buscar Configurações das Turmas envolvidas (Carga Horária Almejada)
+    const { data: turmasConfig } = await supabase
+        .from('turmas')
+        .select(`
+            id, 
+            serie:series(
+                id, 
+                componentes:series_componentes(
+                    aulas_presenciais, 
+                    aulas_nao_presenciais, 
+                    componente:componentes_curriculares(id, nome, sigla)
+                )
+            )
+        `)
+        .eq('escola_id', horario.escola_id);
+
     return { 
         data: {
             ...horario,
             turno: horario.turno as any,
             turno_oposto: turnoOposto as any,
             aulas: (aulas || []) as any[],
+            turmas_config: (turmasConfig || []) as any[]
         }
     };
 }
