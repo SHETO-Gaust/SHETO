@@ -1,9 +1,12 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import type { Turno, Horario, HorarioCompleto } from '@/lib/types';
-import { gerarHorarioIA } from '@/ai/flows/gerar-horario-flow';
+import type { Turno, Horario, HorarioCompleto, TurmaComDados, ProfessorComDados } from '@/lib/types';
+import { gerarHorarioAlgoritmico } from '@/lib/timetabling';
+import { getTurmas } from '../turmas/actions';
+import { getProfessores } from '../professores/actions';
 
 // Get only active turns for the generator
 export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[], error?: string }> {
@@ -42,13 +45,24 @@ export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horar
 export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
     const supabase = await createClient();
 
-    // Check for required data: turmas
-    const { data: turmas } = await supabase.from('turmas').select('id, series!inner(turno_id)').eq('escola_id', escolaId);
-    const turmasDoTurno = turmas?.filter(t => (t.series as any)?.turno_id === turnoId) || [];
+    // 1. Buscar Dados Necessários
+    const [
+        { data: allTurmas },
+        { data: allProfessores },
+        { data: turno }
+    ] = await Promise.all([
+        getTurmas(escolaId),
+        getProfessores(escolaId),
+        supabase.from('turnos').select('*').eq('id', turnoId).single()
+    ]);
+
+    const turmasDoTurno = allTurmas?.filter(t => t.serie.turno_id === turnoId) || [];
 
     if (turmasDoTurno.length === 0) {
         return { error: 'Não há turmas cadastradas para este turno. Verifique a página de Turmas.' };
     }
+
+    if (!turno) return { error: 'Turno não encontrado.' };
     
     const countResult = await supabase
         .from('horarios')
@@ -58,8 +72,8 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
     const newVersion = (countResult.count || 0) + 1;
     const nomeHorario = `Horário V${newVersion}`;
 
-    // 1. Create the record
-    const { data: novoHorario, error } = await supabase
+    // 2. Criar o registro do horário
+    const { data: novoHorario, error: hError } = await supabase
         .from('horarios')
         .insert({
             escola_id: escolaId,
@@ -70,17 +84,18 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
         .select()
         .single();
 
-    if (error) {
-        console.error('Error creating new horario:', error);
-        return { error: 'Não foi possível iniciar a geração do rascunho.' };
-    }
+    if (hError) return { error: 'Falha ao criar rascunho de horário.' };
 
-    // 2. Call AI Flow
+    // 3. Executar o Algoritmo de Geração Lógica
     try {
-        const resultIA = await gerarHorarioIA(escolaId, turnoId);
+        const result = gerarHorarioAlgoritmico(
+            turno as any,
+            turmasDoTurno as any[],
+            allProfessores as any[]
+        );
         
-        if (resultIA && resultIA.aulas.length > 0) {
-            const aulasToInsert = resultIA.aulas.map(aula => ({
+        if (result.aulas.length > 0) {
+            const aulasToInsert = result.aulas.map(aula => ({
                 ...aula,
                 horario_id: novoHorario.id,
             }));
@@ -90,13 +105,13 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
                 .insert(aulasToInsert);
 
             if (insertError) {
-                console.error("Error inserting generated classes:", insertError);
-                return { error: 'O rascunho foi criado, mas houve um erro ao salvar as aulas geradas pela IA.' };
+                console.error("Error inserting classes:", insertError);
+                return { error: 'O rascunho foi criado, mas houve um erro ao salvar as aulas na grade.' };
             }
         }
     } catch (err) {
-        console.error("AI Generation Error:", err);
-        return { error: 'O rascunho foi criado, mas a IA falhou ao organizar as aulas. Você pode tentar novamente ou editar manualmente.' };
+        console.error("Timetabling Engine Error:", err);
+        return { error: 'Ocorreu um erro lógico ao organizar as aulas. Verifique as restrições dos professores.' };
     }
 
     revalidatePath('/avaliacoes-admin');
