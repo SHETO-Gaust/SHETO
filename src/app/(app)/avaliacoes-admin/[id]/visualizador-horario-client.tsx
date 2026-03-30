@@ -1,14 +1,17 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useTransition } from 'react';
 import type { HorarioCompleto, Turno } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { consolidarHorario } from '../actions';
+import { useToast } from '@/hooks/use-toast';
 
 type Props = {
   horario: HorarioCompleto;
@@ -22,8 +25,9 @@ const DIAS_SEMANA_MAP = [
 
 export function VisualizadorHorarioClient({ horario }: Props) {
   const [viewMode, setViewMode] = useState<'single' | 'all'>('single');
+  const [isConsolidating, startConsolidating] = useTransition();
+  const { toast } = useToast();
 
-  // Obter turmas únicas que têm aulas neste horário
   const turmas = useMemo(() => {
     const map = new Map();
     horario.aulas.forEach(aula => {
@@ -41,7 +45,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     [horario.turno.dias_semana]
   );
 
-  // Lógica para calcular o que falta para cada turma
   const getPendencias = (turmaId: string) => {
     const config = horario.turmas_config?.find(c => c.id === turmaId);
     if (!config) return [];
@@ -50,7 +53,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     const pendencias: { componente: string, missing: number, tipo: string, professor: string }[] = [];
 
     config.serie.componentes.forEach((sc: any) => {
-        // Encontrar nome do professor alocado
         const profInfo = config.professores?.find((p: any) => p.componente_id === sc.componente.id);
         const professorNome = profInfo?.professor?.nome_horario || 'SEM PROFESSOR';
 
@@ -78,6 +80,18 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     });
 
     return pendencias;
+  };
+
+  const handleConsolidar = () => {
+      startConsolidating(async () => {
+          const result = await consolidarHorario(horario.id);
+          if (result.error) {
+              toast({ title: 'Erro ao consolidar', description: result.error, variant: 'destructive' });
+          } else {
+              toast({ title: 'Horário Consolidado!', description: 'Esta grade agora é a oficial para este turno.' });
+              window.location.reload();
+          }
+      });
   };
 
   const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
@@ -196,13 +210,35 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6">
+        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6">
           <div className="space-y-1">
-            <CardTitle>Visualização da Grade</CardTitle>
+            <CardTitle className="flex items-center gap-3">
+                {horario.nome}
+                {horario.status === 'publicado' ? (
+                    <Badge className="bg-green-500 hover:bg-green-600 text-white gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Consolidado
+                    </Badge>
+                ) : (
+                    <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50">
+                        Rascunho
+                    </Badge>
+                )}
+            </CardTitle>
             <CardDescription>Visualize o horário gerado para as turmas do turno {horario.turno.nome}.</CardDescription>
           </div>
           
           <div className="flex items-center gap-4">
+            {horario.status !== 'publicado' && (
+                <Button 
+                    onClick={handleConsolidar} 
+                    disabled={isConsolidating} 
+                    className="bg-green-600 hover:bg-green-700 text-white shadow-md"
+                >
+                    {isConsolidating ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
+                    Consolidar Horário
+                </Button>
+            )}
+
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="w-auto">
                 <TabsList>
                     <TabsTrigger value="single">Turma por Turma</TabsTrigger>
@@ -227,7 +263,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         
         <CardContent>
           {viewMode === 'single' ? (
-            <div className="space-y-8">
+            <div className="space-y-8 pt-4">
                 <RenderPendencias turmaId={selectedTurmaId} />
                 <GradeHoraria 
                     turmaId={selectedTurmaId} 
@@ -243,7 +279,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 />
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-12">
+            <div className="grid grid-cols-1 gap-12 pt-4">
                 {turmas.map(turma => (
                     <div key={turma.id} className="space-y-6 pb-12 border-b last:border-0">
                         <div className="flex items-center gap-3">
@@ -277,4 +313,16 @@ export function VisualizadorHorarioClient({ horario }: Props) {
       </Card>
     </div>
   );
+}
+
+function Badge({ children, className, variant = 'default' }: any) {
+    return (
+        <span className={cn(
+            "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border",
+            variant === 'default' ? "bg-primary text-primary-foreground border-transparent" : "border-input",
+            className
+        )}>
+            {children}
+        </span>
+    );
 }

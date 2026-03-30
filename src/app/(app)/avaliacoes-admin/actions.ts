@@ -77,21 +77,31 @@ export async function iniciarGeracaoHorario(
 
     if (!turno) return { error: 'Turno não encontrado.' };
 
-    // 2. Executar o Algoritmo de Geração Lógica (Timetabling)
+    // 2. Buscar Ocupações de Horários Consolidados (Publicados) de OUTROS TURNOS
+    // Isso evita que o professor seja alocado aqui se já estiver ocupado em outro turno ativo
+    const { data: ocupacoesAtivas } = await supabase
+        .from('horario_aulas')
+        .select('professor_id, dia_semana, aula_index, tipo, horario:horarios!inner(id, status, turno_id)')
+        .eq('horarios.escola_id', escolaId)
+        .eq('horarios.status', 'publicado')
+        .neq('horarios.turno_id', turnoId); // Apenas de outros turnos
+
+    // 3. Executar o Algoritmo de Geração Lógica (Timetabling)
     const result = gerarHorarioAlgoritmico(
         turno as any,
         turmasDoTurno as any[],
         allProfessores as any[],
         allTurnos || [],
         configGerminacao,
-        force
+        force,
+        ocupacoesAtivas || [] // Passamos as restrições globais de professores ocupados
     );
 
     if (!result.success && !force) {
         return { error: result.error || 'Erro lógico ao organizar as aulas.' };
     }
 
-    // 3. Criar o registro do horário
+    // 4. Criar o registro do horário
     const { data: novoHorario, error: hError } = await supabase
         .from('horarios')
         .insert({
@@ -135,6 +145,38 @@ export async function iniciarGeracaoHorario(
 
     revalidatePath('/avaliacoes-admin');
     return { data: novoHorario };
+}
+
+export async function consolidarHorario(id: string) {
+    const supabase = await createClient();
+    
+    // 1. Buscar informações do horário atual
+    const { data: current, error: fError } = await supabase
+        .from('horarios')
+        .select('turno_id')
+        .eq('id', id)
+        .single();
+    
+    if (fError || !current) return { error: 'Horário não encontrado.' };
+
+    // 2. Desativar outros horários ativos do mesmo turno
+    await supabase
+        .from('horarios')
+        .update({ status: 'em_rascunho' })
+        .eq('turno_id', current.turno_id)
+        .eq('status', 'publicado');
+
+    // 3. Consolidar este horário
+    const { error: uError } = await supabase
+        .from('horarios')
+        .update({ status: 'publicado' })
+        .eq('id', id);
+
+    if (uError) return { error: 'Erro ao consolidar horário.' };
+
+    revalidatePath('/avaliacoes-admin');
+    revalidatePath(`/avaliacoes-admin/${id}`);
+    return { success: true };
 }
 
 export async function deleteHorario(id: string) {
