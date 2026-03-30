@@ -19,12 +19,12 @@ export function gerarHorarioAlgoritmico(
   const ocupacaoProfessores = new Set<string>();
 
   // 2. Preparar lista de aulas pendentes por turma
-  // Cada item: { turma_id, componente_id, professor_id, tipo }
   const pendencias: { turma_id: string, componente_id: string, professor_id: string | null, tipo: 'presencial' | 'nao_presencial' }[] = [];
 
   for (const turma of turmas) {
+    let npCounter = 0; // Contador para gerar índices únicos para aulas não presenciais
     for (const comp of turma.serie.componentes) {
-      // Adicionar aulas presenciais
+      // Adicionar aulas presenciais para processamento
       for (let i = 0; i < comp.aulas_presenciais; i++) {
         const profAlocado = turma.professores.find(p => p.componente_id === comp.componente_id);
         pendencias.push({
@@ -34,7 +34,8 @@ export function gerarHorarioAlgoritmico(
           tipo: 'presencial'
         });
       }
-      // Adicionar aulas não presenciais (fora da grade)
+      
+      // Adicionar aulas não presenciais (já registradas como fora da grade)
       for (let i = 0; i < comp.aulas_nao_presenciais; i++) {
         const profAlocado = turma.professores.find(p => p.componente_id === comp.componente_id);
         aulasGeradas.push({
@@ -42,7 +43,7 @@ export function gerarHorarioAlgoritmico(
           componente_id: comp.componente_id,
           professor_id: profAlocado?.professor_id || null,
           dia_semana: 'contraturno',
-          aula_index: 0,
+          aula_index: npCounter++, // Índice incremental para evitar violação de chave única
           tipo: 'nao_presencial'
         });
       }
@@ -50,7 +51,7 @@ export function gerarHorarioAlgoritmico(
   }
 
   // Ordenar pendências: priorizar disciplinas com professores que têm mais restrições (heurística)
-  const pendenciasOrdenadas = pendencias.sort((a, b) => {
+  const pendenciasOrdenadas = [...pendencias].sort((a, b) => {
     const profA = professores.find(p => p.id === a.professor_id);
     const profB = professores.find(p => p.id === b.professor_id);
     

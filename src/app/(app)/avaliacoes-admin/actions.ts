@@ -1,8 +1,9 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import type { Turno, Horario, HorarioCompleto, TurmaComDados, ProfessorComDados } from '@/lib/types';
+import type { Turno, Horario, HorarioCompleto } from '@/lib/types';
 import { gerarHorarioAlgoritmico } from '@/lib/timetabling';
 import { getTurmas } from '../turmas/actions';
 import { getProfessores } from '../professores/actions';
@@ -111,11 +112,14 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
 
             if (insertError) {
                 console.error("❌ Erro ao salvar aulas no banco:", insertError);
+                // Se der erro nas aulas, removemos o registro do horário para não deixar sujeira
+                await supabase.from('horarios').delete().eq('id', novoHorario.id);
                 return { error: `Erro ao salvar a grade: ${insertError.message}` };
             }
         }
     } catch (err: any) {
         console.error("❌ Erro no algoritmo de timetabling:", err);
+        await supabase.from('horarios').delete().eq('id', novoHorario.id);
         return { error: 'Ocorreu um erro lógico ao organizar as aulas. Verifique as restrições dos professores.' };
     }
 
@@ -150,7 +154,8 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
     const { data: aulas, error: aError } = await supabase
         .from('horario_aulas')
         .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario), turma:turmas(id, nome)')
-        .eq('horario_id', id);
+        .eq('horario_id', id)
+        .order('aula_index', { ascending: true });
 
     if (aError) return { error: 'Erro ao buscar as aulas do horário.' };
 
