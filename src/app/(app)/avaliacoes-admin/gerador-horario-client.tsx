@@ -156,17 +156,19 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 <Alert variant="destructive" className="bg-destructive/5 border-destructive/20">
                     <AlertCircle className="h-5 w-5" />
                     <AlertTitle className="text-lg font-bold">Impossível concluir a grade horária</AlertTitle>
-                    <AlertDescription className="mt-4 space-y-4">
-                        <p className="font-medium text-foreground">{genError}</p>
+                    <AlertDescription className="mt-4 space-y-6">
+                        <div className="text-sm bg-background/80 p-4 rounded-lg border whitespace-pre-line leading-relaxed font-mono">
+                            {genError}
+                        </div>
                         
                         <div className="rounded-lg bg-background/50 p-4 border border-destructive/10 space-y-3">
-                            <p className="text-xs uppercase font-bold tracking-wider text-muted-foreground">Como corrigir este problema?</p>
+                            <p className="text-xs uppercase font-bold tracking-wider text-muted-foreground">Como corrigir estes problemas?</p>
                             <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                                 <li className="flex items-start gap-2">
                                     <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Users className="h-3 w-3 text-primary"/></div>
                                     <div>
                                         <p className="font-semibold">Restrições de Professores</p>
-                                        <p className="text-xs text-muted-foreground">Verifique se muitos professores estão de folga no mesmo dia.</p>
+                                        <p className="text-xs text-muted-foreground">Verifique se muitos professores estão de folga no mesmo dia ou se têm pouca disponibilidade.</p>
                                         <Link href="/professores" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Ajustar Professores <ArrowRight className="h-3 w-3 ml-1"/></Link>
                                     </div>
                                 </li>
