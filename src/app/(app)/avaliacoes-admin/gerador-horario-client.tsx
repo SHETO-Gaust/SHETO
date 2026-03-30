@@ -6,9 +6,9 @@ import type { Turno, Horario, ConfiguracaoGerminacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario } from './actions';
+import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario, confirmarGeracaoComRealocacao } from './actions';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from 'next/link';
@@ -36,6 +36,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { createClient } from '@/lib/supabase/client';
+import { type SugestaoRealocacao } from '@/lib/timetabling';
 
 type GeradorHorarioClientProps = {
   escolaId: string;
@@ -56,6 +57,9 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   const [disciplinasParaConfig, setDisciplinasParaConfig] = useState<{ id: string, nome: string, sigla: string, maxAulas: number }[]>([]);
   const [configGerminacao, setConfigGerminacao] = useState<ConfiguracaoGerminacao[]>([]);
   
+  const [sugestao, setSugestao] = useState<SugestaoRealocacao[] | null>(null);
+  const [aulasTemporarias, setAulasTemporarias] = useState<any[] | null>(null);
+
   const { toast } = useToast();
 
   const handleTurnoChange = async (turnoId: string) => {
@@ -67,6 +71,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     setSelectedTurnoId(turnoId);
     setIsLoadingHorarios(true);
     setGenError(null);
+    setSugestao(null);
     const { data, error } = await getHorariosSalvos(turnoId);
     if (error) {
       toast({ title: 'Erro ao buscar horários', description: error, variant: 'destructive' });
@@ -83,10 +88,10 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     }
     
     setGenError(null);
+    setSugestao(null);
     const nextVersion = horarios.length + 1;
     setNomeHorarioInput(`Horário V${nextVersion}`);
     
-    // Buscar disciplinas do turno para configurar geminação
     const supabase = createClient();
     const { data: series } = await supabase
         .from('series')
@@ -134,15 +139,37 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     setIsConfigDialogOpen(false);
     startGenerating(async () => {
         const result = await iniciarGeracaoHorario(escolaId, selectedTurnoId, nomeHorarioInput, configGerminacao, force);
-        if (result.error) {
+        
+        if (result.sugestao) {
+            setSugestao(result.sugestao);
+            setAulasTemporarias(result.aulasTemporarias);
+            toast({ title: 'Otimização Disponível', description: 'Encontramos uma forma de encaixar as aulas ajustando o contraturno de outros turnos.' });
+        } else if (result.error) {
             setGenError(result.error);
             toast({ title: 'Problema na Grade', description: 'Ocorreram conflitos lógicos durante a organização.', variant: 'destructive' });
         } else {
             setGenError(null);
-            toast({ title: 'Geração Concluída!', description: force ? 'A grade foi salva com pendências para ajuste manual.' : 'A grade foi organizada e salva com sucesso.'});
+            setSugestao(null);
+            toast({ title: 'Geração Concluída!', description: force ? 'A grade foi salva com pendências.' : 'A grade foi organizada com sucesso.'});
             handleTurnoChange(selectedTurnoId);
         }
     });
+  };
+
+  const handleConfirmarComRealocacao = () => {
+      if (!sugestao || !aulasTemporarias) return;
+
+      startGenerating(async () => {
+          const result = await confirmarGeracaoComRealocacao(escolaId, selectedTurnoId, nomeHorarioInput, aulasTemporarias, sugestao);
+          if (result.error) {
+              toast({ title: 'Erro ao salvar', description: result.error, variant: 'destructive' });
+          } else {
+              setSugestao(null);
+              setAulasTemporarias(null);
+              toast({ title: 'Grade Gerada!', description: 'As aulas foram organizadas e os horários de contraturno de outros turnos foram ajustados automaticamente.' });
+              handleTurnoChange(selectedTurnoId);
+          }
+      });
   };
 
   const toggleGerminacao = (id: string, checked: boolean) => {
@@ -203,7 +230,49 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {genError && (
+            
+            {/* ESTADO DE SUGESTÃO DE REALOCAÇÃO */}
+            {sugestao && (
+                <Alert className="bg-blue-50 border-blue-200 animate-in zoom-in-95 duration-300">
+                    <RefreshCw className="h-5 w-5 text-blue-600" />
+                    <AlertTitle className="text-xl font-bold text-blue-900">Sugestão de Ajuste entre Turnos</AlertTitle>
+                    <AlertDescription className="mt-4 space-y-6">
+                        <p className="text-blue-800 font-medium">
+                            Encontramos uma solução completa, mas ela exige mover algumas aulas de **Contraturno (NP)** de horários que já estão publicados em outros turnos.
+                        </p>
+                        
+                        <div className="bg-white/80 p-4 rounded-xl border border-blue-100 shadow-inner">
+                            <p className="text-xs uppercase font-bold text-blue-600 mb-3 tracking-widest">Alterações Necessárias:</p>
+                            <div className="space-y-3">
+                                {sugestao.map((s, i) => (
+                                    <div key={i} className="flex items-center gap-3 text-sm text-blue-900 bg-blue-100/50 p-2 rounded-lg border border-blue-200/50">
+                                        <div className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                                        <span>
+                                            **{s.professor_nome}**: Mover **{s.disciplina_nome}** (Turma {s.turma_nome}) da {s.dia_antigo} para a **{s.dia_novo}**.
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <Button 
+                                onClick={handleConfirmarComRealocacao} 
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 px-8"
+                                disabled={isGenerating}
+                            >
+                                {isGenerating ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
+                                Aceitar e Gerar Grade Completa
+                            </Button>
+                            <Button variant="outline" onClick={() => setSugestao(null)} className="h-12 border-blue-200 text-blue-700 hover:bg-blue-100">
+                                Cancelar
+                            </Button>
+                        </div>
+                    </AlertDescription>
+                </Alert>
+            )}
+
+            {genError && !sugestao && (
                 <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 animate-in fade-in slide-in-from-top-4 duration-500">
                     <AlertCircle className="h-5 w-5" />
                     <AlertTitle className="text-xl font-bold">Inconsistência Detectada na Grade</AlertTitle>
@@ -219,7 +288,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                     Opção: Gerar com Pendências
                                 </p>
                                 <p className="text-xs text-orange-800 leading-relaxed">
-                                    Se você não conseguir resolver os conflitos agora, pode salvar o horário assim mesmo. As aulas não alocadas ficarão destacadas em <strong>vermelho ("Vago")</strong> para você ajustar manualmente depois.
+                                    Se você não conseguir resolver os conflitos agora, pode salvar o horário assim mesmo. As aulas não alocadas ficarão destacadas em **vermelho ("Vago")**.
                                 </p>
                                 <Button 
                                     size="sm" 
@@ -240,7 +309,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                         <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors"><Users className="h-4 w-4 text-primary"/></div>
                                         <div className="flex-1">
                                             <p className="text-sm font-bold">Ajustar Professores</p>
-                                            <p className="text-[11px] text-muted-foreground">Remova restrições de "Indisponível" para dar mais janelas ao algoritmo.</p>
+                                            <p className="text-[11px] text-muted-foreground">Remova restrições para dar mais janelas.</p>
                                             <Link href="/professores" className="text-primary hover:underline text-[11px] font-bold inline-flex items-center mt-1">Ir para Professores <ArrowRight className="h-3 w-3 ml-1"/></Link>
                                         </div>
                                     </div>
@@ -248,7 +317,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                         <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors"><Layers className="h-4 w-4 text-primary"/></div>
                                         <div className="flex-1">
                                             <p className="text-sm font-bold">Revisar Cargas Horárias</p>
-                                            <p className="text-[11px] text-muted-foreground">Confira se o total de aulas das séries cabe nos slots do turno.</p>
+                                            <p className="text-[11px] text-muted-foreground">Confira se o total de aulas cabe no turno.</p>
                                             <Link href="/serie" className="text-primary hover:underline text-[11px] font-bold inline-flex items-center mt-1">Ir para Séries <ArrowRight className="h-3 w-3 ml-1"/></Link>
                                         </div>
                                     </div>
@@ -266,7 +335,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     Checklist de Dados
                 </Button>
               </Link>
-              <Button size="lg" onClick={handleGerarHorarioClick} disabled={isGenerating} className="flex-1 h-14 text-lg font-bold shadow-xl hover:scale-[1.02] transition-transform active:scale-95">
+              <Button size="lg" onClick={handleGerarHorarioClick} disabled={isGenerating || !!sugestao} className="flex-1 h-14 text-lg font-bold shadow-xl hover:scale-[1.02] transition-transform active:scale-95">
                 {isGenerating ? (
                     <Loader2 className="mr-3 h-6 w-6 animate-spin" />
                 ) : (
@@ -279,7 +348,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
           <CardFooter className="bg-muted/30 py-4 px-6 border-t">
              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <Settings2 className="h-4 w-4" />
-                <p>O algoritmo realiza até 100 tentativas para encontrar o melhor encaixe respeitando as restrições.</p>
+                <p>O algoritmo realiza 100 tentativas e busca otimizar conflitos com outros turnos ativos.</p>
              </div>
           </CardFooter>
         </Card>
