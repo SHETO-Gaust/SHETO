@@ -1,3 +1,4 @@
+
 import { StepCard } from '@/components/dashboard/step-card';
 import { Sun, GraduationCap, BookOpen, Users, Layers, Users2, Clock, BarChart3, Calendar, ArrowRight, CheckCircle2, Search } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -16,7 +17,7 @@ const steps = [
   { step: 4, title: 'Professores', icon: Users, href: '/professores' },
   { step: 5, title: 'Série', icon: Layers, href: '/serie' },
   { step: 6, title: 'Turmas', icon: Users2, href: '/turmas' },
-  { step: 7, title: 'Gerar Horário', icon: Clock, href: '/avaliacoes-admin' },
+  { step: 7, title: 'Gerar Horário', icon: Clock, href: '/gerarhorarios' },
   { step: 8, title: 'Relatórios', icon: BarChart3, href: '/relatorios' },
 ];
 
@@ -115,7 +116,7 @@ export default async function DashboardPage() {
                             </div>
                         </CardContent>
                         <CardFooter className="pt-0">
-                            <Link href={`/avaliacoes-admin/${h.id}`} className="w-full">
+                            <Link href={`/gerarhorarios/${h.id}`} className="w-full">
                                 <Button className="w-full font-bold group-hover:bg-primary transition-colors">
                                     Visualizar Grade Completa
                                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -134,7 +135,7 @@ export default async function DashboardPage() {
                 <p className="text-sm text-muted-foreground/60 max-w-xs mt-1">
                     Após gerar e aprovar um horário no <span className="font-bold">Passo 7</span>, ele aparecerá aqui para consulta rápida.
                 </p>
-                <Link href="/avaliacoes-admin" className="mt-6">
+                <Link href="/gerarhorarios" className="mt-6">
                     <Button variant="outline" size="sm">Ir para Gerador de Horários</Button>
                 </Link>
             </div>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -21,24 +22,16 @@ import {
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/types';
 
-// New structure for RedeGrade TO
 const allLinks = [
-  // Main
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard, module: 'dashboard' },
-
-  // Dados do Horário
   { href: '/turno', label: 'Turno', icon: Sun, module: 'turno', group: 'dados-horario' },
   { href: '/ensino', label: 'Ensino', icon: GraduationCap, module: 'ensino', group: 'dados-horario' },
   { href: '/componentes', label: 'Componentes', icon: BookOpen, module: 'disciplinas', group: 'dados-horario' },
   { href: '/professores', label: 'Professores', icon: Users, module: 'professores', group: 'dados-horario' },
   { href: '/serie', label: 'Série', icon: Layers, module: 'serie', group: 'dados-horario' },
   { href: '/turmas', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados-horario' },
-  
-  // Horários
-  { href: '/avaliacoes-admin', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios' },
+  { href: '/gerarhorarios', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios' },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios' },
-
-  // Gestão
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
 ];
 
@@ -47,7 +40,6 @@ const linkGroups = [
     { id: 'horarios', label: 'Horários' },
     { id: 'management', label: 'Gestão' },
 ];
-
 
 export function MainNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
@@ -71,7 +63,6 @@ export function MainNav({ profile }: { profile: Profile | null }) {
   }
 
   const visibleLinks = allLinks.filter(link => hasAccess(link.module));
-  
   const mainLinks = visibleLinks.filter(l => !l.group);
   
   return (

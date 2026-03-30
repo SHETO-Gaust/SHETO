@@ -1,3 +1,4 @@
+
 import { redirect } from 'next/navigation';
 import { cookies, headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
@@ -23,7 +24,7 @@ const moduleMap: { [key: string]: string } = {
     '/professores': 'professores',
     '/componentes': 'disciplinas',
     '/turmas': 'turmas',
-    '/avaliacoes-admin': 'horarios',
+    '/gerarhorarios': 'horarios',
     '/relatorios': 'horarios',
     '/usuarios': 'usuarios',
     '/turno': 'turno',
@@ -36,9 +37,6 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // CORREÇÃO 1: No Next 15, cookies() deve ser aguardado
-  // Nota: Se você seguiu a correção no seu src/lib/supabase/server.ts, 
-  // o createClient já faz esse await internamente.
   const supabase = await createClient();
 
   const {
@@ -65,7 +63,6 @@ export default async function AppLayout({
     .order('escolar', { ascending: true });
   const allEscolas = allEscolasData as Escola[] || [];
 
-  // CORREÇÃO 2: headers() também deve ser aguardado no Next 15
   const headerList = await headers();
   const pathname = headerList.get('x-next-url') || '';
   
@@ -107,7 +104,6 @@ export default async function AppLayout({
           <MainNav profile={userProfile} />
         </SidebarContent>
         <SidebarFooter>
-          {/* Espaço para elementos adicionais no rodapé do Sidebar */}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>

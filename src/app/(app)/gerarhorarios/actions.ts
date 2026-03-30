@@ -1,0 +1,202 @@
+
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
+import type { Turno, Horario, HorarioCompleto, ConfiguracaoGerminacao } from '@/lib/types';
+import { gerarHorarioAlgoritmico, type SugestaoRealocacao } from '@/lib/timetabling';
+import { getTurmas } from '../turmas/actions';
+import { getProfessores } from '../professores/actions';
+import { getTurnos } from '../turno/actions';
+
+export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[], error?: string }> {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+        .from('turnos')
+        .select('*')
+        .eq('escola_id', escolaId)
+        .eq('ativo', true)
+        .order('nome', { ascending: true });
+
+    if (error) return { error: 'Não foi possível buscar os turnos ativos.' };
+    return { data: data as Turno[] };
+}
+
+export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horario[], error?: string }> {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+        .from('horarios')
+        .select('*')
+        .eq('turno_id', turnoId)
+        .order('created_at', { ascending: false });
+
+    if (error) return { error: 'Não foi possível buscar os horários salvos.' };
+    return { data: data as Horario[] };
+}
+
+export async function iniciarGeracaoHorario(
+    escolaId: string, 
+    turnoId: string, 
+    nomeHorario: string, 
+    configGerminacao: ConfiguracaoGerminacao[] = [],
+    force: boolean = false
+) {
+    const supabase = await createClient();
+
+    if (!nomeHorario || nomeHorario.trim() === '') return { error: 'O nome do horário é obrigatório.' };
+
+    const [
+        { data: allTurmas },
+        { data: allProfessores },
+        { data: allTurnos },
+        { data: turno }
+    ] = await Promise.all([
+        getTurmas(escolaId),
+        getProfessores(escolaId),
+        getTurnos(escolaId),
+        supabase.from('turnos').select('*').eq('id', turnoId).single()
+    ]);
+
+    const turmasDoTurno = allTurmas?.filter(t => t.serie.turno_id === turnoId) || [];
+    if (turmasDoTurno.length === 0) return { error: 'Não há turmas cadastradas para este turno.' };
+    if (!turno) return { error: 'Turno não encontrado.' };
+
+    const { data: ocupacoesAtivas } = await supabase
+        .from('horario_aulas')
+        .select(`
+            id, professor_id, dia_semana, aula_index, tipo, horario_id,
+            professor:professores(nome_horario),
+            turma:turmas(nome),
+            componente:componentes_curriculares(nome),
+            horario:horarios!inner(id, status, turno_id)
+        `)
+        .eq('horarios.escola_id', escolaId)
+        .eq('horarios.status', 'publicado')
+        .neq('horarios.turno_id', turnoId);
+
+    const result = gerarHorarioAlgoritmico(
+        turno as any,
+        turmasDoTurno as any[],
+        allProfessores as any[],
+        allTurnos || [],
+        configGerminacao,
+        force,
+        ocupacoesAtivas || []
+    );
+
+    if (result.sugestao && result.sugestao.length > 0) {
+        return { sugestao: result.sugestao, aulasTemporarias: result.aulas };
+    }
+
+    if (!result.success && !force) return { error: result.error || 'Erro lógico.' };
+
+    return salvarNovaGrade(escolaId, turnoId, nomeHorario, result.aulas, force);
+}
+
+export async function confirmarGeracaoComRealocacao(
+    escolaId: string,
+    turnoId: string,
+    nomeHorario: string,
+    aulas: any[],
+    sugestoes: SugestaoRealocacao[]
+) {
+    const supabase = await createClient();
+
+    for (const sug of sugestoes) {
+        const { error: updateError } = await supabase
+            .from('horario_aulas')
+            .update({ dia_semana: sug.dia_novo, aula_index: sug.aula_idx_novo })
+            .eq('id', sug.aula_id);
+        
+        if (updateError) return { error: `Falha ao realocar aula: ${updateError.message}` };
+    }
+
+    return salvarNovaGrade(escolaId, turnoId, nomeHorario, aulas, false);
+}
+
+async function salvarNovaGrade(escolaId: string, turnoId: string, nome: string, aulas: any[], force: boolean) {
+    const supabase = await createClient();
+    const { data: novoHorario, error: hError } = await supabase
+        .from('horarios')
+        .insert({
+            escola_id: escolaId,
+            turno_id: turnoId,
+            nome: force ? `${nome} (Incompleto)` : nome,
+            status: 'em_rascunho',
+        })
+        .select().single();
+
+    if (hError) return { error: 'Falha ao criar registro.' };
+
+    if (aulas.length > 0) {
+        const aulasToInsert = aulas.map(a => ({ horario_id: novoHorario.id, ...a }));
+        const { error: insertError } = await supabase.from('horario_aulas').insert(aulasToInsert);
+        if (insertError) {
+            await supabase.from('horarios').delete().eq('id', novoHorario.id);
+            return { error: 'Erro ao salvar a grade.' };
+        }
+    }
+
+    revalidatePath('/gerarhorarios');
+    return { data: novoHorario };
+}
+
+export async function consolidarHorario(id: string) {
+    const supabase = await createClient();
+    const { data: current } = await supabase.from('horarios').select('turno_id').eq('id', id).single();
+    if (!current) return { error: 'Horário não encontrado.' };
+
+    await supabase.from('horarios').update({ status: 'em_rascunho' }).eq('turno_id', current.turno_id).eq('status', 'publicado');
+    const { error: uError } = await supabase.from('horarios').update({ status: 'publicado' }).eq('id', id);
+    if (uError) return { error: 'Erro ao consolidar.' };
+
+    revalidatePath('/gerarhorarios');
+    return { success: true };
+}
+
+export async function deleteHorario(id: string) {
+    const supabase = await createClient();
+    const { error } = await supabase.from('horarios').delete().eq('id', id);
+    if (error) return { error: 'Não foi possível deletar.' };
+    revalidatePath('/gerarhorarios');
+    return { success: true };
+}
+
+export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioCompleto, error?: string }> {
+    const supabase = await createClient();
+    const { data: horario, error: hError } = await supabase.from('horarios').select('*, turno:turnos(*)').eq('id', id).single();
+    if (hError || !horario) return { error: 'Horário não encontrado.' };
+
+    const { data: allTurnos } = await supabase.from('turnos').select('*').eq('escola_id', horario.escola_id);
+    const nomeTurno = (horario.turno as any).nome.toLowerCase();
+    const turnoOposto = allTurnos?.find(t => {
+        if (nomeTurno.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
+        if (nomeTurno.includes('vespertino')) return t.nome.toLowerCase().includes('matutino');
+        return false;
+    }) || allTurnos?.find(t => t.id !== (horario.turno as any).id);
+
+    const { data: aulas } = await supabase
+        .from('horario_aulas')
+        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario), turma:turmas(id, nome)')
+        .eq('horario_id', id)
+        .order('aula_index', { ascending: true });
+
+    const { data: turmasConfig } = await supabase
+        .from('turmas')
+        .select(`
+            id, 
+            serie:series(id, componentes:series_componentes(aulas_presenciais, aulas_nao_presenciais, componente:componentes_curriculares(id, nome, sigla))),
+            professores:turmas_professores(componente_id, professor:professores(nome_horario))
+        `)
+        .eq('escola_id', horario.escola_id);
+
+    return { 
+        data: {
+            ...horario,
+            turno: horario.turno as any,
+            turno_oposto: turnoOposto as any,
+            aulas: (aulas || []) as any[],
+            turmas_config: (turmasConfig || []) as any[]
+        }
+    };
+}

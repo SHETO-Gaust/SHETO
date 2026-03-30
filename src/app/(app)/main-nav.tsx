@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -21,24 +22,16 @@ import {
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/types';
 
-// Structure for SHE
 const allLinks = [
-  // Main
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard, module: 'dashboard' },
-
-  // Dados do Horário
   { href: '/turno', label: 'Turno', icon: Sun, module: 'turno', group: 'dados-horario', step: 1 },
   { href: '/ensino', label: 'Ensino', icon: GraduationCap, module: 'ensino', group: 'dados-horario', step: 2 },
   { href: '/componentes', label: 'Componentes', icon: BookOpen, module: 'disciplinas', group: 'dados-horario', step: 3 },
   { href: '/professores', label: 'Professores', icon: Users, module: 'professores', group: 'dados-horario', step: 4 },
   { href: '/serie', label: 'Série', icon: Layers, module: 'serie', group: 'dados-horario', step: 5 },
   { href: '/turmas', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados-horario', step: 6 },
-  
-  // Horários
-  { href: '/avaliacoes-admin', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios', step: 7 },
+  { href: '/gerarhorarios', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios', step: 7 },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios', step: 8 },
-
-  // Gestão
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
 ];
 
@@ -47,7 +40,6 @@ const linkGroups = [
     { id: 'horarios', label: 'Horários' },
     { id: 'management', label: 'Gestão' },
 ];
-
 
 export function MainNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
@@ -71,7 +63,6 @@ export function MainNav({ profile }: { profile: Profile | null }) {
   }
 
   const visibleLinks = allLinks.filter(link => hasAccess(link.module));
-  
   const mainLinks = visibleLinks.filter(l => !l.group);
   
   return (
