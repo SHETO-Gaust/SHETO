@@ -5,7 +5,7 @@ import type { Turno, Horario } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, Users2 } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, Users2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario } from './actions';
 import { format } from 'date-fns';
@@ -82,7 +82,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     setIsNameDialogOpen(true);
   };
 
-  const handleConfirmGeracao = () => {
+  const handleConfirmGeracao = (force: boolean = false) => {
     if (!nomeHorarioInput.trim()) {
         toast({ title: 'O nome do horário é obrigatório', variant: 'destructive' });
         return;
@@ -90,13 +90,13 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     setIsNameDialogOpen(false);
     startGenerating(async () => {
-        const result = await iniciarGeracaoHorario(escolaId, selectedTurnoId, nomeHorarioInput);
+        const result = await iniciarGeracaoHorario(escolaId, selectedTurnoId, nomeHorarioInput, force);
         if (result.error) {
             setGenError(result.error);
             toast({ title: 'Falha na Geração', description: 'O horário não pôde ser gerado completamente.', variant: 'destructive' });
         } else {
             setGenError(null);
-            toast({ title: 'Geração Concluída!', description: 'A grade foi organizada e salva com sucesso.'});
+            toast({ title: 'Geração Concluída!', description: force ? 'A grade foi salva com pendências.' : 'A grade foi organizada e salva com sucesso.'});
             handleTurnoChange(selectedTurnoId);
         }
     });
@@ -155,48 +155,54 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             {genError && (
                 <Alert variant="destructive" className="bg-destructive/5 border-destructive/20">
                     <AlertCircle className="h-5 w-5" />
-                    <AlertTitle className="text-lg font-bold">Impossível concluir a grade horária</AlertTitle>
+                    <AlertTitle className="text-lg font-bold">Impossível concluir a grade horária ideal</AlertTitle>
                     <AlertDescription className="mt-4 space-y-6">
                         <div className="text-sm bg-background/80 p-4 rounded-lg border whitespace-pre-line leading-relaxed font-mono">
                             {genError}
                         </div>
                         
-                        <div className="rounded-lg bg-background/50 p-4 border border-destructive/10 space-y-3">
-                            <p className="text-xs uppercase font-bold tracking-wider text-muted-foreground">Como corrigir estes problemas?</p>
-                            <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                                <li className="flex items-start gap-2">
-                                    <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Users className="h-3 w-3 text-primary"/></div>
-                                    <div>
-                                        <p className="font-semibold">Restrições de Professores</p>
-                                        <p className="text-xs text-muted-foreground">Verifique se muitos professores estão de folga no mesmo dia ou se têm pouca disponibilidade.</p>
-                                        <Link href="/professores" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Ajustar Professores <ArrowRight className="h-3 w-3 ml-1"/></Link>
-                                    </div>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Users2 className="h-3 w-3 text-primary"/></div>
-                                    <div>
-                                        <p className="font-semibold">Falta de Professores</p>
-                                        <p className="text-xs text-muted-foreground">Confira se todas as disciplinas das turmas têm professores alocados.</p>
-                                        <Link href="/turmas" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Verificar Alocações <ArrowRight className="h-3 w-3 ml-1"/></Link>
-                                    </div>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Layers className="h-3 w-3 text-primary"/></div>
-                                    <div>
-                                        <p className="font-semibold">Carga Horária das Séries</p>
-                                        <p className="text-xs text-muted-foreground">O total de aulas presenciais deve preencher exatamente o turno.</p>
-                                        <Link href="/serie" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Revisar Carga Horária <ArrowRight className="h-3 w-3 ml-1"/></Link>
-                                    </div>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><List className="h-3 w-3 text-primary"/></div>
-                                    <div>
-                                        <p className="font-semibold">Diagnóstico Completo</p>
-                                        <p className="text-xs text-muted-foreground">Use o relatório de situação para encontrar erros de cadastro.</p>
-                                        <Link href="/relatorios" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Abrir Checklist <ArrowRight className="h-3 w-3 ml-1"/></Link>
-                                    </div>
-                                </li>
-                            </ul>
+                        <div className="flex flex-col gap-4">
+                            <div className="rounded-lg bg-orange-50 p-4 border border-orange-200 space-y-3">
+                                <p className="text-sm font-bold text-orange-800 flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    Deseja gerar mesmo assim?
+                                </p>
+                                <p className="text-xs text-orange-700">
+                                    O sistema salvará o que foi possível alocar. Os espaços vazios ficarão destacados em vermelho na visualização da grade para que você identifique onde faltam aulas.
+                                </p>
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="border-orange-300 text-orange-800 hover:bg-orange-100"
+                                    onClick={() => handleConfirmGeracao(true)}
+                                    disabled={isGenerating}
+                                >
+                                    {isGenerating ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <Zap className="mr-2 h-4 w-4"/>}
+                                    Gerar Grade com Pendências
+                                </Button>
+                            </div>
+
+                            <div className="rounded-lg bg-background/50 p-4 border border-destructive/10 space-y-3">
+                                <p className="text-xs uppercase font-bold tracking-wider text-muted-foreground">Como corrigir estes problemas definitivamente?</p>
+                                <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                    <li className="flex items-start gap-2">
+                                        <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Users className="h-3 w-3 text-primary"/></div>
+                                        <div>
+                                            <p className="font-semibold">Restrições de Professores</p>
+                                            <p className="text-xs text-muted-foreground">Vá em 'Professores' e remova as folgas (indisponíveis) para dar mais janelas ao algoritmo.</p>
+                                            <Link href="/professores" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Ajustar Professores <ArrowRight className="h-3 w-3 ml-1"/></Link>
+                                        </div>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <div className="h-5 w-5 rounded bg-primary/10 flex items-center justify-center shrink-0 mt-0.5"><Layers className="h-3 w-3 text-primary"/></div>
+                                        <div>
+                                            <p className="font-semibold">Carga Horária das Séries</p>
+                                            <p className="text-xs text-muted-foreground">Reduza a quantidade de aulas semanais se o turno estiver sobrecarregado.</p>
+                                            <Link href="/serie" className="text-primary hover:underline text-xs font-bold inline-flex items-center mt-1">Revisar Carga Horária <ArrowRight className="h-3 w-3 ml-1"/></Link>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     </AlertDescription>
                 </Alert>
@@ -222,7 +228,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
           <CardFooter className="bg-muted/30 py-3">
              <p className="text-xs text-muted-foreground flex items-center gap-2">
                 <Settings2 className="h-3.5 w-3.5" />
-                O sistema só permitirá o salvamento se for possível alocar todas as aulas previstas respeitando as restrições.
+                O sistema prioriza a perfeição das restrições, mas você pode forçar a geração parcial se necessário.
              </p>
           </CardFooter>
         </Card>
@@ -246,8 +252,8 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                 <CardHeader className="pb-2">
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="text-lg">{h.nome}</CardTitle>
-                                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${h.status === 'publicado' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
-                                            {h.status === 'publicado' ? 'Publicado' : 'Rascunho'}
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${h.status === 'publicado' ? 'bg-green-100 text-green-800' : h.nome.includes('Incompleto') ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'}`}>
+                                            {h.status === 'publicado' ? 'Publicado' : h.nome.includes('Incompleto') ? 'Pendente' : 'Rascunho'}
                                         </span>
                                     </div>
                                     <CardDescription>
@@ -318,7 +324,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setIsNameDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleConfirmGeracao} disabled={!nomeHorarioInput.trim()}>
+                <Button onClick={() => handleConfirmGeracao(false)} disabled={!nomeHorarioInput.trim()}>
                     Iniciar Geração
                 </Button>
             </DialogFooter>

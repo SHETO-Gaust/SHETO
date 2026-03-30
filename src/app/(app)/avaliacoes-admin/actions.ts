@@ -42,7 +42,7 @@ export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horar
 }
 
 // Action to start the generation process
-export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, nomeHorario: string) {
+export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, nomeHorario: string, force: boolean = false) {
     const supabase = await createClient();
 
     if (!nomeHorario || nomeHorario.trim() === '') {
@@ -75,20 +75,21 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, n
         turno as any,
         turmasDoTurno as any[],
         allProfessores as any[],
-        allTurnos || []
+        allTurnos || [],
+        force
     );
 
-    if (!result.success) {
+    if (!result.success && !force) {
         return { error: result.error || 'Erro lógico ao organizar as aulas.' };
     }
 
-    // 3. Criar o registro do horário apenas se o algoritmo teve sucesso
+    // 3. Criar o registro do horário
     const { data: novoHorario, error: hError } = await supabase
         .from('horarios')
         .insert({
             escola_id: escolaId,
             turno_id: turnoId,
-            nome: nomeHorario,
+            nome: force ? `${nomeHorario} (Incompleto)` : nomeHorario,
             status: 'em_rascunho',
         })
         .select()

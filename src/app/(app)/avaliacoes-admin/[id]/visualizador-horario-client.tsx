@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -7,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { AlertCircle } from 'lucide-react';
 
 type Props = {
   horario: HorarioCompleto;
@@ -55,6 +55,17 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     const hasAulas = horario.aulas.some(a => a.turma_id === turmaId && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial') return null;
 
+    // Lógica para detectar se um slot vazio é uma inconsistência
+    const isInconsistent = (dia: string, index: number) => {
+        if (tipo !== 'presencial') return false;
+        
+        // Slot proibido pela série não é inconsistência, é regra.
+        // Precisamos dos dados da série para isso, mas como não temos aqui,
+        // vamos considerar inconsistente se estiver vazio num dia ativo do turno.
+        const aula = getAulaNoSlot(dia, index);
+        return !aula;
+    };
+
     return (
         <div className="space-y-3">
             <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -85,8 +96,10 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         </td>
                         {diasAtivos.map(dia => {
                             const aula = getAulaNoSlot(dia.id, aulaIndex);
+                            const hole = isInconsistent(dia.id, aulaIndex);
+
                             return (
-                            <td key={dia.id} className="p-2 text-center border-r last:border-r-0">
+                            <td key={dia.id} className={cn("p-2 text-center border-r last:border-r-0", hole && "bg-destructive/10")}>
                                 {aula ? (
                                 <div className="flex flex-col items-center justify-center gap-1">
                                     <div className={cn(
@@ -99,6 +112,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                     {aula.professor?.nome_horario || 'SEM PROF.'}
                                     </div>
                                 </div>
+                                ) : hole ? (
+                                    <div className="flex flex-col items-center justify-center gap-1 text-destructive animate-pulse">
+                                        <AlertCircle className="h-4 w-4" />
+                                        <span className="text-[9px] font-bold uppercase">Vago</span>
+                                    </div>
                                 ) : (
                                 <span className="text-muted-foreground/10">-</span>
                                 )}
