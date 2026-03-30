@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useTransition } from 'react';
@@ -22,6 +23,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 type GeradorHorarioClientProps = {
   escolaId: string;
@@ -34,6 +45,10 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   const [isLoadingHorarios, setIsLoadingHorarios] = useState(false);
   const [isGenerating, startGenerating] = useTransition();
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  
+  const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
+  const [nomeHorarioInput, setNomeHorarioInput] = useState('');
+  
   const { toast } = useToast();
 
   const handleTurnoChange = async (turnoId: string) => {
@@ -53,13 +68,31 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     setIsLoadingHorarios(false);
   };
 
-  const handleGerarHorario = () => {
+  const handleGerarHorarioClick = () => {
+    if (!selectedTurnoId) {
+        toast({ title: 'Selecione um turno primeiro', variant: 'destructive' });
+        return;
+    }
+    
+    // Sugere um nome baseado na versão atual
+    const nextVersion = horarios.length + 1;
+    setNomeHorarioInput(`Horário V${nextVersion}`);
+    setIsNameDialogOpen(true);
+  };
+
+  const handleConfirmGeracao = () => {
+    if (!nomeHorarioInput.trim()) {
+        toast({ title: 'O nome do horário é obrigatório', variant: 'destructive' });
+        return;
+    }
+
+    setIsNameDialogOpen(false);
     startGenerating(async () => {
-        const result = await iniciarGeracaoHorario(escolaId, selectedTurnoId);
+        const result = await iniciarGeracaoHorario(escolaId, selectedTurnoId, nomeHorarioInput);
         if (result.error) {
             toast({ title: 'Erro ao iniciar geração', description: result.error, variant: 'destructive' });
         } else {
-            toast({ title: 'Geração Concluída!', description: 'O algoritmo organizou as aulas e o rascunho está pronto.'});
+            toast({ title: 'Geração Concluída!', description: 'A grade foi organizada e salva com sucesso.'});
             handleTurnoChange(selectedTurnoId);
         }
     });
@@ -122,7 +155,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     Verificar Dados (Checklist)
                 </Button>
               </Link>
-              <Button size="lg" onClick={handleGerarHorario} disabled={isGenerating} className="flex-1">
+              <Button size="lg" onClick={handleGerarHorarioClick} disabled={isGenerating} className="flex-1">
                 {isGenerating ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -206,6 +239,36 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             </CardContent>
         </Card>
       )}
+
+      {/* DIÁLOGO PARA DEFINIR O NOME DO HORÁRIO */}
+      <Dialog open={isNameDialogOpen} onOpenChange={setIsNameDialogOpen}>
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()}>
+            <DialogHeader>
+                <DialogTitle>Gerar Novo Horário</DialogTitle>
+                <DialogDescription>
+                    Como você deseja nomear esta versão da grade para o turno {selectedTurno?.nome}?
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="nome-horario">Nome do Horário</Label>
+                    <Input 
+                        id="nome-horario" 
+                        value={nomeHorarioInput} 
+                        onChange={(e) => setNomeHorarioInput(e.target.value)}
+                        placeholder="Ex: Grade 2026 V1"
+                        autoFocus
+                    />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsNameDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={handleConfirmGeracao} disabled={!nomeHorarioInput.trim()}>
+                    Iniciar Geração
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -42,8 +42,12 @@ export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horar
 }
 
 // Action to start the generation process
-export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
+export async function iniciarGeracaoHorario(escolaId: string, turnoId: string, nomeHorario: string) {
     const supabase = await createClient();
+
+    if (!nomeHorario || nomeHorario.trim() === '') {
+        return { error: 'O nome do horário é obrigatório.' };
+    }
 
     // 1. Buscar Dados Necessários
     const [
@@ -63,14 +67,6 @@ export async function iniciarGeracaoHorario(escolaId: string, turnoId: string) {
     }
 
     if (!turno) return { error: 'Turno não encontrado.' };
-    
-    const countResult = await supabase
-        .from('horarios')
-        .select('id', { count: 'exact', head: true })
-        .eq('turno_id', turnoId);
-
-    const newVersion = (countResult.count || 0) + 1;
-    const nomeHorario = `Horário V${newVersion}`;
 
     // 2. Criar o registro do horário
     const { data: novoHorario, error: hError } = await supabase

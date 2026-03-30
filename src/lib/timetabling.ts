@@ -23,6 +23,8 @@ export function gerarHorarioAlgoritmico(
 
   for (const turma of turmas) {
     let npCounter = 0; // Contador para gerar índices únicos para aulas não presenciais
+    const weekDaysNP = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+
     for (const comp of turma.serie.componentes) {
       // Adicionar aulas presenciais para processamento
       for (let i = 0; i < comp.aulas_presenciais; i++) {
@@ -35,17 +37,20 @@ export function gerarHorarioAlgoritmico(
         });
       }
       
-      // Adicionar aulas não presenciais (já registradas como fora da grade)
+      // Adicionar aulas não presenciais (distribuídas ficticiamente no contraturno)
       for (let i = 0; i < comp.aulas_nao_presenciais; i++) {
         const profAlocado = turma.professores.find(p => p.componente_id === comp.componente_id);
+        const dayNP = weekDaysNP[npCounter % weekDaysNP.length];
+        
         aulasGeradas.push({
           turma_id: turma.id,
           componente_id: comp.componente_id,
           professor_id: profAlocado?.professor_id || null,
-          dia_semana: 'contraturno',
-          aula_index: npCounter++, // Índice incremental para evitar violação de chave única
+          dia_semana: dayNP,
+          aula_index: Math.floor(npCounter / weekDaysNP.length), // Garante índices variados para evitar violação de chave única
           tipo: 'nao_presencial'
         });
+        npCounter++;
       }
     }
   }
