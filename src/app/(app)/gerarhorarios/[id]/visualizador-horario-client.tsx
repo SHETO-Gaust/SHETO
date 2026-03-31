@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Users } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Users, Calendar } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario } from '../actions';
@@ -17,13 +17,13 @@ type Props = {
 };
 
 const DIAS_SEMANA_MAP = [
-  { id: 'segunda', label: 'Seg' }, { id: 'terca', label: 'Ter' },
-  { id: 'quarta', label: 'Qua' }, { id: 'quinta', label: 'Qui' },
-  { id: 'sexta', label: 'Sex' }, { id: 'sabado', label: 'Sáb' },
+  { id: 'segunda', label: 'Segunda' }, { id: 'terca', label: 'Terça' },
+  { id: 'quarta', label: 'Quarta' }, { id: 'quinta', label: 'Quinta' },
+  { id: 'sexta', label: 'Sexta' }, { id: 'sabado', label: 'Sábado' },
 ];
 
 export function VisualizadorHorarioClient({ horario }: Props) {
-  const [viewMode, setViewMode] = useState<'single' | 'all' | 'teachers'>('single');
+  const [viewMode, setViewMode] = useState<'single' | 'all' | 'teachers' | 'by-day'>('single');
   const [teacherViewMode, setTeacherViewMode] = useState<'individual' | 'all'>('individual');
   const [isConsolidating, startConsolidating] = useTransition();
   const { toast } = useToast();
@@ -55,13 +55,20 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     return Array.from(map.values()).sort((a, b) => a.nome_horario.localeCompare(b.nome_horario));
   }, [horario.aulas, horario.outras_aulas_publicadas]);
 
+  const diasAtivos = useMemo(() => 
+    DIAS_SEMANA_MAP.filter(d => horario.turno.dias_semana.includes(d.id)),
+    [horario.turno.dias_semana]
+  );
+
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [selectedProfessorId, setSelectedProfessorId] = useState<string>('');
+  const [selectedDayId, setSelectedDayId] = useState<string>('');
 
   useEffect(() => {
     if (turmas.length > 0 && !selectedTurmaId) setSelectedTurmaId(turmas[0].id);
     if (professores.length > 0 && !selectedProfessorId) setSelectedProfessorId(professores[0].id);
-  }, [turmas, professores]);
+    if (diasAtivos.length > 0 && !selectedDayId) setSelectedDayId(diasAtivos[0].id);
+  }, [turmas, professores, diasAtivos]);
 
   const getPendencias = (turmaId: string) => {
     const config = horario.turmas_config?.find(c => c.id === turmaId);
@@ -100,6 +107,18 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     return pendencias;
   };
 
+  const handleConsolidar = () => {
+      startConsolidating(async () => {
+          const result = await consolidarHorario(horario.id);
+          if (result.error) {
+              toast({ title: 'Erro ao consolidar', description: result.error, variant: 'destructive' });
+          } else {
+              toast({ title: 'Horário Consolidado!', description: 'Esta grade agora é a oficial para este turno.' });
+              window.location.reload();
+          }
+      });
+  };
+
   const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
     const pendencias = getPendencias(turmaId);
     if (pendencias.length === 0) return null;
@@ -123,18 +142,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             </AlertDescription>
         </Alert>
     );
-  };
-
-  const handleConsolidar = () => {
-      startConsolidating(async () => {
-          const result = await consolidarHorario(horario.id);
-          if (result.error) {
-              toast({ title: 'Erro ao consolidar', description: result.error, variant: 'destructive' });
-          } else {
-              toast({ title: 'Horário Consolidado!', description: 'Esta grade agora é a oficial para este turno.' });
-              window.location.reload();
-          }
-      });
   };
 
   const GradeHoraria = ({ targetId, isProfessorView, tipo, label, turnoInfo, dataset }: { targetId: string, isProfessorView: boolean, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null, dataset?: any[] }) => {
@@ -210,7 +217,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                     </div>
                                 </div>
                                 ) : hole ? (
-                                    <div className="flex items-center justify-center gap-1 text-destructive/60 animate-pulse">
+                                    <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse">
                                         <AlertCircle className="h-4 w-4" />
                                         <span className="text-[9px] font-bold uppercase">Vago</span>
                                     </div>
@@ -295,6 +302,80 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     );
   }
 
+  const GradePorDia = ({ dayId, turnoInfo }: { dayId: string, turnoInfo: Turno }) => {
+    const dayLabel = diasAtivos.find(d => d.id === dayId)?.label || dayId;
+    
+    return (
+        <div className="space-y-4 pt-4">
+            <div className="flex items-center gap-3 border-b pb-4">
+                <div className="h-12 w-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <Calendar className="h-6 w-6" />
+                </div>
+                <div>
+                    <h2 className="text-xl font-bold tracking-tight">
+                        {dayLabel}{dayId !== 'sabado' && dayId !== 'domingo' ? '-feira' : ''}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">Visualizando todas as turmas do turno {turnoInfo.nome}.</p>
+                </div>
+            </div>
+
+            <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                    <thead>
+                    <tr className="bg-muted/50 border-b">
+                        <th className="p-3 text-left font-bold border-r w-32 sticky left-0 bg-muted/50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Horário</th>
+                        {turmas.map(t => (
+                        <th key={t.id} className="p-3 text-center font-bold min-w-[160px] border-r">
+                            Turma {t.nome}
+                        </th>
+                        ))}
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => (
+                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/5 transition-colors h-24">
+                        <td className="p-3 font-medium bg-muted/20 border-r sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                            <div className="font-bold text-primary">{aulaIndex + 1}ª Aula</div>
+                            <div className="text-[10px] text-muted-foreground font-normal">
+                            {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} - {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
+                            </div>
+                        </td>
+                        {turmas.map(turma => {
+                            const aula = horario.aulas.find(a => 
+                                a.turma_id === turma.id && 
+                                a.dia_semana === dayId && 
+                                a.aula_index === aulaIndex &&
+                                a.tipo === 'presencial'
+                            );
+
+                            return (
+                            <td key={turma.id} className="p-2 text-center border-r last:border-r-0">
+                                {aula ? (
+                                <div className="flex flex-col items-center justify-center gap-1.5 h-full">
+                                    <div className="font-bold text-[11px] leading-tight uppercase px-3 py-2 rounded-lg bg-primary/5 text-primary border border-primary/10 w-full shadow-sm">
+                                    {aula.componente.sigla || aula.componente.nome}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase" title={aula.professor?.nome_horario}>
+                                        {aula.professor?.nome_horario || 'SEM PROF.'}
+                                    </div>
+                                </div>
+                                ) : (
+                                <span className="text-muted-foreground/10 font-bold">-</span>
+                                )}
+                            </td>
+                            )
+                        })}
+                        </tr>
+                    ))}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -332,6 +413,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     <TabsTrigger value="single">Turma por Turma</TabsTrigger>
                     <TabsTrigger value="all">Todas as Turmas</TabsTrigger>
                     <TabsTrigger value="teachers">Por Professor</TabsTrigger>
+                    <TabsTrigger value="by-day">Por Dia</TabsTrigger>
                 </TabsList>
             </Tabs>
 
@@ -343,6 +425,19 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     <SelectContent>
                         {turmas.map(t => (
                             <SelectItem key={t.id} value={t.id}>Turma {t.nome}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            )}
+
+            {viewMode === 'by-day' && (
+                <Select value={selectedDayId} onValueChange={setSelectedDayId}>
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Selecione o dia" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {diasAtivos.map(d => (
+                            <SelectItem key={d.id} value={d.id}>{d.label}{d.id !== 'sabado' && d.id !== 'domingo' ? '-feira' : ''}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
@@ -405,6 +500,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     ))}
                 </div>
             )
+          ) : viewMode === 'by-day' ? (
+            <GradePorDia dayId={selectedDayId} turnoInfo={horario.turno} />
           ) : (
             <div className="grid grid-cols-1 gap-12 pt-4">
                 {turmas.map(turma => (
