@@ -1,13 +1,13 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { HorarioCompleto, Turno } from '@/lib/types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { Clock, Calendar } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 type Props = {
   horarios: HorarioCompleto[];
@@ -21,6 +21,7 @@ const DIAS_SEMANA_MAP = [
 
 export function HorariosPublicClient({ horarios }: Props) {
   const [selectedHorarioId, setSelectedHorarioId] = useState<string>(horarios[0]?.id || '');
+  const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   
   const currentHorario = useMemo(() => 
     horarios.find(h => h.id === selectedHorarioId) || horarios[0],
@@ -38,7 +39,17 @@ export function HorariosPublicClient({ horarios }: Props) {
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [currentHorario]);
 
-  const [selectedTurmaId, setSelectedTurmaId] = useState<string>(turmas[0]?.id || '');
+  // Sincroniza a turma selecionada ao trocar de horário/turno
+  useEffect(() => {
+    if (turmas.length > 0) {
+      const isStillValid = turmas.some(t => t.id === selectedTurmaId);
+      if (!isStillValid) {
+        setSelectedTurmaId(turmas[0].id);
+      }
+    } else {
+      setSelectedTurmaId('');
+    }
+  }, [turmas, selectedTurmaId]);
 
   const diasAtivos = useMemo(() => {
     if (!currentHorario) return [];
@@ -46,7 +57,7 @@ export function HorariosPublicClient({ horarios }: Props) {
   }, [currentHorario]);
 
   const GradeHoraria = ({ turmaId, tipo, label, turnoInfo }: { turmaId: string, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null }) => {
-    if (!turnoInfo || !currentHorario) return null;
+    if (!turnoInfo || !currentHorario || !turmaId) return null;
 
     const getAulaNoSlot = (dia: string, index: number) => {
         return currentHorario.aulas.find(a => 
@@ -98,7 +109,7 @@ export function HorariosPublicClient({ horarios }: Props) {
                                 {aula ? (
                                 <div className="flex flex-col items-center justify-center h-full space-y-1.5">
                                     <div className={cn(
-                                        "font-bold text-xs leading-tight uppercase px-3 py-2 rounded-lg w-full shadow-sm border",
+                                        "font-bold text-[11px] leading-tight uppercase px-3 py-2 rounded-lg w-full shadow-sm border",
                                         tipo === 'presencial' 
                                             ? "bg-primary/5 text-primary border-primary/20" 
                                             : "bg-orange-50 text-orange-700 border-orange-200"
@@ -156,23 +167,31 @@ export function HorariosPublicClient({ horarios }: Props) {
         </div>
 
         <div className="space-y-12">
-            <div className="animate-in fade-in zoom-in-95 duration-300">
-                <GradeHoraria 
-                    turmaId={selectedTurmaId} 
-                    tipo="presencial" 
-                    label="Grade Regular" 
-                    turnoInfo={currentHorario.turno} 
-                />
-            </div>
-            
-            {currentHorario.turno_oposto && (
-                <div className="animate-in fade-in zoom-in-95 duration-500 delay-150">
-                    <GradeHoraria 
-                        turmaId={selectedTurmaId} 
-                        tipo="nao_presencial" 
-                        label="Grade do Contraturno (Atividades Não Presenciais)" 
-                        turnoInfo={currentHorario.turno_oposto} 
-                    />
+            {selectedTurmaId ? (
+                <>
+                    <div className="animate-in fade-in zoom-in-95 duration-300">
+                        <GradeHoraria 
+                            turmaId={selectedTurmaId} 
+                            tipo="presencial" 
+                            label="Grade Regular" 
+                            turnoInfo={currentHorario.turno} 
+                        />
+                    </div>
+                    
+                    {currentHorario.turno_oposto && (
+                        <div className="animate-in fade-in zoom-in-95 duration-500 delay-150">
+                            <GradeHoraria 
+                                turmaId={selectedTurmaId} 
+                                tipo="nao_presencial" 
+                                label="Grade do Contraturno (Atividades Não Presenciais)" 
+                                turnoInfo={currentHorario.turno_oposto} 
+                            />
+                        </div>
+                    )}
+                </>
+            ) : (
+                <div className="text-center p-12 border-2 border-dashed rounded-xl bg-muted/10">
+                    <p className="text-muted-foreground">Nenhuma turma encontrada para este turno.</p>
                 </div>
             )}
         </div>
