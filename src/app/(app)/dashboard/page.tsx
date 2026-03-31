@@ -18,7 +18,8 @@ const steps = [
   { step: 5, title: 'Série', icon: Layers, href: '/serie' },
   { step: 6, title: 'Turmas', icon: Users2, href: '/turmas' },
   { step: 7, title: 'Gerar Horário', icon: Clock, href: '/gerarhorarios' },
-  { step: 8, title: 'Relatórios', icon: BarChart3, href: '/relatorios' },
+  { step: 8, title: 'Visualizar Horário', icon: Search, href: '/visualizarhorario' },
+  { step: 9, title: 'Relatórios', icon: BarChart3, href: '/relatorios' },
 ];
 
 export default async function DashboardPage() {
@@ -116,7 +117,7 @@ export default async function DashboardPage() {
                             </div>
                         </CardContent>
                         <CardFooter className="pt-0">
-                            <Link href={`/gerarhorarios/${h.id}`} className="w-full">
+                            <Link href={`/visualizarhorario`} className="w-full">
                                 <Button className="w-full font-bold group-hover:bg-primary transition-colors">
                                     Visualizar Grade Completa
                                     <ArrowRight className="ml-2 h-4 w-4" />

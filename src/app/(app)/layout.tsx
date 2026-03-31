@@ -25,6 +25,7 @@ const moduleMap: { [key: string]: string } = {
     '/componentes': 'disciplinas',
     '/turmas': 'turmas',
     '/gerarhorarios': 'horarios',
+    '/visualizarhorario': 'horarios',
     '/relatorios': 'horarios',
     '/usuarios': 'usuarios',
     '/turno': 'turno',

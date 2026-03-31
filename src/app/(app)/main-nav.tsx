@@ -13,6 +13,7 @@ import {
   Sun,
   GraduationCap,
   Layers,
+  Search,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -31,7 +32,8 @@ const allLinks = [
   { href: '/serie', label: 'Série', icon: Layers, module: 'serie', group: 'dados-horario', step: 5 },
   { href: '/turmas', label: 'Turmas', icon: Users2, module: 'turmas', group: 'dados-horario', step: 6 },
   { href: '/gerarhorarios', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios', step: 7 },
-  { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios', step: 8 },
+  { href: '/visualizarhorario', label: 'Visualizar Horário', icon: Search, module: 'horarios', group: 'horarios', step: 8 },
+  { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios', step: 9 },
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
 ];
 
