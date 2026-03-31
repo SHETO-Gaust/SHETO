@@ -80,11 +80,6 @@ export function MainNav({ profile }: { profile: Profile | null }) {
               >
                 <link.icon className="h-5 w-5" />
                 <span className="text-base flex-1">{link.label}</span>
-                 {link.step && (
-                    <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-sidebar-accent text-xs font-bold text-sidebar-accent-foreground">
-                        {link.step}
-                    </span>
-                )}
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
@@ -111,8 +106,8 @@ export function MainNav({ profile }: { profile: Profile | null }) {
                         >
                         <link.icon className="h-5 w-5" />
                         <span className="text-base flex-1">{link.label}</span>
-                         {link.step && (
-                            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-sidebar-accent text-xs font-bold text-sidebar-accent-foreground">
+                        {link.step && (
+                            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-bold text-sidebar-accent-foreground">
                                 {link.step}
                             </span>
                         )}
