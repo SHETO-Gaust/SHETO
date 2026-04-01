@@ -1,3 +1,4 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -64,7 +65,7 @@ export async function iniciarGeracaoHorario(
         .from('horario_aulas')
         .select(`
             id, professor_id, dia_semana, aula_index, tipo, horario_id,
-            professor:professores(nome_horario),
+            professor:professores(nome_horario, restricoes),
             turma:turmas(nome),
             componente:componentes_curriculares(nome),
             horario:horarios!inner(id, status, turno_id)
@@ -147,7 +148,7 @@ export async function consolidarHorario(id: string) {
 
     await supabase.from('horarios').update({ status: 'em_rascunho' }).eq('turno_id', current.turno_id).eq('status', 'publicado');
     const { error: uError } = await supabase.from('horarios').update({ status: 'publicado' }).eq('id', id);
-    if (uError) return { error: 'Erro ao consolidar.' };
+    if (uError) return { error: 'Erro ao publicar.' };
 
     revalidatePath('/gerarhorarios');
     revalidatePath('/dashboard');
@@ -191,7 +192,7 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
     // Aulas do horário específico sendo visualizado
     const { data: aulas } = await supabase
         .from('horario_aulas')
-        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario), turma:turmas(id, nome)')
+        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario, restricoes), turma:turmas(id, nome)')
         .eq('horario_id', id)
         .order('aula_index', { ascending: true });
 
@@ -201,7 +202,7 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
         .select(`
             *, 
             componente:componentes_curriculares(id, nome, sigla), 
-            professor:professores(id, nome_horario), 
+            professor:professores(id, nome_horario, restricoes), 
             turma:turmas(id, nome),
             horario:horarios!inner(id, status, turno_id, turno:turnos(*))
         `)

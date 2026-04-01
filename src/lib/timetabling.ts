@@ -169,7 +169,9 @@ export function gerarHorarioAlgoritmico(
                     }
 
                     const prof = professores.find(pr => pr.id === b.professor_id);
-                    if (prof?.restricoes?.[turno.id]?.[d]?.[idx] === 'indisponivel') { livre = false; break; }
+                    const restricao = prof?.restricoes?.[turno.id]?.[d]?.[idx];
+                    // PLANEJAMENTO AGORA É TRATADO COMO INDISPONÍVEL (HARD BLOCK)
+                    if (restricao === 'indisponivel' || restricao === 'planejamento') { livre = false; break; }
                 }
             }
 
@@ -191,7 +193,6 @@ export function gerarHorarioAlgoritmico(
     }
 
     // --- ALOCAÇÃO NÃO PRESENCIAL (CONTRATURNO) ---
-    // Aulas NP ocupam slots fictícios no turno oposto
     if (turnoOposto) {
         for (const b of blocosNaoPresenciais) {
             let alocado = false;
@@ -206,13 +207,13 @@ export function gerarHorarioAlgoritmico(
                 if (b.professor_id) {
                     for (let k = 0; k < b.size; k++) {
                         const idx = i + k;
-                        // Checar se professor já está em aula presencial no outro turno
                         const conflictKey = `${d}-${idx}-${b.professor_id}`;
                         if (ocupacaoFixaProfessores.has(conflictKey)) { livre = false; break; }
                         
-                        // Checar restrições do professor no turno oposto
                         const prof = professores.find(pr => pr.id === b.professor_id);
-                        if (prof?.restricoes?.[turnoOposto.id]?.[d]?.[idx] === 'indisponivel') { livre = false; break; }
+                        const restricaoOposta = prof?.restricoes?.[turnoOposto.id]?.[d]?.[idx];
+                        // PLANEJAMENTO TAMBÉM BLOQUEIA CONTRATURNO
+                        if (restricaoOposta === 'indisponivel' || restricaoOposta === 'planejamento') { livre = false; break; }
                     }
                 }
 
@@ -232,7 +233,6 @@ export function gerarHorarioAlgoritmico(
     return { success: pendentes.length === 0, aulas: aulasGeradas, bumpedNPs: Array.from(bumpedNPs), pendentes };
   };
 
-  // Loop principal de tentativas
   let melhorTentativa: any = null;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -241,7 +241,6 @@ export function gerarHorarioAlgoritmico(
     if (!melhorTentativa || res.pendentes.length < melhorTentativa.pendentes.length) melhorTentativa = res;
   }
 
-  // Tentar com realocação de contraturnos consolidados
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const res = executarTentativa(true);
     if (res.success) {
@@ -282,14 +281,13 @@ export function gerarHorarioAlgoritmico(
     }
   }
 
-  // Se chegou aqui, falhou. Montar diagnóstico detalhado.
   if (melhorTentativa) {
-      const p = melhorTentativa.pendentes[0]; // Pegar o primeiro que travou para diagnóstico
+      const p = melhorTentativa.pendentes[0];
       let diag = `Não foi possível alocar todas as aulas após ${MAX_ATTEMPTS} tentativas.\n\n`;
       diag += `GARGALO DETECTADO:\n`;
       diag += `A disciplina "${p.componente_nome}" do professor ${p.professor_nome} na Turma ${p.turma_nome} não encontrou espaço.\n\n`;
       diag += `SUGESTÕES DE CORREÇÃO:\n`;
-      diag += `1. Verifique se o professor ${p.professor_nome} possui muitas restrições de folga na aba "Professores".\n`;
+      diag += `1. Verifique se o professor ${p.professor_nome} possui muitas restrições de folga ou planejamento na aba "Professores".\n`;
       diag += `2. Tente desativar a "Geminação" para a disciplina ${p.componente_nome} no passo anterior da geração.\n`;
       diag += `3. Verifique se este professor está sobrecarregado com muitas turmas simultâneas.\n`;
       diag += `4. Se o erro persistir, você pode "Gerar Mesmo com Erros" para ver visualmente onde as janelas estão faltando.`;

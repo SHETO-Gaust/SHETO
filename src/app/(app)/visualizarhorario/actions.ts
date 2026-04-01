@@ -42,7 +42,7 @@ export async function getHorarioPublicadoPorTurno(turnoId: string): Promise<{ da
     // 3. Buscar aulas deste horário
     const { data: aulas } = await supabase
         .from('horario_aulas')
-        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario), turma:turmas(id, nome)')
+        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario, restricoes), turma:turmas(id, nome)')
         .eq('horario_id', horario.id)
         .order('aula_index', { ascending: true });
 
@@ -52,7 +52,7 @@ export async function getHorarioPublicadoPorTurno(turnoId: string): Promise<{ da
         .select(`
             *, 
             componente:componentes_curriculares(id, nome, sigla), 
-            professor:professores(id, nome_horario), 
+            professor:professores(id, nome_horario, restricoes), 
             turma:turmas(id, nome),
             horario:horarios!inner(id, status, turno_id, turno:turnos(*))
         `)

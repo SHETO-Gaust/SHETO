@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -183,7 +184,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
     const hasAulas = sourceData.some(a => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial' && !isProfessorView) return null;
-    if (!hasAulas && isProfessorView) return null;
+    if (!hasAulas && isProfessorView) {
+        // Se for visão do professor e não tiver aulas, ainda checamos se tem planejamento marcado
+        const hasPlanejamento = DIAS_SEMANA_MAP.some(dia => {
+            const prof = professores.find(p => p.id === targetId);
+            return prof?.restricoes?.[turnoInfo.id]?.[dia.id]?.hasOwnProperty('planejamento');
+        });
+        if (!hasPlanejamento) return null;
+    }
 
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
 
@@ -225,6 +233,15 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             const aula = getAulaNoSlot(dia.id, aulaIndex);
                             const hole = isInconsistent(dia.id, aulaIndex);
 
+                            // Lógica de Planejamento na Visão do Professor
+                            let isPlanning = false;
+                            if (isProfessorView && !aula) {
+                                const prof = professores.find(p => p.id === targetId);
+                                if (prof?.restricoes?.[turnoInfo.id]?.[dia.id]?.[aulaIndex] === 'planejamento') {
+                                    isPlanning = true;
+                                }
+                            }
+
                             return (
                             <td key={dia.id} className={cn("p-2 text-center border-r last:border-r-0", hole && "bg-destructive/5")}>
                                 {aula ? (
@@ -239,6 +256,12 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                         {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
                                     </div>
                                 </div>
+                                ) : isPlanning ? (
+                                    <div className="flex flex-col items-center justify-center gap-1">
+                                        <div className="font-bold text-[9px] uppercase px-2 py-1 rounded w-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm opacity-80">
+                                            Planejamento
+                                        </div>
+                                    </div>
                                 ) : hole ? (
                                     <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse">
                                         <AlertCircle className="h-4 w-4" />
@@ -272,21 +295,38 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     const turnosEnvolvidos = useMemo(() => {
         const turnosMap = new Map<string, Turno>();
         
-        horario.aulas.filter(a => a.professor_id === professorId).forEach(a => {
-            if (a.tipo === 'presencial') {
-                turnosMap.set(horario.turno.id, horario.turno);
-            }
-        });
+        // Turno Atual (checa aulas OU planejamento)
+        const hasSomethingInCurrent = horario.aulas.some(a => a.professor_id === professorId) || 
+                                     (prof?.restricoes && prof.restricoes[horario.turno.id]);
+        
+        if (hasSomethingInCurrent) {
+            turnosMap.set(horario.turno.id, horario.turno);
+        }
 
+        // Outros Turnos Publicados
         horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId).forEach(a => {
             const turnoAula = a.horario?.turno;
-            if (turnoAula && a.tipo === 'presencial') {
+            if (turnoAula) {
                 turnosMap.set(turnoAula.id, turnoAula);
             }
         });
 
+        // Adicionar turnos onde o professor tem planejamento mas nenhuma aula
+        if (prof?.restricoes) {
+            Object.keys(prof.restricoes).forEach(tId => {
+                const isPlanningInTurno = Object.values(prof.restricoes[tId]).some((d: any) => 
+                    Object.values(d).includes('planejamento')
+                );
+                if (isPlanningInTurno && !turnosMap.has(tId)) {
+                    // Tenta encontrar o objeto Turno correspondente
+                    const publishedTurno = horario.outras_aulas_publicadas?.find(a => a.horario?.turno_id === tId)?.horario?.turno;
+                    if (publishedTurno) turnosMap.set(tId, publishedTurno);
+                }
+            });
+        }
+
         return Array.from(turnosMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
-    }, [professorId]);
+    }, [professorId, prof]);
 
     return (
         <div className="space-y-8 pt-4">
@@ -298,7 +338,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     <h2 className="text-xl font-bold tracking-tight">
                         {prof.nome_horario}
                     </h2>
-                    <p className="text-sm text-muted-foreground">Visualizando grade docente global (atuais + publicados).</p>
+                    <p className="text-sm text-muted-foreground">Visualizando grade docente global (atuais + publicados + planejamento).</p>
                 </div>
             </div>
 
@@ -318,7 +358,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             {turnosEnvolvidos.length === 0 && (
                 <div className="p-12 text-center border-2 border-dashed rounded-xl bg-muted/10">
                     <AlertCircle className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-muted-foreground">Este professor não possui aulas presenciais alocadas.</p>
+                    <p className="text-muted-foreground">Este professor não possui aulas ou horários de planejamento alocados.</p>
                 </div>
             )}
         </div>
