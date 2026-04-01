@@ -1,4 +1,3 @@
-
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -151,6 +150,18 @@ export async function consolidarHorario(id: string) {
     if (uError) return { error: 'Erro ao consolidar.' };
 
     revalidatePath('/gerarhorarios');
+    revalidatePath('/dashboard');
+    revalidatePath('/visualizarhorario');
+    return { success: true };
+}
+
+export async function reverterParaRascunho(id: string) {
+    const supabase = await createClient();
+    const { error } = await supabase.from('horarios').update({ status: 'em_rascunho' }).eq('id', id);
+    if (error) return { error: 'Não foi possível reverter para rascunho.' };
+    revalidatePath('/gerarhorarios');
+    revalidatePath('/dashboard');
+    revalidatePath('/visualizarhorario');
     return { success: true };
 }
 
@@ -159,6 +170,8 @@ export async function deleteHorario(id: string) {
     const { error } = await supabase.from('horarios').delete().eq('id', id);
     if (error) return { error: 'Não foi possível deletar.' };
     revalidatePath('/gerarhorarios');
+    revalidatePath('/dashboard');
+    revalidatePath('/visualizarhorario');
     return { success: true };
 }
 

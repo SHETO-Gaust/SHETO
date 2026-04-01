@@ -6,11 +6,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Users, Calendar } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Users, Calendar, Undo2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { consolidarHorario } from '../actions';
+import { consolidarHorario, reverterParaRascunho } from '../actions';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 type Props = {
   horario: HorarioCompleto;
@@ -25,7 +36,7 @@ const DIAS_SEMANA_MAP = [
 export function VisualizadorHorarioClient({ horario }: Props) {
   const [viewMode, setViewMode] = useState<'single' | 'all' | 'teachers' | 'by-day'>('single');
   const [teacherViewMode, setTeacherViewMode] = useState<'individual' | 'all'>('individual');
-  const [isConsolidating, startConsolidating] = useTransition();
+  const [isActionPending, startAction] = useTransition();
   const { toast } = useToast();
 
   const turmas = useMemo(() => {
@@ -108,7 +119,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   };
 
   const handleConsolidar = () => {
-      startConsolidating(async () => {
+      startAction(async () => {
           const result = await consolidarHorario(horario.id);
           if (result.error) {
               toast({ title: 'Erro ao consolidar', description: result.error, variant: 'destructive' });
@@ -118,6 +129,18 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           }
       });
   };
+
+  const handleReverter = () => {
+      startAction(async () => {
+          const result = await reverterParaRascunho(horario.id);
+          if (result.error) {
+              toast({ title: 'Erro ao reverter', description: result.error, variant: 'destructive' });
+          } else {
+              toast({ title: 'Publicação Cancelada', description: 'O horário voltou ao estado de rascunho.' });
+              window.location.reload();
+          }
+      });
+  }
 
   const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
     const pendencias = getPendencias(turmaId);
@@ -303,7 +326,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   }
 
   const GradePorDia = ({ dayId, turnoInfo }: { dayId: string, turnoInfo: Turno }) => {
-    const dayLabel = diasAtivos.find(d => d.id === dayId)?.label || dayId;
+    const dayLabel = DIAS_SEMANA_MAP.find(d => d.id === dayId)?.label || dayId;
     
     return (
         <div className="space-y-4 pt-4">
@@ -397,15 +420,36 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           </div>
           
           <div className="flex flex-wrap items-center gap-4">
-            {horario.status !== 'publicado' && (
+            {horario.status !== 'publicado' ? (
                 <Button 
                     onClick={handleConsolidar} 
-                    disabled={isConsolidating} 
+                    disabled={isActionPending} 
                     className="bg-green-600 hover:bg-green-700 text-white shadow-md"
                 >
-                    {isConsolidating ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
+                    {isActionPending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
                     Consolidar Horário
                 </Button>
+            ) : (
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" className="text-orange-600 border-orange-200 hover:bg-orange-50" disabled={isActionPending}>
+                            {isActionPending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Undo2 className="mr-2 h-4 w-4" />}
+                            Reverter para Rascunho
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Cancelar Publicação?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Este horário deixará de ser o oficial para o turno {horario.turno.nome} e será removido da consulta pública imediatamente.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Voltar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleReverter} className="bg-orange-600 hover:bg-orange-700">Confirmar</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             )}
 
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="w-auto">

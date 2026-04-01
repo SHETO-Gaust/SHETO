@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useTransition, useMemo } from 'react';
@@ -6,9 +5,9 @@ import type { Turno, Horario, ConfiguracaoGerminacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, AlertTriangle, CheckCircle2, RefreshCw, Undo2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario, confirmarGeracaoComRealocacao } from './actions';
+import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario, confirmarGeracaoComRealocacao, reverterParaRascunho } from './actions';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from 'next/link';
@@ -49,6 +48,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   const [isLoadingHorarios, setIsLoadingHorarios] = useState(false);
   const [isGenerating, startGenerating] = useTransition();
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isReverting, setIsReverting] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
   
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
@@ -192,6 +192,19 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         setHorarios(prev => prev.filter(h => h.id !== id));
     }
   };
+
+  const handleReverterParaRascunho = async (id: string) => {
+    setIsReverting(id);
+    const result = await reverterParaRascunho(id);
+    setIsReverting(null);
+
+    if (result.error) {
+        toast({ title: 'Erro ao reverter', description: result.error, variant: 'destructive' });
+    } else {
+        toast({ title: 'Status alterado!', description: 'O horário voltou para o estado de rascunho.' });
+        handleTurnoChange(selectedTurnoId);
+    }
+  }
 
   const selectedTurno = turnosAtivos.find(t => t.id === selectedTurnoId);
 
@@ -366,50 +379,84 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     </div>
                 ) : horarios.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {horarios.map(h => (
-                            <Card key={h.id} className="bg-muted/40 overflow-hidden border shadow-sm group hover:border-primary/30 transition-all">
-                                <CardHeader className="pb-3">
-                                    <div className="flex items-center justify-between">
-                                        <CardTitle className="text-base font-bold truncate pr-2" title={h.nome}>{h.nome}</CardTitle>
-                                        <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-md shadow-sm ${h.status === 'publicado' ? 'bg-green-500 text-white' : h.nome.includes('Incompleto') ? 'bg-destructive text-white' : 'bg-orange-500 text-white'}`}>
-                                            {h.status === 'publicado' ? 'Publicado' : h.nome.includes('Incompleto') ? 'Incompleto' : 'Rascunho'}
-                                        </span>
-                                    </div>
-                                    <CardDescription className="text-[11px] flex items-center gap-1.5 mt-1">
-                                        <Clock className="h-3 w-3" />
-                                        {format(new Date(h.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardFooter className="flex gap-2 pt-0">
-                                    <Link href={`/gerarhorarios/${h.id}`} className="flex-1">
-                                        <Button variant="outline" className="w-full h-9 text-xs font-bold" size="sm">
-                                            <FileText className="mr-2 h-3.5 w-3.5" />
-                                            Ver Grade
-                                        </Button>
-                                    </Link>
-                                    
-                                    <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                            <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-destructive/60 hover:text-destructive hover:bg-destructive/10" disabled={isDeleting === h.id}>
-                                                {isDeleting === h.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        {horarios.map(h => {
+                            const isPublicado = h.status === 'publicado';
+                            const isIncompleto = h.nome.includes('Incompleto');
+
+                            return (
+                                <Card key={h.id} className="bg-muted/40 overflow-hidden border shadow-sm group hover:border-primary/30 transition-all flex flex-col">
+                                    <CardHeader className="pb-3">
+                                        <div className="flex items-center justify-between">
+                                            <CardTitle className="text-base font-bold truncate pr-2" title={h.nome}>{h.nome}</CardTitle>
+                                            <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-md shadow-sm ${isPublicado ? 'bg-green-500 text-white' : isIncompleto ? 'bg-destructive text-white' : 'bg-orange-500 text-white'}`}>
+                                                {isPublicado ? 'Publicado' : isIncompleto ? 'Incompleto' : 'Rascunho'}
+                                            </span>
+                                        </div>
+                                        <CardDescription className="text-[11px] flex items-center gap-1.5 mt-1">
+                                            <Clock className="h-3 w-3" />
+                                            {format(new Date(h.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardFooter className="flex gap-2 pt-0 mt-auto">
+                                        <Link href={`/gerarhorarios/${h.id}`} className="flex-1">
+                                            <Button variant="outline" className="w-full h-9 text-xs font-bold" size="sm">
+                                                <FileText className="mr-2 h-3.5 w-3.5" />
+                                                Ver Grade
                                             </Button>
-                                        </AlertDialogTrigger>
-                                        <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
-                                            <AlertDialogHeader>
-                                                <AlertDialogTitle>Excluir Versão?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    Isso apagará permanentemente o rascunho <strong>{h.nome}</strong>. Esta ação não pode ser desfeita.
-                                                </AlertDialogDescription>
-                                            </AlertDialogHeader>
-                                            <AlertDialogFooter>
-                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleDelete(h.id)} className="bg-destructive hover:bg-destructive/90">Confirmar Exclusão</AlertDialogAction>
-                                            </AlertDialogFooter>
-                                        </AlertDialogContent>
-                                    </AlertDialog>
-                                </CardFooter>
-                            </Card>
-                        ))}
+                                        </Link>
+                                        
+                                        {isPublicado && (
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-orange-600 hover:text-orange-700 hover:bg-orange-100" disabled={isReverting === h.id}>
+                                                        {isReverting === h.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Cancelar Publicação?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            O horário <strong>{h.nome}</strong> deixará de ser a grade oficial do turno {selectedTurno.nome} e será removido da consulta pública. Você poderá editá-lo novamente como rascunho.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleReverterParaRascunho(h.id)} className="bg-orange-600 hover:bg-orange-700">Confirmar</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        )}
+
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-destructive/60 hover:text-destructive hover:bg-destructive/10" disabled={isDeleting === h.id}>
+                                                    {isDeleting === h.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle className={isPublicado ? "text-destructive" : ""}>Excluir {isPublicado ? "Grade PUBLICADA" : "Versão"}?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        {isPublicado ? (
+                                                            <div className="space-y-3">
+                                                                <p className="font-bold text-foreground">Atenção: Este horário está PUBLICADO.</p>
+                                                                <p>Ao excluir esta grade, a escola ficará sem um horário oficial para o turno <strong>{selectedTurno.nome}</strong> e ele desaparecerá da consulta pública imediatamente.</p>
+                                                            </div>
+                                                        ) : (
+                                                            <>Isso apagará permanentemente o rascunho <strong>{h.nome}</strong>. Esta ação não pode ser desfeita.</>
+                                                        )}
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => handleDelete(h.id)} className="bg-destructive hover:bg-destructive/90">Confirmar Exclusão</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </CardFooter>
+                                </Card>
+                            )
+                        })}
                     </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center p-16 text-center border-2 border-dashed rounded-xl bg-muted/10">
