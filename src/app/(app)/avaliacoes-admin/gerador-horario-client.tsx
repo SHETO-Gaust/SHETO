@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useTransition, useMemo } from 'react';
@@ -123,7 +122,8 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         });
         const list = Array.from(discMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
         setDisciplinasParaConfig(list);
-        setConfigGerminacao(list.map(d => ({ componente_id: d.id, geminar: true, tamanho_bloco: 2 })));
+        // Alterado geminar para false por padrão
+        setConfigGerminacao(list.map(d => ({ componente_id: d.id, geminar: false, tamanho_bloco: 2 })));
     }
 
     setDialogStep('name');
