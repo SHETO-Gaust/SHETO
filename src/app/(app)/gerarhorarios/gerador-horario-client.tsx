@@ -36,6 +36,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { createClient } from '@/lib/supabase/client';
 import { type SugestaoRealocacao } from '@/lib/timetabling';
+import { cn } from '@/lib/utils';
 
 type GeradorHorarioClientProps = {
   escolaId: string;
@@ -123,7 +124,6 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         });
         const list = Array.from(discMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
         setDisciplinasParaConfig(list);
-        // Alterado geminar para false por padrão
         setConfigGerminacao(list.map(d => ({ componente_id: d.id, geminar: false, tamanho_bloco: 2 })));
     }
 
@@ -512,11 +512,18 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                         <div className="space-y-2">
                             {disciplinasParaConfig.map(disc => {
                                 const config = configGerminacao.find(c => c.componente_id === disc.id);
+                                const isHighLoad = disc.maxAulas >= 3;
                                 return (
-                                    <div key={disc.id} className="flex flex-col p-4 border rounded-xl bg-card shadow-sm hover:border-primary/30 transition-colors gap-4">
+                                    <div 
+                                        key={disc.id} 
+                                        className={cn(
+                                            "flex flex-col p-4 border rounded-xl bg-card shadow-sm hover:border-primary/30 transition-colors gap-4",
+                                            isHighLoad && "bg-orange-50/30 border-orange-100 ring-1 ring-orange-100/50"
+                                        )}
+                                    >
                                         <div className="flex items-center justify-between">
                                             <div className="space-y-0.5">
-                                                <p className="font-bold text-sm">{disc.nome} ({disc.sigla})</p>
+                                                <p className={cn("font-bold text-sm", isHighLoad && "text-orange-900")}>{disc.nome} ({disc.sigla})</p>
                                                 <p className="text-xs text-muted-foreground">{disc.maxAulas} aulas por semana</p>
                                             </div>
                                             <div className="flex items-center gap-3">
