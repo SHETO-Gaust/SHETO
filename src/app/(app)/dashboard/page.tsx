@@ -1,4 +1,3 @@
-
 import { StepCard } from '@/components/dashboard/step-card';
 import { Sun, GraduationCap, BookOpen, Users, Layers, Users2, Clock, BarChart3, Calendar, ArrowRight, CheckCircle2, Search } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -98,7 +97,7 @@ export default async function DashboardPage() {
                         <CardHeader className="pb-3">
                             <div className="flex justify-between items-start">
                                 <Badge className="bg-green-500 hover:bg-green-600 text-white font-bold uppercase tracking-tighter">
-                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Consolidado
+                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Publicado
                                 </Badge>
                                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                                     <Clock className="h-3 w-3" />
@@ -132,7 +131,7 @@ export default async function DashboardPage() {
                 <div className="h-16 w-16 bg-muted/20 rounded-full flex items-center justify-center mb-4">
                     <Clock className="h-8 w-8 text-muted-foreground/40" />
                 </div>
-                <h3 className="text-lg font-semibold text-muted-foreground">Nenhuma grade consolidada</h3>
+                <h3 className="text-lg font-semibold text-muted-foreground">Nenhuma grade publicada</h3>
                 <p className="text-sm text-muted-foreground/60 max-w-xs mt-1">
                     Após gerar e aprovar um horário no <span className="font-bold">Passo 7</span>, ele aparecerá aqui para consulta rápida.
                 </p>

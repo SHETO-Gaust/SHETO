@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
@@ -68,7 +67,7 @@ export function VisualizadorOperacionalClient({ turnosAtivos }: Props) {
       ) : error ? (
         <div className="flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-xl bg-muted/5">
             <Calendar className="h-16 w-16 text-muted-foreground/20 mb-4" />
-            <h3 className="text-lg font-semibold text-muted-foreground">Sem Grade Consolidada</h3>
+            <h3 className="text-lg font-semibold text-muted-foreground">Sem Grade Publicada</h3>
             <p className="text-sm text-muted-foreground/60 max-w-sm mt-1">
                 Ainda não existe um horário marcado como **"Publicado"** para o turno selecionado.
             </p>

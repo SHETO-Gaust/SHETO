@@ -122,9 +122,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
       startAction(async () => {
           const result = await consolidarHorario(horario.id);
           if (result.error) {
-              toast({ title: 'Erro ao consolidar', description: result.error, variant: 'destructive' });
+              toast({ title: 'Erro ao publicar', description: result.error, variant: 'destructive' });
           } else {
-              toast({ title: 'Horário Consolidado!', description: 'Esta grade agora é a oficial para este turno.' });
+              toast({ title: 'Horário Publicado!', description: 'Esta grade agora é a oficial para este turno.' });
               window.location.reload();
           }
       });
@@ -408,7 +408,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 {horario.nome}
                 {horario.status === 'publicado' ? (
                     <Badge className="bg-green-500 hover:bg-green-600 text-white gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Consolidado
+                        <CheckCircle2 className="h-3 w-3" /> Publicado
                     </Badge>
                 ) : (
                     <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50">
@@ -427,7 +427,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     className="bg-green-600 hover:bg-green-700 text-white shadow-md"
                 >
                     {isActionPending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-                    Consolidar Horário
+                    Publicar Horário
                 </Button>
             ) : (
                 <AlertDialog>

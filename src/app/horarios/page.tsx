@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useTransition } from 'react';
@@ -38,7 +37,7 @@ export default function ConsultaPublicaPage() {
       setHorarios(hResult.data || []);
       
       if (hResult.data?.length === 0) {
-          toast({ title: 'Sem horários ativos', description: 'Esta escola ainda não possui horários consolidados para este período.' });
+          toast({ title: 'Sem horários ativos', description: 'Esta escola ainda não possui horários publicados para este período.' });
       }
     });
   };
@@ -104,7 +103,7 @@ export default function ConsultaPublicaPage() {
             ) : (
                 <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed rounded-xl bg-background">
                     <AlertCircle className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                    <p className="text-lg font-medium text-muted-foreground">Nenhum horário consolidado foi encontrado.</p>
+                    <p className="text-lg font-medium text-muted-foreground">Nenhum horário publicado foi encontrado.</p>
                     <p className="text-sm text-muted-foreground/60 max-w-sm">
                         A unidade escolar pode estar em processo de elaboração das grades ou ainda não realizou a publicação oficial no sistema.
                     </p>
