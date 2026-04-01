@@ -26,7 +26,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { upsertTurma } from './actions';
-import type { Serie, Turno } from '@/lib/types';
+import type { Serie, Turno, TurmaComDados } from '@/lib/types';
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -42,12 +42,14 @@ type Props = {
   setIsOpen: (open: boolean) => void;
   escolaId: string | number;
   series: (Serie & { turno: Pick<Turno, 'id' | 'nome'> | null })[];
-  onTurmaCreated: () => void;
+  turma?: TurmaComDados | null;
+  onTurmaSaved: () => void;
 };
 
-export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurmaCreated }: Props) {
+export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, turma, onTurmaSaved }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const isEdit = !!turma;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -71,14 +73,23 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
 
   useEffect(() => {
     if (isOpen) {
-      document.body.style.pointerEvents = 'auto'; // prevent clicks from being blocked
-      form.reset({
-        escola_id: String(escolaId),
-        nome: '',
-        serie_id: undefined
-      });
+      document.body.style.pointerEvents = 'auto';
+      if (turma) {
+        form.reset({
+          id: turma.id,
+          escola_id: String(escolaId),
+          nome: turma.nome,
+          serie_id: turma.serie_id
+        });
+      } else {
+        form.reset({
+          escola_id: String(escolaId),
+          nome: '',
+          serie_id: undefined
+        });
+      }
     }
-  }, [isOpen, form, escolaId]);
+  }, [isOpen, form, escolaId, turma]);
 
   const onSubmit = async (data: FormValues) => {
     setLoading(true);
@@ -87,12 +98,12 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
       if (result?.error) {
         toast({ title: 'Erro', description: result.error, variant: 'destructive' });
       } else {
-        toast({ title: 'Sucesso', description: 'Turma criada!' });
-        onTurmaCreated();
+        toast({ title: 'Sucesso', description: isEdit ? 'Turma atualizada!' : 'Turma criada!' });
+        onTurmaSaved();
         setIsOpen(false);
       }
     } catch (err) {
-      console.error("❌ Erro fatal ao criar turma:", err);
+      console.error("❌ Erro fatal ao salvar turma:", err);
       toast({ title: 'Erro inesperado', description: 'Ocorreu um erro ao processar sua solicitação.', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -103,8 +114,10 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[425px] pointer-events-auto" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>Nova Turma</DialogTitle>
-          <DialogDescription>Crie uma nova turma a partir de um modelo de série.</DialogDescription>
+          <DialogTitle>{isEdit ? 'Editar Turma' : 'Nova Turma'}</DialogTitle>
+          <DialogDescription>
+            {isEdit ? 'Atualize as informações desta turma.' : 'Crie uma nova turma a partir de um modelo de série.'}
+          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -165,7 +178,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, onTurma
                 disabled={loading}
                 className="min-w-[120px]"
               >
-                {loading ? <Loader2 className="animate-spin" /> : 'Criar Turma'}
+                {loading ? <Loader2 className="animate-spin" /> : isEdit ? 'Salvar Alterações' : 'Criar Turma'}
               </Button>
             </div>
           </form>

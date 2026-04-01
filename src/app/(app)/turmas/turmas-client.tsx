@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import type { TurmaComDados, Serie, ProfessorComDados, ComponenteCurricular, Turno } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Edit, Trash2, Users, BookOpen } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Edit, Trash2, Users, BookOpen, Pencil } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getTurmas } from './actions';
@@ -24,7 +24,7 @@ type Props = {
 };
 
 type SheetType = 'alocacao' | 'carga-prof' | null;
-type DialogType = 'create-turma' | 'delete-turma' | null;
+type DialogType = 'create-turma' | 'edit-turma' | 'delete-turma' | null;
 
 export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
   const [turmas, setTurmas] = useState(initialTurmas);
@@ -48,7 +48,6 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
   }, [turmas]);
 
   const fetchAndUpdateTurmas = async () => {
-    // For simplicity, we just reload the page to get all dependencies recalculated
     window.location.reload();
   };
 
@@ -94,13 +93,22 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
                         {group.turmas.map(turma => {
                             const totalComponentes = turma.serie.componentes.filter(c => (c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0) > 0).length;
                             const componentesEnsalados = turma.professores.length;
-                            const progresso = totalComponentes > 0 ? (componentesEnsalados / totalComponentes) * 100 : 100;
                             const isCompleto = totalComponentes === componentesEnsalados;
 
                             return (
                                 <Card key={turma.id} className="flex flex-col">
-                                    <CardHeader>
-                                        <CardTitle>Turma {turma.nome}</CardTitle>
+                                    <CardHeader className="pb-3">
+                                        <div className="flex justify-between items-start">
+                                            <CardTitle>Turma {turma.nome}</CardTitle>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                                onClick={() => handleOpenDialog(turma, 'edit-turma')}
+                                            >
+                                                <Pencil className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </CardHeader>
                                     <CardContent className="flex-grow space-y-3">
                                         <div>
@@ -127,13 +135,14 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
         </div>
       )}
 
-      {activeDialog === 'create-turma' && (
+      {(activeDialog === 'create-turma' || activeDialog === 'edit-turma') && (
         <CreateTurmaDialog
             isOpen={true}
             setIsOpen={(open) => { if (!open) closeModals(); }}
             escolaId={escolaId}
             series={dependencies.series}
-            onTurmaCreated={fetchAndUpdateTurmas}
+            turma={selectedTurma}
+            onTurmaSaved={fetchAndUpdateTurmas}
         />
       )}
 
