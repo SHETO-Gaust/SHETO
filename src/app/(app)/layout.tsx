@@ -1,8 +1,6 @@
-
 import { redirect } from 'next/navigation';
-import { cookies, headers } from 'next/headers';
+import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import Image from 'next/image';
 import {
   SidebarProvider,
   Sidebar,
@@ -96,7 +94,7 @@ export default async function AppLayout({
         <SidebarHeader>
           <div className="flex items-center justify-center p-2">
             <div className="flex items-center gap-2 text-xl font-bold text-sidebar-foreground">
-                <Clock className="h-6 w-6 text-orange-400" />
+                <Clock className="h-6 w-6 text-primary" />
                 <span>SHE</span>
             </div>
           </div>

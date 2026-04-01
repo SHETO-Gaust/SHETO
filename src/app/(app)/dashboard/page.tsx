@@ -18,7 +18,6 @@ const steps = [
   { step: 6, title: 'Turmas', icon: Users2, href: '/turmas' },
   { step: 7, title: 'Gerar Horário', icon: Clock, href: '/gerarhorarios' },
   { step: 8, title: 'Visualizar Horário', icon: Search, href: '/visualizarhorario' },
-  { step: 9, title: 'Relatórios', icon: BarChart3, href: '/relatorios' },
 ];
 
 export default async function DashboardPage() {
@@ -133,7 +132,7 @@ export default async function DashboardPage() {
                 </div>
                 <h3 className="text-lg font-semibold text-muted-foreground">Nenhuma grade publicada</h3>
                 <p className="text-sm text-muted-foreground/60 max-w-xs mt-1">
-                    Após gerar e aprovar um horário no <span className="font-bold">Passo 7</span>, ele aparecerá aqui para consulta rápida.
+                    Após gerar e publicar um horário no <span className="font-bold">Passo 7</span>, ele aparecerá aqui para consulta rápida.
                 </p>
                 <Link href="/gerarhorarios" className="mt-6">
                     <Button variant="outline" size="sm">Ir para Gerador de Horários</Button>
