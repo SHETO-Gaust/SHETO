@@ -123,6 +123,13 @@ export function EditProfessorSheet({
   };
 
   const onSubmit = async (data: FormValues) => {
+    // Se estiver no primeiro passo, apenas avança (não salva)
+    if (step === 'info') {
+      setStep('restricoes');
+      return;
+    }
+
+    // Se estiver no segundo passo, aí sim salva no banco
     setLoading(true);
     try {
       const result = await upsertProfessor(data);
@@ -147,7 +154,8 @@ export function EditProfessorSheet({
     }
   };
 
-  const nextStep = async () => {
+  const nextStep = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
     const isValid = await form.trigger(['nome_completo', 'nome_horario', 'turnos_ids', 'aulas_disponiveis']);
     if (isValid) setStep('restricoes');
   };
