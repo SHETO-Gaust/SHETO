@@ -106,9 +106,16 @@ export async function getWorkloadReportData(escolaId: string, turnoId: string) {
             t.professores.forEach(p => {
                 if (p.professor_id === prof.id) {
                     const comp = t.serie.componentes.find(c => c.componente_id === p.componente_id);
-                    const aulas = (comp?.aulas_presenciais || 0) + (comp?.aulas_nao_presenciais || 0);
-                    totalAtribuido += aulas;
-                    detalhes.push({ turma: t.nome, serie: t.serie.nome, aulas, disciplina: (comp as any).componente?.nome });
+                    if (comp) {
+                        const aulas = (comp.aulas_presenciais || 0) + (comp.aulas_nao_presenciais || 0);
+                        totalAtribuido += aulas;
+                        detalhes.push({ 
+                            turma: t.nome, 
+                            serie: t.serie.nome, 
+                            aulas, 
+                            disciplina: (comp as any).componente?.nome || 'Disciplina' 
+                        });
+                    }
                 }
             });
         });
