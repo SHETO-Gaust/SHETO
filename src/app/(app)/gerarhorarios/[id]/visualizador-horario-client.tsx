@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho } from '../actions';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,13 +53,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
   const professores = useMemo(() => {
     const map = new Map();
-    // Docentes do horário atual
     horario.aulas.forEach(aula => {
       if (aula.professor_id && !map.has(aula.professor_id)) {
         map.set(aula.professor_id, aula.professor);
       }
     });
-    // Docentes de outros horários publicados (para concatenar)
     horario.outras_aulas_publicadas?.forEach(aula => {
         if (aula.professor_id && !map.has(aula.professor_id)) {
             map.set(aula.professor_id, aula.professor);
@@ -430,18 +429,16 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6 print:pb-2">
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-3">
-                {horario.nome}
-                <div className="print:hidden">
-                    {horario.status === 'publicado' ? (
-                        <Badge className="bg-green-500 hover:bg-green-600 text-white gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Publicado
-                        </Badge>
-                    ) : (
-                        <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50">
-                            Rascunho
-                        </Badge>
-                    )}
-                </div>
+                <span>{horario.nome}</span>
+                {horario.status === 'publicado' ? (
+                    <Badge className="bg-green-500 hover:bg-green-600 text-white gap-1 print:hidden whitespace-nowrap">
+                        <CheckCircle2 className="h-3 w-3" /> Publicado
+                    </Badge>
+                ) : (
+                    <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50 print:hidden whitespace-nowrap">
+                        Rascunho
+                    </Badge>
+                )}
             </CardTitle>
             <CardDescription className="print:text-black">Visualize o horário gerado para as turmas do turno {horario.turno.nome}.</CardDescription>
           </div>
@@ -615,16 +612,4 @@ export function VisualizadorHorarioClient({ horario }: Props) {
       </Card>
     </div>
   );
-}
-
-function Badge({ children, className, variant = 'default' }: any) {
-    return (
-        <span className={cn(
-            "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border",
-            variant === 'default' ? "bg-primary text-primary-foreground border-transparent" : "border-input",
-            className
-        )}>
-            {children}
-        </span>
-    );
 }
