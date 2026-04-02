@@ -32,11 +32,11 @@ export default async function LoginPage() {
       </div>
       <div className="relative hidden bg-muted md:block">
         <Image
-          src="https://picsum.photos/seed/classroom/1200/1800"
-          alt="Sala de aula antiga"
+          src="/img/estudantes.jpeg"
+          alt="Estudantes estudando"
           fill
           className="object-cover"
-          data-ai-hint="classroom empty"
+          data-ai-hint="students studying"
         />
         <div className="absolute inset-0 bg-blue-950/60" />
         <div className="absolute bottom-10 left-10 text-white bg-black/30 p-6 rounded-lg backdrop-blur-sm max-w-md">
