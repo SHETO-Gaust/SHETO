@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -83,42 +84,50 @@
   body {
     @apply bg-background text-foreground;
   }
-  .ProseMirror {
-    outline: none;
-  }
+}
 
-  .ProseMirror > * + * {
-    margin-top: 0.75em;
-  }
-
-  .ProseMirror ul,
-  .ProseMirror ol {
-    padding: 0 1rem;
-  }
-
-  .ProseMirror h1,
-  .ProseMirror h2,
-  .ProseMirror h3 {
-      line-height: 1.1;
-      font-weight: 600;
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 1cm;
   }
   
-  .ProseMirror h1 {
-    font-size: 1.5rem;
-  }
-  .ProseMirror h2 {
-    font-size: 1.25rem;
-  }
-  .ProseMirror h3 {
-    font-size: 1.1rem;
+  body {
+    background: white !important;
+    font-size: 10pt;
   }
 
-  .ProseMirror p {
-      line-height: 1.5;
+  header, footer, nav, aside, button, .print\:hidden, [data-sidebar="sidebar"] {
+    display: none !important;
   }
 
-  .ProseMirror blockquote {
-    padding-left: 1rem;
-    border-left: 2px solid hsl(var(--border));
+  main, .flex-1, .container {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .card {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  th, td {
+    border: 1px solid black !important;
+    padding: 4pt !important;
+  }
+
+  .break-after-page {
+    page-break-after: always;
+  }
+
+  .break-inside-avoid {
+    page-break-inside: avoid;
   }
 }

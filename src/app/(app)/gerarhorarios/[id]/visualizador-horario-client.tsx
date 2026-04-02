@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Users, Calendar, Undo2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Users, Calendar, Undo2, Printer } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho } from '../actions';
@@ -148,7 +148,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     if (pendencias.length === 0) return null;
 
     return (
-        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6">
+        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6 print:hidden">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
             <AlertDescription className="text-xs mt-2">
@@ -185,7 +185,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     const hasAulas = sourceData.some(a => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial' && !isProfessorView) return null;
     if (!hasAulas && isProfessorView) {
-        // Se for visão do professor e não tiver aulas, ainda checamos se tem planejamento marcado
         const hasPlanejamento = DIAS_SEMANA_MAP.some(dia => {
             const prof = professores.find(p => p.id === targetId);
             return prof?.restricoes?.[turnoInfo.id]?.[dia.id]?.hasOwnProperty('planejamento');
@@ -202,19 +201,19 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     };
 
     return (
-        <div className="space-y-3">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <div className={cn("w-2 h-2 rounded-full", tipo === 'presencial' ? "bg-primary" : "bg-orange-400")} />
+        <div className="space-y-3 break-inside-avoid">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black">
+                <div className={cn("w-2 h-2 rounded-full print:hidden", tipo === 'presencial' ? "bg-primary" : "bg-orange-400")} />
                 {label} ({turnoInfo.nome})
             </h3>
-            <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="rounded-xl border bg-card overflow-hidden print:border-black print:rounded-none">
                 <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
-                    <tr className="bg-muted/50 border-b">
-                        <th className="p-3 text-left font-medium border-r w-32">Horário</th>
+                    <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                        <th className="p-3 text-left font-medium border-r w-32 print:border-black">Horário</th>
                         {diasAtivosLocal.map(dia => (
-                        <th key={dia.id} className="p-3 text-center font-medium min-w-[120px]">
+                        <th key={dia.id} className="p-3 text-center font-medium min-w-[120px] print:border-black">
                             {dia.label}
                         </th>
                         ))}
@@ -222,9 +221,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     </thead>
                     <tbody>
                     {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => (
-                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/10 transition-colors h-20">
-                        <td className="p-3 font-medium bg-muted/20 border-r">
-                            <div className="font-semibold text-primary">{aulaIndex + 1}ª Aula</div>
+                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/10 transition-colors h-20 print:border-black">
+                        <td className="p-3 font-medium bg-muted/20 border-r print:border-black print:bg-white">
+                            <div className="font-semibold text-primary print:text-black">{aulaIndex + 1}ª Aula</div>
                             <div className="text-[10px] text-muted-foreground font-normal">
                             {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} às {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
                             </div>
@@ -233,7 +232,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             const aula = getAulaNoSlot(dia.id, aulaIndex);
                             const hole = isInconsistent(dia.id, aulaIndex);
 
-                            // Lógica de Planejamento na Visão do Professor
                             let isPlanning = false;
                             if (isProfessorView && !aula) {
                                 const prof = professores.find(p => p.id === targetId);
@@ -243,28 +241,28 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             }
 
                             return (
-                            <td key={dia.id} className={cn("p-2 text-center border-r last:border-r-0", hole && "bg-destructive/5")}>
+                            <td key={dia.id} className={cn("p-2 text-center border-r last:border-r-0 print:border-black", hole && "bg-destructive/5 print:bg-transparent")}>
                                 {aula ? (
                                 <div className="flex flex-col items-center justify-center gap-1">
                                     <div className={cn(
-                                        "font-bold text-xs leading-tight uppercase px-2 py-1 rounded w-full line-clamp-2 shadow-sm",
-                                        tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20" : "bg-orange-100 text-orange-700 border border-orange-200"
+                                        "font-bold text-xs leading-tight uppercase px-2 py-1 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white",
+                                        tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black"
                                     )}>
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase" title={isProfessorView ? `Turma ${aula.turma.nome}` : aula.professor?.nome_horario}>
+                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase print:text-black" title={isProfessorView ? `Turma ${aula.turma.nome}` : aula.professor?.nome_horario}>
                                         {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
                                     </div>
                                 </div>
                                 ) : isPlanning ? (
                                     <div className="flex flex-col items-center justify-center gap-1">
-                                        <div className="font-bold text-[9px] uppercase px-2 py-1 rounded w-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm opacity-80">
+                                        <div className="font-bold text-[9px] uppercase px-2 py-1 rounded w-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm opacity-80 print:bg-gray-100 print:text-black print:border-black">
                                             Planejamento
                                         </div>
                                     </div>
                                 ) : hole ? (
-                                    <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse">
-                                        <AlertCircle className="h-4 w-4" />
+                                    <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse print:animate-none print:text-gray-300">
+                                        <AlertCircle className="h-4 w-4 print:hidden" />
                                         <span className="text-[9px] font-bold uppercase">Vago</span>
                                     </div>
                                 ) : (
@@ -294,51 +292,41 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
     const turnosEnvolvidos = useMemo(() => {
         const turnosMap = new Map<string, Turno>();
-        
-        // Turno Atual (checa aulas OU planejamento)
         const hasSomethingInCurrent = horario.aulas.some(a => a.professor_id === professorId) || 
                                      (prof?.restricoes && prof.restricoes[horario.turno.id]);
         
-        if (hasSomethingInCurrent) {
-            turnosMap.set(horario.turno.id, horario.turno);
-        }
+        if (hasSomethingInCurrent) turnosMap.set(horario.turno.id, horario.turno);
 
-        // Outros Turnos Publicados
         horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId).forEach(a => {
             const turnoAula = a.horario?.turno;
-            if (turnoAula) {
-                turnosMap.set(turnoAula.id, turnoAula);
-            }
+            if (turnoAula) turnosMap.set(turnoAula.id, turnoAula);
         });
 
-        // Adicionar turnos onde o professor tem planejamento mas nenhuma aula
         if (prof?.restricoes) {
             Object.keys(prof.restricoes).forEach(tId => {
                 const isPlanningInTurno = Object.values(prof.restricoes[tId]).some((d: any) => 
                     Object.values(d).includes('planejamento')
                 );
                 if (isPlanningInTurno && !turnosMap.has(tId)) {
-                    // Tenta encontrar o objeto Turno correspondente
                     const publishedTurno = horario.outras_aulas_publicadas?.find(a => a.horario?.turno_id === tId)?.horario?.turno;
                     if (publishedTurno) turnosMap.set(tId, publishedTurno);
                 }
             });
         }
-
         return Array.from(turnosMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
     }, [professorId, prof]);
 
     return (
-        <div className="space-y-8 pt-4">
-            <div className="flex items-center gap-3 border-b pb-4">
-                <div className="h-12 w-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+        <div className="space-y-8 pt-4 break-after-page">
+            <div className="flex items-center gap-3 border-b pb-4 print:border-black">
+                <div className="h-12 w-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center print:hidden">
                     <User className="h-6 w-6" />
                 </div>
                 <div>
-                    <h2 className="text-xl font-bold tracking-tight">
+                    <h2 className="text-xl font-bold tracking-tight print:text-black">
                         {prof.nome_horario}
                     </h2>
-                    <p className="text-sm text-muted-foreground">Visualizando grade docente global (atuais + publicados + planejamento).</p>
+                    <p className="text-sm text-muted-foreground print:text-black">Grade Docente Global</p>
                 </div>
             </div>
 
@@ -354,13 +342,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     />
                 </div>
             ))}
-
-            {turnosEnvolvidos.length === 0 && (
-                <div className="p-12 text-center border-2 border-dashed rounded-xl bg-muted/10">
-                    <AlertCircle className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-muted-foreground">Este professor não possui aulas ou horários de planejamento alocados.</p>
-                </div>
-            )}
         </div>
     );
   }
@@ -370,26 +351,26 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     
     return (
         <div className="space-y-4 pt-4">
-            <div className="flex items-center gap-3 border-b pb-4">
-                <div className="h-12 w-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+            <div className="flex items-center gap-3 border-b pb-4 print:border-black">
+                <div className="h-12 w-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center print:hidden">
                     <Calendar className="h-6 w-6" />
                 </div>
                 <div>
-                    <h2 className="text-xl font-bold tracking-tight">
+                    <h2 className="text-xl font-bold tracking-tight print:text-black">
                         {dayLabel}{dayId !== 'sabado' && dayId !== 'domingo' ? '-feira' : ''}
                     </h2>
-                    <p className="text-sm text-muted-foreground">Visualizando todas as turmas do turno {turnoInfo.nome}.</p>
+                    <p className="text-sm text-muted-foreground print:text-black">Todas as turmas - Turno {turnoInfo.nome}</p>
                 </div>
             </div>
 
-            <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="rounded-xl border bg-card overflow-hidden print:border-black print:rounded-none">
                 <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                     <thead>
-                    <tr className="bg-muted/50 border-b">
-                        <th className="p-3 text-left font-bold border-r w-32 sticky left-0 bg-muted/50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Horário</th>
+                    <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                        <th className="p-3 text-left font-bold border-r w-32 sticky left-0 bg-muted/50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:relative print:shadow-none print:bg-white print:border-black">Horário</th>
                         {turmas.map(t => (
-                        <th key={t.id} className="p-3 text-center font-bold min-w-[160px] border-r">
+                        <th key={t.id} className="p-3 text-center font-bold min-w-[160px] border-r print:border-black">
                             Turma {t.nome}
                         </th>
                         ))}
@@ -397,9 +378,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     </thead>
                     <tbody>
                     {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => (
-                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/5 transition-colors h-24">
-                        <td className="p-3 font-medium bg-muted/20 border-r sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                            <div className="font-bold text-primary">{aulaIndex + 1}ª Aula</div>
+                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/5 transition-colors h-24 print:border-black">
+                        <td className="p-3 font-medium bg-muted/20 border-r sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] print:relative print:shadow-none print:bg-white print:border-black">
+                            <div className="font-bold text-primary print:text-black">{aulaIndex + 1}ª Aula</div>
                             <div className="text-[10px] text-muted-foreground font-normal">
                             {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} - {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
                             </div>
@@ -413,13 +394,13 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             );
 
                             return (
-                            <td key={turma.id} className="p-2 text-center border-r last:border-r-0">
+                            <td key={turma.id} className="p-2 text-center border-r last:border-r-0 print:border-black">
                                 {aula ? (
                                 <div className="flex flex-col items-center justify-center gap-1.5 h-full">
-                                    <div className="font-bold text-[11px] leading-tight uppercase px-3 py-2 rounded-lg bg-primary/5 text-primary border border-primary/10 w-full shadow-sm">
+                                    <div className="font-bold text-[11px] leading-tight uppercase px-3 py-2 rounded-lg bg-primary/5 text-primary border border-primary/10 w-full shadow-sm print:bg-white print:border-black print:text-black print:shadow-none">
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase" title={aula.professor?.nome_horario}>
+                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase print:text-black" title={aula.professor?.nome_horario}>
                                         {aula.professor?.nome_horario || 'SEM PROF.'}
                                     </div>
                                 </div>
@@ -439,27 +420,38 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     );
   };
 
+  const handlePrint = () => {
+      window.print();
+  }
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6">
+      <Card className="print:border-none print:shadow-none">
+        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6 print:pb-2">
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-3">
                 {horario.nome}
-                {horario.status === 'publicado' ? (
-                    <Badge className="bg-green-500 hover:bg-green-600 text-white gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Publicado
-                    </Badge>
-                ) : (
-                    <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50">
-                        Rascunho
-                    </Badge>
-                )}
+                <div className="print:hidden">
+                    {horario.status === 'publicado' ? (
+                        <Badge className="bg-green-500 hover:bg-green-600 text-white gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Publicado
+                        </Badge>
+                    ) : (
+                        <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50">
+                            Rascunho
+                        </Badge>
+                    )}
+                </div>
             </CardTitle>
-            <CardDescription>Visualize o horário gerado para as turmas do turno {horario.turno.nome}.</CardDescription>
+            <CardDescription className="print:text-black">Visualize o horário gerado para as turmas do turno {horario.turno.nome}.</CardDescription>
           </div>
           
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4 print:hidden">
+            <Button variant="outline" onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir Grade
+            </Button>
+
             {horario.status !== 'publicado' ? (
                 <Button 
                     onClick={handleConsolidar} 
@@ -553,7 +545,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           </div>
         </CardHeader>
         
-        <CardContent>
+        <CardContent className="print:p-0">
           {viewMode === 'single' ? (
             <div className="space-y-8 pt-4">
                 <RenderPendencias turmaId={selectedTurmaId} />
@@ -578,7 +570,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             ) : (
                 <div className="grid grid-cols-1 gap-16 pt-4">
                     {professores.map(prof => (
-                        <div key={prof.id} className="pb-16 border-b last:border-0">
+                        <div key={prof.id} className="pb-16 border-b last:border-0 print:pb-0 print:border-none">
                             <TeacherIndividualView professorId={prof.id} />
                         </div>
                     ))}
@@ -589,17 +581,17 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           ) : (
             <div className="grid grid-cols-1 gap-12 pt-4">
                 {turmas.map(turma => (
-                    <div key={turma.id} className="space-y-6 pb-12 border-b last:border-0">
+                    <div key={turma.id} className="space-y-6 pb-12 border-b last:border-0 print:pb-0 print:border-none print:break-after-page">
                         <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg">
+                            <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg print:hidden">
                                 {turma.nome.charAt(0)}
                             </div>
-                            <h2 className="text-xl font-bold tracking-tight">Turma {turma.nome}</h2>
+                            <h2 className="text-xl font-bold tracking-tight print:text-black">Turma {turma.nome}</h2>
                         </div>
                         
                         <RenderPendencias turmaId={turma.id} />
 
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 print:grid-cols-1">
                             <GradeHoraria 
                                 targetId={turma.id} 
                                 isProfessorView={false}

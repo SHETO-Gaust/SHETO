@@ -9,4 +9,5 @@ export const STEPS = [
   { step: 7, title: 'Gerar Horário', href: '/gerarhorarios' },
   { step: 8, title: 'Visualizar Horário', href: '/visualizarhorario' },
   { step: 9, title: 'Relatórios', href: '/relatorios' },
+  { step: 10, title: 'Substituições', href: '/substituicoes' },
 ];
