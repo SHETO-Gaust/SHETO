@@ -1,17 +1,19 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import type { ChecklistReportData, TurmaComDados, ProfessorComDados } from '@/lib/types';
+import type { ChecklistReportData, TurmaComDados, ProfessorComDados, Turno } from '@/lib/types';
 import { getTurmas } from '@/app/(app)/turmas/actions';
 import { getProfessores } from '@/app/(app)/professores/actions';
 import { getTurnos } from '@/app/(app)/turno/actions';
 
-
+/**
+ * Relatório 1: Checklist de Dados
+ */
 export async function getChecklistReportData(escolaId: string, turnoId: string): Promise<{ data?: ChecklistReportData; error?: string }> {
   const supabase = await createClient();
 
   try {
-    // Parallel data fetching
     const [
       turnosResult,
       niveisEnsinoResult,
@@ -28,33 +30,11 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
       supabase.from('series').select('id, nome, turno_id, series_componentes(aulas_presenciais, aulas_nao_presenciais, componente_id)').eq('escola_id', escolaId),
     ]);
 
-    // Handle potential errors from fetches
     if (turnosResult.error) throw new Error('Falha ao buscar turnos.');
-    if (niveisEnsinoResult.error) throw new Error('Falha ao buscar níveis de ensino.');
-    if (componentesResult.error) throw new Error('Falha ao buscar componentes.');
-    if (professoresResult.error) throw new Error('Falha ao buscar professores.');
-    if (turmasResult.error) throw new Error('Falha ao buscar turmas.');
-    if (seriesResult.error) throw new Error('Falha ao buscar séries.');
-
     const allTurnos = turnosResult.data || [];
     const allProfessores = professoresResult.data || [];
     const allTurmas = turmasResult.data || [];
     const allSeries = seriesResult.data || [];
-    
-    // --- Start of new logic ---
-
-    // Calculate assigned classes for each professor
-    const aulasAtribuidasMap = new Map<string, number>();
-    for (const turma of allTurmas) {
-      for (const prof of turma.professores) {
-        const comp = turma.serie.componentes.find(c => c.componente_id === prof.componente_id);
-        if (comp) {
-          const currentCount = aulasAtribuidasMap.get(prof.professor_id) || 0;
-          const totalAulas = (comp.aulas_presenciais || 0) + (comp.aulas_nao_presenciais || 0);
-          aulasAtribuidasMap.set(prof.professor_id, currentCount + totalAulas);
-        }
-      }
-    }
     
     const selectedTurno = allTurnos.find(t => t.id === turnoId);
     const seriesDoTurno = allSeries.filter(s => s.turno_id === turnoId);
@@ -66,145 +46,118 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     // 1. Turno
     checklist.push({
         id: '1',
-        title: 'Turno',
-        description: 'Verificar os dias e horários dos turnos.',
-        status: selectedTurno && selectedTurno.horarios && selectedTurno.horarios.length > 0 && selectedTurno.dias_semana.length > 0 ? 'ok' : 'error',
-        details: !(selectedTurno && selectedTurno.horarios && selectedTurno.horarios.length > 0) ? 'Horários ou dias da semana não configurados.' : '',
+        title: 'Configuração do Turno',
+        description: 'Verifica se os dias e horários das aulas foram definidos.',
+        status: selectedTurno && selectedTurno.horarios?.length ? 'ok' : 'error',
+        details: !(selectedTurno && selectedTurno.horarios?.length) ? 'Horários das aulas não configurados.' : '',
         link: '/turno'
     });
     
-    // 2. Ensino
+    // 2. Séries
+    const seriesIncompletas = seriesDoTurno.filter(s => {
+        const total = s.series_componentes.reduce((acc, curr) => acc + (curr.aulas_presenciais || 0), 0);
+        const esperado = (selectedTurno?.aulas_por_dia || 0) * (selectedTurno?.dias_semana?.length || 0);
+        return total !== esperado;
+    });
     checklist.push({
         id: '2',
-        title: 'Ensino',
-        description: 'Verificar se os Ensinos foram cadastrados.',
-        status: (niveisEnsinoResult.count ?? 0) > 0 ? 'ok' : 'error',
-        details: (niveisEnsinoResult.count ?? 0) === 0 ? 'Nenhum nível de ensino cadastrado.' : '',
-        link: '/ensino'
-    });
-
-    // 3. Disciplinas
-    checklist.push({
-        id: '3',
-        title: 'Disciplinas',
-        description: 'Verificar se as Disciplinas foram cadastradas.',
-        status: (componentesResult.count ?? 0) > 0 ? 'ok' : 'error',
-        details: (componentesResult.count ?? 0) === 0 ? 'Nenhuma disciplina (componente) cadastrada.' : '',
-        link: '/componentes'
-    });
-
-    // 4. Séries
-    const seriesComProblemaCarga = seriesDoTurno
-        .filter(s => {
-          const totalAulasDistribuidas = s.series_componentes.reduce((sum, item) => sum + (item.aulas_presenciais || 0), 0);
-          const turnoDaSerie = allTurnos.find(t => t.id === s.turno_id);
-          const totalAulasSemanais = (turnoDaSerie?.aulas_por_dia || 0) * (turnoDaSerie?.dias_semana?.length || 0);
-          return totalAulasSemanais !== totalAulasDistribuidas;
-        })
-        .map(s => s.nome);
-
-    checklist.push({
-        id: '4',
-        title: 'Carga Horária Presencial das Séries',
-        description: 'Verificar se a soma das aulas presenciais das disciplinas bate com o total de aulas semanais do turno.',
-        status: seriesComProblemaCarga.length > 0 ? 'warning' : 'ok',
-        details: seriesComProblemaCarga.length > 0 ? `Séries com carga horária inconsistente: ${seriesComProblemaCarga.join(', ')}` : '',
+        title: 'Carga Horária das Séries',
+        description: 'A soma das aulas das disciplinas deve bater com a grade do turno.',
+        status: seriesIncompletas.length > 0 ? 'warning' : 'ok',
+        details: seriesIncompletas.length > 0 ? `Séries com carga divergente: ${seriesIncompletas.map(s => s.nome).join(', ')}` : '',
         link: '/serie'
     });
 
-    // 5. Professores
-    const professoresSemDisciplina = professoresDoTurno.filter(p => p.componentes.length === 0).map(p => p.nome_horario);
-    checklist.push({
-        id: '5',
-        title: 'Habilitação dos Professores',
-        description: 'Verificar se os professores foram associados com suas respectivas disciplinas.',
-        status: professoresSemDisciplina.length > 0 ? 'warning' : 'ok',
-        details: professoresSemDisciplina.length > 0 ? `Professores sem disciplinas associadas: ${professoresSemDisciplina.join(', ')}` : '',
-        link: '/professores'
+    // 3. Ensalamento
+    const turmasIncompletas = turmasDoTurno.filter(t => {
+        const componentesObrigatorios = t.serie.componentes.filter(c => (c.aulas_presenciais || 0) > 0);
+        const alocados = t.professores.map(p => p.componente_id);
+        return componentesObrigatorios.some(c => !alocados.includes(c.componente_id));
     });
-
-    // 6. Turmas e Ensalamento
-    const turmasComEnsalamentoIncompleto = turmasDoTurno
-        .filter(t => {
-            const componentesDaSerie = t.serie.componentes.filter(c => ((c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0)) > 0);
-            const professoresAlocados = t.professores.map(p => p.componente_id);
-            return componentesDaSerie.some(c => !professoresAlocados.includes(c.componente_id));
-        })
-        .map(t => `${t.serie.nome} - ${t.nome}`);
-
     checklist.push({
-        id: '6',
-        title: 'Ensalamento das Turmas',
-        description: 'Verificar nas turmas se os professores estão relacionados com todas as disciplinas.',
-        status: turmasDoTurno.length === 0 ? 'error' : turmasComEnsalamentoIncompleto.length > 0 ? 'warning' : 'ok',
-        details: turmasDoTurno.length === 0 ? 'Nenhuma turma criada para este turno.' : turmasComEnsalamentoIncompleto.length > 0 ? `Turmas com disciplinas sem professor: ${turmasComEnsalamentoIncompleto.join('; ')}` : '',
+        id: '3',
+        title: 'Vínculo de Professores (Ensalamento)',
+        description: 'Todas as disciplinas das turmas devem ter um professor associado.',
+        status: turmasIncompletas.length > 0 ? 'error' : 'ok',
+        details: turmasIncompletas.length > 0 ? `${turmasIncompletas.length} turmas possuem disciplinas sem professor.` : '',
         link: '/turmas'
-    });
-    
-    // 7. Carga Horária dos Professores
-    const overbookedProfessors: string[] = [];
-    if (selectedTurno) {
-        for (const prof of professoresDoTurno) {
-            const aulasAtribuidas = aulasAtribuidasMap.get(prof.id) || 0;
-            if (aulasAtribuidas > prof.aulas_disponiveis) {
-                overbookedProfessors.push(prof.nome_horario);
-            }
-        }
-    }
-    checklist.push({
-        id: '7',
-        title: 'Consistência da Carga Horária',
-        description: 'Verifica se algum professor foi alocado em mais aulas do que sua carga horária disponível permite.',
-        status: overbookedProfessors.length > 0 ? 'error' : 'ok',
-        details: overbookedProfessors.length > 0 ? `Professores com mais aulas do que o disponível: ${overbookedProfessors.join(', ')}` : '',
-        link: '/turmas'
-    });
-    
-    // 8. Relatório de Restrições dos Professores
-    const bottleneckSlots: string[] = [];
-    if (selectedTurno && turmasDoTurno.length > 0) {
-        const numTurmas = turmasDoTurno.length;
-        for (const dia of selectedTurno.dias_semana) {
-            for (let aulaIndex = 0; aulaIndex < selectedTurno.aulas_por_dia; aulaIndex++) {
-                const professorsRestrictedInSlot = professoresDoTurno.filter(p => p.restricoes?.[turnoId]?.[dia]?.[aulaIndex]).length;
-                const availableProfessors = professoresDoTurno.length - professorsRestrictedInSlot;
-                if (availableProfessors < numTurmas) {
-                    bottleneckSlots.push(`${dia.charAt(0).toUpperCase() + dia.slice(1)}, ${aulaIndex + 1}ª aula`);
-                }
-            }
-        }
-    }
-    checklist.push({
-        id: '8',
-        title: 'Conflito de Restrições',
-        description: 'Verifica se a quantidade de professores disponíveis em cada horário é suficiente para a quantidade de turmas.',
-        status: bottleneckSlots.length > 0 ? 'error' : 'ok',
-        details: bottleneckSlots.length > 0 ? `Conflito de disponibilidade. Não há professores suficientes para todas as turmas nos seguintes horários: ${bottleneckSlots.join('; ')}` : '',
-        link: '/professores'
     });
 
     return { data: checklist };
   } catch (error: any) {
-    console.error('Error fetching checklist report data:', error);
-    return { error: error.message || 'Não foi possível buscar os dados do relatório.' };
+    return { error: error.message };
   }
 }
 
-// Placeholder actions for other reports
-export async function getDadosInstituicao(escolaId: string, turnoId: string) {
-    // In the future, this will fetch detailed data.
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return { data: { message: `Dados da Instituição para o turno ${turnoId} (Em construção)` }};
+/**
+ * Relatório 2: Carga Horária Docente (Audit)
+ */
+export async function getWorkloadReportData(escolaId: string, turnoId: string) {
+    const { data: turmas } = await getTurmas(escolaId);
+    const { data: professores } = await getProfessores(escolaId);
+
+    if (!turmas || !professores) return { error: 'Dados insuficientes.' };
+
+    const report = professores.map(prof => {
+        let totalAtribuido = 0;
+        const detalhes: any[] = [];
+
+        turmas.forEach(t => {
+            t.professores.forEach(p => {
+                if (p.professor_id === prof.id) {
+                    const comp = t.serie.componentes.find(c => c.componente_id === p.componente_id);
+                    const aulas = (comp?.aulas_presenciais || 0) + (comp?.aulas_nao_presenciais || 0);
+                    totalAtribuido += aulas;
+                    detalhes.push({ turma: t.nome, serie: t.serie.nome, aulas, disciplina: (comp as any).componente?.nome });
+                }
+            });
+        });
+
+        return {
+            id: prof.id,
+            nome: prof.nome_horario,
+            disponivel: prof.aulas_disponiveis,
+            atribuido: totalAtribuido,
+            saldo: prof.aulas_disponiveis - totalAtribuido,
+            detalhes
+        };
+    }).sort((a, b) => a.nome.localeCompare(b.nome));
+
+    return { data: report };
 }
 
-export async function getRestricoesProfessores(escolaId: string, turnoId: string) {
-    // In the future, this will fetch professor restrictions.
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return { data: { message: `Restrições dos Professores para o turno ${turnoId} (Em construção)` }};
-}
+/**
+ * Relatório 3: Mapa de Gargalos (Heatmap de Disponibilidade)
+ */
+export async function getBottleneckReportData(escolaId: string, turnoId: string) {
+    const supabase = await createClient();
+    const { data: turno } = await supabase.from('turnos').select('*').eq('id', turnoId).single();
+    const { data: turmas } = await supabase.from('turmas').select('id, serie:series(turno_id)').filter('serie.turno_id', 'eq', turnoId);
+    const { data: professores } = await getProfessores(escolaId);
 
-export async function getHorariosTurmas(escolaId: string, turnoId: string) {
-    // In the future, this will fetch generated schedules.
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return { data: { message: `Horários das Turmas para o turno ${turnoId} (Em construção)` }};
+    if (!turno || !professores) return { error: 'Dados insuficientes.' };
+
+    const numTurmas = turmas?.length || 0;
+    const dias = turno.dias_semana;
+    const aulas = turno.aulas_por_dia;
+
+    const heatmap = dias.map((dia: string) => {
+        const slots = Array.from({ length: aulas }).map((_, idx) => {
+            // Conta quantos professores estão disponíveis (não tem bloqueio nem planejamento)
+            const disponiveis = professores.filter(p => {
+                const r = p.restricoes?.[turnoId]?.[dia]?.[idx];
+                return r !== 'indisponivel' && r !== 'planejamento' && p.turnos_ids.includes(turnoId);
+            }).length;
+
+            return {
+                aula: idx + 1,
+                disponiveis,
+                necessarios: numTurmas,
+                conflito: disponiveis < numTurmas
+            };
+        });
+        return { dia, slots };
+    });
+
+    return { data: { heatmap, numTurmas, turnoNome: turno.nome } };
 }

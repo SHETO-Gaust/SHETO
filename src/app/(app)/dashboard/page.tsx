@@ -1,3 +1,4 @@
+
 import { StepCard } from '@/components/dashboard/step-card';
 import { Sun, GraduationCap, BookOpen, Users, Layers, Users2, Clock, BarChart3, Calendar, ArrowRight, CheckCircle2, Search } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -18,6 +19,7 @@ const steps = [
   { step: 6, title: 'Turmas', icon: Users2, href: '/turmas' },
   { step: 7, title: 'Gerar Horário', icon: Clock, href: '/gerarhorarios' },
   { step: 8, title: 'Visualizar Horário', icon: Search, href: '/visualizarhorario' },
+  { step: 9, title: 'Relatórios', icon: BarChart3, href: '/relatorios' },
 ];
 
 export default async function DashboardPage() {
