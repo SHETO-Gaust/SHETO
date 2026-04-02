@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
@@ -36,7 +37,7 @@ export function VisualizadorOperacionalClient({ turnosAtivos }: Props) {
 
   return (
     <div className="space-y-6">
-      <Card className="bg-muted/30 border-none shadow-none">
+      <Card className="bg-muted/30 border-none shadow-none print:hidden">
         <CardHeader className="pb-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">

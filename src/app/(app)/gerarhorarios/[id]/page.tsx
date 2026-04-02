@@ -25,14 +25,14 @@ export default async function DetalhesHorarioPage({ params }: { params: { id: st
               <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>
             </Link>
           </CardContent>
-        </Card>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between print:hidden">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight">{horario.nome}</h1>
           <p className="text-sm text-muted-foreground">

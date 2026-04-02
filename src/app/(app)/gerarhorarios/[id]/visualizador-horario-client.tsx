@@ -426,7 +426,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   return (
     <div className="space-y-6">
       <Card className="print:border-none print:shadow-none">
-        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6 print:pb-2">
+        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6 print:hidden">
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-3">
                 <span>{horario.nome}</span>
@@ -567,7 +567,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             ) : (
                 <div className="grid grid-cols-1 gap-16 pt-4">
                     {professores.map(prof => (
-                        <div key={prof.id} className="pb-16 border-b last:border-0 print:pb-0 print:border-none">
+                        <div key={prof.id} className="pb-16 border-b last:border-0 print:pb-0 print:border-none print:break-after-page">
                             <TeacherIndividualView professorId={prof.id} />
                         </div>
                     ))}
