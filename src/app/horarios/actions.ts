@@ -61,3 +61,58 @@ export async function getHorariosPublicos(escolaId: string): Promise<{ data?: Ho
 
     return { data: resultados };
 }
+
+// MELHORIA ITEM 3: Buscar horários consolidados por professor
+export async function getGradeProfessorPublica(escolaId: string, nomeProfessor: string): Promise<{ data?: any, error?: string }> {
+    const supabase = await createClient();
+
+    // 1. Achar o professor na escola
+    const { data: prof } = await supabase
+        .from('professores')
+        .select('id, nome_horario, restricoes')
+        .eq('escola_id', escolaId)
+        .ilike('nome_horario', `%${nomeProfessor}%`)
+        .limit(1)
+        .single();
+
+    if (!prof) return { error: 'Professor não encontrado nesta unidade.' };
+
+    // 2. Buscar todas as aulas publicadas deste professor nesta escola
+    const { data: aulas } = await supabase
+        .from('horario_aulas')
+        .select(`
+            *,
+            componente:componentes_curriculares(id, nome, sigla),
+            turma:turmas(id, nome),
+            horario:horarios!inner(id, status, turno_id, turno:turnos(*))
+        `)
+        .eq('professor_id', prof.id)
+        .eq('horarios.status', 'publicado')
+        .eq('horarios.escola_id', escolaId);
+
+    if (!aulas || aulas.length === 0) return { error: 'Este professor não possui aulas em grades publicadas no momento.' };
+
+    // 3. Agrupar por turno para o visualizador
+    const turnosMap = new Map<string, any>();
+    aulas.forEach(a => {
+        const tId = a.horario.turno_id;
+        if (!turnosMap.has(tId)) {
+            turnosMap.set(tId, {
+                horario_id: a.horario_id,
+                turno: a.horario.turno,
+                aulas: []
+            });
+        }
+        turnosMap.get(tId).aulas.push({
+            ...a,
+            professor: prof
+        });
+    });
+
+    return { 
+        data: {
+            professor: prof,
+            turnos: Array.from(turnosMap.values())
+        }
+    };
+}

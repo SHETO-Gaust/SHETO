@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useTransition } from 'react';
@@ -98,17 +99,7 @@ export default function ConsultaPublicaPage() {
                 </CardContent>
             </Card>
 
-            {horarios.length > 0 ? (
-                <HorariosPublicClient horarios={horarios} />
-            ) : (
-                <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed rounded-xl bg-background">
-                    <AlertCircle className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                    <p className="text-lg font-medium text-muted-foreground">Nenhum horário publicado foi encontrado.</p>
-                    <p className="text-sm text-muted-foreground/60 max-w-sm">
-                        A unidade escolar pode estar em processo de elaboração das grades ou ainda não realizou a publicação oficial no sistema.
-                    </p>
-                </div>
-            )}
+            <HorariosPublicClient horarios={horarios} escolaId={escola.id} />
           </div>
         )}
       </div>

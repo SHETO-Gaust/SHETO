@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, GripVertical } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { consolidarHorario, reverterParaRascunho } from '../actions';
+import { consolidarHorario, reverterParaRascunho, swapAulasManualmente } from '../actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -51,6 +51,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   const [itemsPerPage, setItemsPerPage] = useState<1 | 2>(1);
   const { toast } = useToast();
 
+  // Estados para Drag & Drop
+  const [draggedAula, setDraggedDraggedAula] = useState<{ id: string, dia: string, index: number, professorId: string | null } | null>(null);
+
   const turmas = useMemo(() => {
     const map = new Map();
     horario.aulas.forEach(aula => {
@@ -90,6 +93,62 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     if (professores.length > 0 && !selectedProfessorId) setSelectedProfessorId(professores[0].id);
     if (diasAtivos.length > 0 && !selectedDayId) setSelectedDayId(diasAtivos[0].id);
   }, [turmas, professores, diasAtivos]);
+
+  // Funções de Drag and Drop
+  const handleDragStart = (aula: any) => {
+    if (horario.status === 'publicado') return;
+    setDraggedDraggedAula({
+        id: aula.id,
+        dia: aula.dia_semana,
+        index: aula.aula_index,
+        professorId: aula.professor_id
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (diaDestino: string, indexDestino: number, targetAulaId?: string) => {
+    if (!draggedAula || horario.status === 'publicado') return;
+    
+    // Se soltou no mesmo lugar, cancela
+    if (draggedAula.dia === diaDestino && draggedAula.index === indexDestino) {
+        setDraggedDraggedAula(null);
+        return;
+    }
+
+    // MELHORIA ITEM 1: Validação de conflitos em tempo real (simplificada no cliente)
+    const hasConflict = horario.aulas.some(a => 
+        a.id !== draggedAula.id &&
+        a.professor_id === draggedAula.professorId && 
+        a.dia_semana === diaDestino && 
+        a.aula_index === indexDestino &&
+        a.tipo === 'presencial'
+    );
+
+    if (hasConflict) {
+        toast({ title: 'Conflito de Professor!', description: 'O professor já tem aula neste horário em outra turma.', variant: 'destructive' });
+        setDraggedDraggedAula(null);
+        return;
+    }
+
+    startAction(async () => {
+        const result = await swapAulasManualmente(
+            draggedAula.id, draggedAula.dia, draggedAula.index,
+            targetAulaId || null, diaDestino, indexDestino
+        );
+        
+        if (result.error) {
+            toast({ title: 'Erro ao mover', description: result.error, variant: 'destructive' });
+        } else {
+            toast({ title: 'Grade Ajustada!', description: 'A alteração manual foi salva com sucesso.' });
+            window.location.reload();
+        }
+    });
+
+    setDraggedDraggedAula(null);
+  };
 
   const getPendencias = (turmaId: string) => {
     const config = horario.turmas_config?.find(c => c.id === turmaId);
@@ -152,31 +211,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
       });
   }
 
-  const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
-    const pendencias = getPendencias(turmaId);
-    if (pendencias.length === 0) return null;
-
-    return (
-        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6 print:hidden">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
-            <AlertDescription className="text-xs mt-2">
-                <div className="flex flex-wrap gap-3">
-                    {pendencias.map((p, i) => (
-                        <div key={i} className="bg-destructive/10 text-destructive px-3 py-2 rounded font-medium border border-destructive/20 flex flex-col items-center text-center min-w-[120px] shadow-sm">
-                            <span className="font-bold text-[11px] leading-tight">{p.componente}</span>
-                            <span className="text-[10px] opacity-90">{p.missing} aula(s) {p.tipo}</span>
-                            <div className="mt-1.5 pt-1 border-t border-destructive/10 w-full text-[9px] uppercase font-bold text-destructive/70">
-                                {p.professor}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </AlertDescription>
-        </Alert>
-    );
-  };
-
   const GradeHoraria = ({ targetId, isProfessorView, tipo, label, turnoInfo, dataset }: { targetId: string, isProfessorView: boolean, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null, dataset?: any[] }) => {
     if (!turnoInfo) return null;
 
@@ -193,14 +227,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
     const hasAulas = sourceData.some(a => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial' && !isProfessorView) return null;
-    if (!hasAulas && isProfessorView) {
-        const hasPlanejamento = DIAS_SEMANA_MAP.some(dia => {
-            const prof = professores.find(p => p.id === targetId);
-            return prof?.restricoes?.[turnoInfo.id]?.[dia.id]?.hasOwnProperty('planejamento');
-        });
-        if (!hasPlanejamento) return null;
-    }
-
+    
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
 
     const isInconsistent = (dia: string, index: number) => {
@@ -234,44 +261,51 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         <td className="p-2 print:p-1 font-medium bg-muted/20 border-r print:border-black print:bg-white">
                             <div className="font-bold text-primary print:text-black print:text-[8px]">{aulaIndex + 1}ª Aula</div>
                             <div className="text-[9px] text-muted-foreground font-normal print:text-[7px]">
-                            {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} às {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
+                            {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} - {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
                             </div>
                         </td>
                         {diasAtivosLocal.map(dia => {
                             const aula = getAulaNoSlot(dia.id, aulaIndex);
                             const hole = isInconsistent(dia.id, aulaIndex);
 
-                            let isPlanning = false;
-                            if (isProfessorView && !aula) {
-                                const prof = professores.find(p => p.id === targetId);
-                                if (prof?.restricoes?.[turnoInfo.id]?.[dia.id]?.[aulaIndex] === 'planejamento') {
-                                    isPlanning = true;
-                                }
-                            }
-
                             return (
-                            <td key={dia.id} className={cn("p-1 text-center border-r last:border-r-0 print:border-black", hole && "bg-destructive/5 print:bg-transparent")}>
+                            <td 
+                                key={dia.id} 
+                                className={cn(
+                                    "p-1 text-center border-r last:border-r-0 print:border-black transition-all", 
+                                    hole && "bg-destructive/5 print:bg-transparent",
+                                    !isProfessorView && !isActionPending && horario.status !== 'publicado' && tipo === 'presencial' && "cursor-pointer hover:bg-primary/5"
+                                )}
+                                onDragOver={handleDragOver}
+                                onDrop={() => handleDrop(dia.id, aulaIndex, aula?.id)}
+                            >
                                 {aula ? (
-                                <div className="flex flex-col items-center justify-center gap-0.5">
+                                <div 
+                                    className="group relative flex flex-col items-center justify-center gap-0.5"
+                                    draggable={!isProfessorView && horario.status !== 'publicado' && tipo === 'presencial'}
+                                    onDragStart={() => handleDragStart(aula)}
+                                >
                                     <div className={cn(
-                                        "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white print:text-[8px]",
-                                        tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black"
+                                        "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white print:text-[8px] transition-transform",
+                                        tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black",
+                                        draggedAula?.id === aula.id && "opacity-20 scale-95"
                                     )}>
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
-                                    <div className="text-[8px] text-muted-foreground font-bold truncate w-full uppercase print:text-black print:text-[7px]" title={isProfessorView ? `Turma ${aula.turma.nome}` : aula.professor?.nome_horario}>
+                                    <div className="text-[8px] text-muted-foreground font-bold truncate w-full uppercase print:text-black print:text-[7px]">
                                         {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
                                     </div>
-                                </div>
-                                ) : isPlanning ? (
-                                    <div className="flex flex-col items-center justify-center gap-1">
-                                        <div className="font-bold text-[8px] uppercase px-1 py-0.5 rounded w-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm opacity-80 print:bg-gray-100 print:text-black print:border-black print:text-[7px]">
-                                            Planejamento
+                                    
+                                    {!isProfessorView && horario.status !== 'publicado' && tipo === 'presencial' && (
+                                        <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity print:hidden">
+                                            <div className="bg-primary text-white rounded-full p-0.5 shadow-lg">
+                                                <GripVertical className="h-2 w-2" />
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
+                                </div>
                                 ) : hole ? (
                                     <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse print:animate-none print:text-gray-300">
-                                        <AlertCircle className="h-3 w-3 print:hidden" />
                                         <span className="text-[8px] font-bold uppercase print:text-[7px]">Vago</span>
                                     </div>
                                 ) : (
@@ -409,7 +443,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                     <div className="font-bold text-[11px] leading-tight uppercase px-3 py-2 rounded-lg bg-primary/5 text-primary border border-primary/10 w-full shadow-sm print:bg-white print:border-black print:text-black print:shadow-none print:text-[8px] print:px-1 print:py-0.5">
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase print:text-black print:text-[7px]" title={aula.professor?.nome_horario}>
+                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase print:text-black print:text-[7px]">
                                         {aula.professor?.nome_horario || 'SEM PROF.'}
                                     </div>
                                 </div>
@@ -447,6 +481,16 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
   return (
     <div className="space-y-6">
+      {horario.status !== 'publicado' && (
+          <Alert className="bg-primary/5 border-primary/20 print:hidden">
+              <Move className="h-4 w-4 text-primary" />
+              <AlertTitle className="text-xs font-bold uppercase">Edição Manual Ativada</AlertTitle>
+              <AlertDescription className="text-xs">
+                  Você pode **clicar e arrastar** as disciplinas na "Grade Regular" para trocar os horários manualmente. O sistema validará conflitos de professor globalmente.
+              </AlertDescription>
+          </Alert>
+      )}
+
       <Card className="print:border-none print:shadow-none">
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6 print:hidden">
           <div className="space-y-1">
