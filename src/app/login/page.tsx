@@ -32,7 +32,7 @@ export default async function LoginPage() {
       </div>
       <div className="relative hidden bg-muted md:block">
         <Image
-          src="/img/FPerin.png"
+          src="/img/ALFPC.png"
           alt="Fachada Escola"
           fill
           className="object-cover"
