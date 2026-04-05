@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import type { Profile, Escola } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Building2, Loader2 } from 'lucide-react';
@@ -17,16 +18,21 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
     const { toast } = useToast();
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const [mounted, setMounted] = useState(false);
 
-    // The currently active school. Defaults to user's own school from the server.
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const [currentSchoolId, setCurrentSchoolId] = useState(userProfile.ue || '');
     
-    // When an admin selects a new school from the dropdown.
     const handleSchoolChange = async (newSchoolId: string) => {
         const supabase = createClient();
+        const ueValue = newSchoolId === 'null' ? null : newSchoolId;
+        
         const { error } = await supabase
             .from('profiles')
-            .update({ ue: newSchoolId === 'null' ? null : newSchoolId })
+            .update({ ue: ueValue })
             .eq('id', userProfile.id);
 
         if (error) {
@@ -46,10 +52,11 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
         }
     };
     
-    const currentSchool = allEscolas.find(s => s.id === currentSchoolId) || (userProfile.escolas as Escola | null);
+    if (!mounted) return null;
+
+    const currentSchool = allEscolas.find(s => s.id === (currentSchoolId === 'null' ? null : currentSchoolId));
     const currentSchoolName = currentSchool?.escolar || 'Nenhuma escola selecionada';
 
-    // If user is an admin, show a dropdown to switch schools.
     if (userProfile.role === 'admin') {
         return (
             <div className="flex items-center gap-4 w-full">
@@ -80,12 +87,11 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
         );
     }
     
-    // For non-admins, just display their associated school.
     return (
         <div className="flex items-center gap-4 p-2">
              <div className="flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-muted-foreground" />
-                <span className="font-medium text-sm text-foreground truncate">{currentSchoolName}</span>
+                <span className="font-medium text-sm text-foreground truncate uppercase">{currentSchoolName}</span>
             </div>
              {currentSchool && (
                  <div className="hidden lg:flex items-center gap-x-4 gap-y-1 text-xs text-muted-foreground border-l pl-4 flex-wrap">

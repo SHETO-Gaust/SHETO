@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import type { Profile, Escola } from '@/lib/types';
 import {
   Table,
@@ -12,9 +13,11 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Edit, UserPlus } from 'lucide-react';
+import { Edit, UserPlus, UserX, UserCheck, Loader2 } from 'lucide-react';
 import { EditUserPermissionsSheet } from './edit-permissions-sheet';
 import { CreateUserSheet } from './create-user-sheet';
+import { toggleUserStatus } from './actions';
+import { useToast } from '@/hooks/use-toast';
 
 const allModules = [
   { id: 'dashboard', label: 'Painel', description: 'Acesso padrão ao painel inicial.' },
@@ -29,6 +32,8 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
     const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
     const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
     const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
+    const [isPending, startTransition] = useTransition();
+    const { toast } = useToast();
 
     useEffect(() => {
         setUsers(initialUsers);
@@ -42,6 +47,18 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
     const handleUpdate = (updatedUser: Profile) => {
         setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
     }
+
+    const handleToggleStatus = (user: Profile) => {
+        startTransition(async () => {
+            const result = await toggleUserStatus(user.id, user.active);
+            if (result.error) {
+                toast({ title: 'Erro', description: result.error, variant: 'destructive' });
+            } else {
+                toast({ title: user.active ? 'Usuário Suspenso' : 'Usuário Reativado' });
+                handleUpdate({ ...user, active: !user.active });
+            }
+        });
+    };
 
     return (
         <>
@@ -59,13 +76,13 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
                             <TableHead>Email</TableHead>
                             <TableHead>Função</TableHead>
                             <TableHead>Escola</TableHead>
-                            <TableHead>Módulos</TableHead>
+                            <TableHead>Status</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {users.map((user) => (
-                            <TableRow key={user.id}>
+                            <TableRow key={user.id} className={!user.active ? 'opacity-60 bg-muted/20' : ''}>
                                 <TableCell className="font-medium">{user.name || '-'}</TableCell>
                                 <TableCell>{user.email}</TableCell>
                                 <TableCell>
@@ -73,28 +90,29 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
                                         {user.role}
                                     </Badge>
                                 </TableCell>
-                                <TableCell>{user.escolas?.escolar || 'N/A'}</TableCell>
-                                <TableCell className="max-w-xs">
-                                   <div className="flex flex-wrap gap-1">
-                                    {user.role === 'admin' ? (
-                                        <Badge>Acesso Total</Badge>
-                                    ) : (
-                                        Array.isArray(user.modules) && user.modules.length > 0 ? (
-                                            user.modules.map(mod => {
-                                                const moduleLabel = allModules.find(m => m.id === mod)?.label || mod;
-                                                return <Badge key={mod} variant="outline">{moduleLabel}</Badge>
-                                            })
-                                        ) : (
-                                            <span className="text-xs text-muted-foreground">Nenhum</span>
-                                        )
-                                    )}
-                                   </div>
+                                <TableCell className="text-xs uppercase font-medium">{user.escolas?.escolar || 'N/A'}</TableCell>
+                                <TableCell>
+                                    <Badge variant={user.active ? 'outline' : 'destructive'} className={user.active ? 'text-green-600 border-green-200 bg-green-50' : ''}>
+                                        {user.active ? 'Ativo' : 'Suspenso'}
+                                    </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                    <Button variant="outline" size="sm" onClick={() => handleEditClick(user)}>
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        Gerenciar
-                                    </Button>
+                                    <div className="flex items-center justify-end gap-2">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            onClick={() => handleToggleStatus(user)}
+                                            disabled={isPending}
+                                            className={user.active ? 'text-destructive hover:text-destructive' : 'text-green-600 hover:text-green-600'}
+                                        >
+                                            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : user.active ? <UserX className="h-4 w-4 mr-1" /> : <UserCheck className="h-4 w-4 mr-1" />}
+                                            {user.active ? 'Suspender' : 'Ativar'}
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={() => handleEditClick(user)}>
+                                            <Edit className="mr-2 h-4 w-4" />
+                                            Permissões
+                                        </Button>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}

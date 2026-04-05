@@ -1,3 +1,4 @@
+
 'use server';
 
 import { createClient, createAdminClient } from '@/lib/supabase/server';
@@ -12,7 +13,7 @@ export async function getUsers(): Promise<Profile[]> {
     const { data, error } = await supabase
         .from('profiles')
         .select('*, escolas(id, escolar)')
-        .order('name', { ascending: true });
+        .order('created_at', { ascending: false });
 
     if (error) {
         console.error('Error fetching users:', error);
@@ -35,6 +36,19 @@ export async function updateUserPermissions(userId: string, modules: string[], r
         return { error: 'Ocorreu um erro ao atualizar as permissões do usuário.' };
     }
 
+    revalidatePath('/usuarios');
+    return { success: true };
+}
+
+export async function toggleUserStatus(userId: string, currentStatus: boolean) {
+    const supabase = await createClient();
+    const { error } = await supabase
+        .from('profiles')
+        .update({ active: !currentStatus })
+        .eq('id', userId);
+
+    if (error) return { error: 'Erro ao alterar status do usuário.' };
+    
     revalidatePath('/usuarios');
     return { success: true };
 }
@@ -66,7 +80,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: email,
         password: password,
-        email_confirm: true, // Auto-confirma o usuário
+        email_confirm: true,
         user_metadata: { name: name }
     });
 
@@ -82,55 +96,58 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         return { error: 'Não foi possível criar o usuário, tente novamente.' };
     }
 
-    // UPDATE a profile ao invés de INSERT, pois um trigger no Supabase já deve ter criado um.
+    // Usar UPSERT para garantir que o perfil exista mesmo se o trigger falhar
     const { error: profileError } = await supabaseAdmin
         .from('profiles')
-        .update({
+        .upsert({
+            id: authData.user.id,
             name: name,
             role: role,
             modules: modules,
-            email: email, // Garante que o email esteja na tabela de perfis também
-            ue: ue,
-        })
-        .eq('id', authData.user.id);
+            email: email,
+            ue: ue === 'null' ? null : ue,
+            active: true,
+        });
 
     if (profileError) {
-        console.error('Error updating profile:', profileError);
-        // Desfaz a criação do usuário na autenticação para evitar usuários órfãos
+        console.error('Error creating/updating profile:', profileError);
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         return { error: `Ocorreu um erro ao criar o perfil do usuário: ${profileError.message}` };
     }
 
-    // --- ENVIO DE E-MAIL DE BOAS VINDAS ---
-    if (ue) {
-        const { data: escola } = await supabaseAdmin
-            .from('escolas')
-            .select('*')
-            .eq('id', ue)
-            .single();
+    // Envio de email
+    try {
+        if (ue && ue !== 'null') {
+            const { data: escola } = await supabaseAdmin
+                .from('escolas')
+                .select('*')
+                .eq('id', ue)
+                .single();
 
-        if (escola) {
+            if (escola) {
+                await sendWelcomeEmail({
+                    to: email,
+                    name: name || 'Usuário(a)',
+                    password: password,
+                    schoolName: escola.escolar,
+                    regional: escola.regional || 'Não informada',
+                    city: escola.cidade || 'Não informada',
+                    inep: escola.inep || 'N/A'
+                });
+            }
+        } else if (role === 'admin') {
             await sendWelcomeEmail({
                 to: email,
-                name: name || 'Usuário(a)',
+                name: name || 'Administrador(a)',
                 password: password,
-                schoolName: escola.escolar,
-                regional: escola.regional || 'Não informada',
-                city: escola.cidade || 'Não informada',
-                inep: escola.inep || 'N/A'
+                schoolName: 'Administração Central',
+                regional: 'Seduc Sede',
+                city: 'Palmas',
+                inep: 'Global'
             });
         }
-    } else if (role === 'admin') {
-        // Para admins globais sem escola vinculada
-        await sendWelcomeEmail({
-            to: email,
-            name: name || 'Administrador(a)',
-            password: password,
-            schoolName: 'Administração Central',
-            regional: 'Seduc Sede',
-            city: 'Palmas',
-            inep: 'Global'
-        });
+    } catch (mailErr) {
+        console.warn('Usuário criado mas erro ao enviar email:', mailErr);
     }
 
     revalidatePath('/usuarios');

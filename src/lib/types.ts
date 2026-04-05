@@ -16,6 +16,7 @@ export type Profile = {
   role?: ProfileRole;
   modules?: string[];
   ue?: string | null; // uuid da escola
+  active: boolean;
   escolas?: Partial<Escola> | null;
   created_at: string; // timestamp with time zone
   updated_at: string; // timestamp with time zone
