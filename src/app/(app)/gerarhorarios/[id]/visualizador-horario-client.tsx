@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, GripVertical } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho, swapAulasManualmente } from '../actions';
@@ -50,8 +50,15 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   const [itemsPerPage, setItemsPerPage] = useState<1 | 2>(1);
   const { toast } = useToast();
 
-  const [draggedAula, setDraggedDraggedAula] = useState<{ id: string, dia: string, index: number, professorId: string | null } | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ dia: string, index: number } | null>(null);
+  // NOVO ESTADO PARA SELEÇÃO MANUAL (SUBSTITUI DRAG & DROP)
+  const [selectedSlot, setSelectedSlot] = useState<{ 
+    id: string, 
+    dia: string, 
+    index: number, 
+    professorId: string | null,
+    componenteNome: string,
+    turmaId: string
+  } | null>(null);
 
   const turmas = useMemo(() => {
     const map = new Map();
@@ -155,42 +162,39 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     );
   };
 
-  const handleDragStart = (aula: any) => {
-    if (horario.status === 'publicado') return;
-    setDraggedDraggedAula({
-        id: aula.id,
-        dia: aula.dia_semana,
-        index: aula.aula_index,
-        professorId: aula.professor_id
-    });
-  };
+  // NOVA LÓGICA DE MANIPULAÇÃO POR CLIQUE
+  const handleCellClick = (diaDestino: string, indexDestino: number, targetAula?: any) => {
+    if (horario.status === 'publicado' || isActionPending) return;
 
-  const handleDragOver = (e: React.DragEvent, dia: string, index: number) => {
-    e.preventDefault();
-    if (dropTarget?.dia !== dia || dropTarget?.index !== index) {
-        setDropTarget({ dia, index });
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDropTarget(null);
-  };
-
-  const handleDrop = (diaDestino: string, indexDestino: number, targetAulaId?: string) => {
-    setDropTarget(null);
-    if (!draggedAula || horario.status === 'publicado') return;
-    
-    if (draggedAula.dia === diaDestino && draggedAula.index === indexDestino) {
-        setDraggedDraggedAula(null);
+    // 1. Se não houver nada selecionado, tenta selecionar a aula clicada
+    if (!selectedSlot) {
+        if (targetAula) {
+            setSelectedSlot({
+                id: targetAula.id,
+                dia: targetAula.dia_semana,
+                index: targetAula.aula_index,
+                professorId: targetAula.professor_id,
+                componenteNome: targetAula.componente.sigla || targetAula.componente.nome,
+                turmaId: targetAula.turma_id
+            });
+        }
         return;
     }
 
-    // 1. Validar conflito do professor que está sendo arrastado no destino
-    // Excluímos a aula de destino se ela for sair de lá (swap)
+    // 2. Se já houver algo selecionado e clicar na mesma coisa, cancela
+    if (selectedSlot.dia === diaDestino && selectedSlot.index === indexDestino) {
+        setSelectedSlot(null);
+        return;
+    }
+
+    // 3. Processar a troca/mudança
+    const targetAulaId = targetAula?.id || null;
+
+    // Validações de conflito
     const hasConflictOrigemNoDestino = horario.aulas.some(a => 
-        a.id !== draggedAula.id &&
+        a.id !== selectedSlot.id &&
         (targetAulaId ? a.id !== targetAulaId : true) &&
-        a.professor_id === draggedAula.professorId && 
+        a.professor_id === selectedSlot.professorId && 
         a.dia_semana === diaDestino && 
         a.aula_index === indexDestino &&
         a.tipo === 'presencial'
@@ -198,44 +202,42 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
     if (hasConflictOrigemNoDestino) {
         toast({ title: 'Conflito de Professor!', description: 'O professor já tem aula neste horário em outra turma.', variant: 'destructive' });
-        setDraggedDraggedAula(null);
+        setSelectedSlot(null);
         return;
     }
 
-    // 2. Se for swap (tem aula no destino), validar se o professor do destino pode ir para a origem
     if (targetAulaId) {
-        const targetAula = horario.aulas.find(a => a.id === targetAulaId);
         const hasConflictDestinoNaOrigem = horario.aulas.some(a => 
             a.id !== targetAulaId &&
-            a.id !== draggedAula.id &&
-            a.professor_id === targetAula?.professor_id &&
-            a.dia_semana === draggedAula.dia &&
-            a.aula_index === draggedAula.index &&
+            a.id !== selectedSlot.id &&
+            a.professor_id === targetAula.professor_id &&
+            a.dia_semana === selectedSlot.dia &&
+            a.aula_index === selectedSlot.index &&
             a.tipo === 'presencial'
         );
 
         if (hasConflictDestinoNaOrigem) {
             toast({ title: 'Conflito de Professor!', description: `O professor ${targetAula?.professor?.nome_horario} já possui aula na posição de origem deste movimento.`, variant: 'destructive' });
-            setDraggedDraggedAula(null);
+            setSelectedSlot(null);
             return;
         }
     }
 
+    // Executa a ação
     startAction(async () => {
         const result = await swapAulasManualmente(
-            draggedAula.id, draggedAula.dia, draggedAula.index,
-            targetAulaId || null, diaDestino, indexDestino
+            selectedSlot.id, selectedSlot.dia, selectedSlot.index,
+            targetAulaId, diaDestino, indexDestino
         );
         
         if (result.error) {
             toast({ title: 'Erro ao mover', description: result.error, variant: 'destructive' });
         } else {
             toast({ title: 'Grade Ajustada!', description: 'A alteração manual foi salva com sucesso.' });
+            setSelectedSlot(null);
             window.location.reload();
         }
     });
-
-    setDraggedDraggedAula(null);
   };
 
   const handleConsolidar = () => {
@@ -318,31 +320,28 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         {diasAtivosLocal.map(dia => {
                             const aula = getAulaNoSlot(dia.id, aulaIndex);
                             const hole = isInconsistent(dia.id, aulaIndex);
-                            const isBeingHovered = dropTarget?.dia === dia.id && dropTarget?.index === aulaIndex && tipo === 'presencial' && !isProfessorView;
+                            
+                            const isSelected = selectedSlot?.dia === dia.id && selectedSlot?.index === aulaIndex && !isProfessorView;
+                            const isPotencialTarget = selectedSlot && !isSelected && tipo === 'presencial' && !isProfessorView;
 
                             return (
                             <td 
                                 key={dia.id} 
                                 className={cn(
-                                    "p-1 text-center border-r last:border-r-0 print:border-black transition-all", 
+                                    "p-1 text-center border-r last:border-r-0 print:border-black transition-all group", 
                                     hole && "bg-destructive/5 print:bg-transparent",
                                     !isProfessorView && !isActionPending && horario.status !== 'publicado' && tipo === 'presencial' && "cursor-pointer hover:bg-primary/5",
-                                    isBeingHovered && "bg-primary/20 ring-2 ring-primary ring-inset"
+                                    isSelected && "bg-primary/20 ring-2 ring-primary ring-inset",
+                                    isPotencialTarget && "bg-blue-50/50"
                                 )}
-                                onDragOver={(e) => handleDragOver(e, dia.id, aulaIndex)}
-                                onDragLeave={handleDragLeave}
-                                onDrop={() => handleDrop(dia.id, aulaIndex, aula?.id)}
+                                onClick={() => !isProfessorView && tipo === 'presencial' && handleCellClick(dia.id, aulaIndex, aula)}
                             >
                                 {aula ? (
-                                <div 
-                                    className="group relative flex flex-col items-center justify-center gap-0.5 cursor-grab active:cursor-grabbing"
-                                    draggable={!isProfessorView && horario.status !== 'publicado' && tipo === 'presencial'}
-                                    onDragStart={() => handleDragStart(aula)}
-                                >
+                                <div className="relative flex flex-col items-center justify-center gap-0.5">
                                     <div className={cn(
                                         "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white print:text-[8px] transition-all",
                                         tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black",
-                                        draggedAula?.id === aula.id && "opacity-20 scale-95 grayscale"
+                                        isSelected && "scale-105 shadow-md border-primary"
                                     )}>
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
@@ -350,10 +349,10 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                         {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
                                     </div>
                                     
-                                    {!isProfessorView && horario.status !== 'publicado' && tipo === 'presencial' && (
-                                        <div className="absolute -top-1 -right-1 print:hidden">
-                                            <div className="bg-primary/10 text-primary rounded-full p-0.5 shadow-sm opacity-40 group-hover:opacity-100 transition-opacity">
-                                                <GripVertical className="h-2 w-2" />
+                                    {!isProfessorView && horario.status !== 'publicado' && tipo === 'presencial' && !isSelected && (
+                                        <div className="absolute -top-1 -right-1 print:hidden opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="bg-primary text-white rounded-full p-0.5 shadow-sm">
+                                                <MousePointer2 className="h-2 w-2" />
                                             </div>
                                         </div>
                                     )}
@@ -401,7 +400,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
         if (prof?.restricoes) {
             Object.keys(prof.restricoes).forEach(tId => {
-                const isPlanningInTurno = Object.values(prof.restricoes[tId]).some((d: any) => 
+                const isPlanningInTurno = Object.values(prof.restricoes[tId] || {}).some((d: any) => 
                     Object.values(d).includes('planejamento')
                 );
                 if (isPlanningInTurno && !turnosMap.has(tId)) {
@@ -536,13 +535,33 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   return (
     <div className="space-y-6">
       {horario.status !== 'publicado' && (
-          <Alert className="bg-primary/5 border-primary/20 print:hidden">
-              <Move className="h-4 w-4 text-primary" />
-              <AlertTitle className="text-xs font-bold uppercase">Edição Manual Ativada</AlertTitle>
-              <AlertDescription className="text-xs">
-                  Você pode **clicar e arrastar** as disciplinas na "Grade Regular" para trocar os horários manualmente. O sistema validará conflitos de professor globalmente e destacará o slot de destino.
-              </AlertDescription>
-          </Alert>
+          <div className="sticky top-16 z-20 print:hidden">
+            <Alert className={cn(
+                "transition-all border-2", 
+                selectedSlot ? "bg-primary/10 border-primary shadow-lg" : "bg-primary/5 border-primary/20"
+            )}>
+                {selectedSlot ? (
+                    <MousePointer2 className="h-5 w-5 text-primary animate-bounce" />
+                ) : (
+                    <Move className="h-4 w-4 text-primary" />
+                )}
+                <AlertTitle className="text-xs font-bold uppercase flex items-center justify-between">
+                    {selectedSlot ? 'Aula Selecionada' : 'Edição Manual Ativada'}
+                    {selectedSlot && (
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedSlot(null)} className="h-6 px-2 text-xs">
+                            <X className="h-3 w-3 mr-1" /> Cancelar Seleção
+                        </Button>
+                    )}
+                </AlertTitle>
+                <AlertDescription className="text-xs">
+                    {selectedSlot ? (
+                        <>Você selecionou **{selectedSlot.componenteNome}**. Agora, **clique no destino** para mover ou trocar de lugar.</>
+                    ) : (
+                        'Clique em uma disciplina na "Grade Regular" para selecioná-la e depois clique em outro horário para realizar a troca.'
+                    )}
+                </AlertDescription>
+            </Alert>
+          </div>
       )}
 
       <Card className="print:border-none print:shadow-none">
