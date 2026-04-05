@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye } from 'lucide-react';
+import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye, Ban, PenSquare } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -38,6 +38,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type ProfessoresClientProps = {
   initialProfessores: ProfessorComDados[];
@@ -47,6 +49,12 @@ type ProfessoresClientProps = {
 };
 
 type SheetType = 'edit' | 'disciplinas' | 'restricoes' | null;
+
+const DIAS_SEMANA_MAP = [
+  { id: 'segunda', label: 'Seg' }, { id: 'terca', label: 'Ter' },
+  { id: 'quarta', label: 'Qua' }, { id: 'quinta', label: 'Qui' },
+  { id: 'sexta', label: 'Sex' }, { id: 'sabado', label: 'Sáb' },
+];
 
 export function ProfessoresClient({
   initialProfessores,
@@ -169,8 +177,8 @@ export function ProfessoresClient({
                             <div className="text-xs text-muted-foreground">{prof.nome_horario} | {prof.email || 'Sem e-mail'}</div>
                         </div>
                         {hasResponse && (
-                            <Badge className="bg-blue-600 hover:bg-blue-700 animate-pulse cursor-help" onClick={() => openReview(prof)}>
-                                Resposta Disponível
+                            <Badge className="bg-blue-600 hover:bg-blue-700 animate-pulse cursor-pointer gap-1" onClick={() => openReview(prof)}>
+                                <AlertCircle className="h-3 w-3" /> Resposta Disponível
                             </Badge>
                         )}
                         {isWaiting && (
@@ -250,51 +258,121 @@ export function ProfessoresClient({
 
       {/* REVISÃO DE RESPOSTA DO PROFESSOR */}
       <AlertDialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
-          <AlertDialogContent className="sm:max-w-xl">
-              <AlertDialogHeader>
+          <AlertDialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+              <AlertDialogHeader className="p-6 pb-2">
                   <AlertDialogTitle className="flex items-center gap-2">
                       <CheckCircle2 className="text-blue-600" /> 
                       Revisar Disponibilidade Enviada
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                      O professor <strong>{selectedProfessor?.nome_completo}</strong> preencheu sua grade através do link enviado. Deseja substituir as restrições atuais pelas novas?
+                      O professor <strong>{selectedProfessor?.nome_completo}</strong> preencheu sua grade. Veja o espelho abaixo e confirme se deseja aplicar estas restrições ao cadastro oficial.
                   </AlertDialogDescription>
               </AlertDialogHeader>
-              <div className="bg-muted/50 p-4 rounded-lg border space-y-3">
-                  <p className="text-sm font-bold uppercase tracking-tight text-muted-foreground">Resumo do Preenchimento:</p>
-                  <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white p-3 rounded border">
-                          <p className="text-xs text-muted-foreground font-bold">Indisponíveis</p>
-                          <p className="text-xl font-black">
-                              {selectedProfessor?.solicitacao_pendente?.dados_temp ? 
-                                Object.values(selectedProfessor.solicitacao_pendente.dados_temp).reduce((acc: number, turno: any) => 
-                                    acc + Object.values(turno).reduce((acc2: number, dia: any) => 
-                                        acc2 + Object.values(dia).filter(v => v === 'indisponivel').length, 0
-                                    ), 0
-                                ) : 0
-                              }
-                          </p>
-                      </div>
-                      <div className="bg-white p-3 rounded border">
-                          <p className="text-xs text-muted-foreground font-bold">Planejamentos</p>
-                          <p className="text-xl font-black">
-                              {selectedProfessor?.solicitacao_pendente?.dados_temp ? 
-                                Object.values(selectedProfessor.solicitacao_pendente.dados_temp).reduce((acc: number, turno: any) => 
-                                    acc + Object.values(turno).reduce((acc2: number, dia: any) => 
-                                        acc2 + Object.values(dia).filter(v => v === 'planejamento').length, 0
-                                    ), 0
-                                ) : 0
-                              }
-                          </p>
-                      </div>
+              
+              <ScrollArea className="flex-1 px-6">
+                <div className="space-y-6 pb-6 pt-2">
+                    <div className="bg-muted/50 p-4 rounded-xl border grid grid-cols-2 gap-4">
+                        <div className="bg-white p-3 rounded-lg border shadow-sm">
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Total Indisponível</p>
+                            <p className="text-2xl font-black text-red-600">
+                                {selectedProfessor?.solicitacao_pendente?.dados_temp ? 
+                                    Object.values(selectedProfessor.solicitacao_pendente.dados_temp).reduce((acc: number, turno: any) => 
+                                        acc + Object.values(turno).reduce((acc2: number, dia: any) => 
+                                            acc2 + Object.values(dia).filter(v => v === 'indisponivel').length, 0
+                                        ), 0
+                                    ) : 0
+                                }
+                            </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg border shadow-sm">
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Planejamentos (Mantidos)</p>
+                            <p className="text-2xl font-black text-blue-600">
+                                {selectedProfessor?.solicitacao_pendente?.dados_temp ? 
+                                    Object.values(selectedProfessor.solicitacao_pendente.dados_temp).reduce((acc: number, turno: any) => 
+                                        acc + Object.values(turno).reduce((acc2: number, dia: any) => 
+                                            acc2 + Object.values(dia).filter(v => v === 'planejamento').length, 0
+                                        ), 0
+                                    ) : 0
+                                }
+                            </p>
+                        </div>
+                    </div>
+
+                    {selectedProfessor && (
+                        <Tabs defaultValue={selectedProfessor.turnos_ids[0]} className="w-full">
+                            <TabsList className="bg-muted w-full justify-start overflow-x-auto h-auto p-1">
+                                {selectedProfessor.turnos.map(t => (
+                                    <TabsTrigger key={t.id} value={t.id} className="text-xs font-bold uppercase py-2 px-4">
+                                        {t.nome}
+                                    </TabsTrigger>
+                                ))}
+                            </TabsList>
+                            {selectedProfessor.turnos.map(turno => (
+                                <TabsContent key={turno.id} value={turno.id} className="mt-4 animate-in fade-in zoom-in-95 duration-300">
+                                    <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+                                        <table className="w-full text-sm text-center border-collapse">
+                                            <thead>
+                                                <tr className="bg-muted/30 border-b">
+                                                    <th className="p-3 font-bold border-r w-24">Aula</th>
+                                                    {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => (
+                                                        <th key={dia.id} className="p-3 font-bold">{dia.label}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIdx) => (
+                                                    <tr key={aulaIdx} className="border-b last:border-0 h-16">
+                                                        <td className="p-2 font-bold bg-muted/10 border-r">
+                                                            <div className="text-primary">{aulaIdx + 1}ª</div>
+                                                            <div className="text-[9px] text-muted-foreground uppercase">
+                                                                {turno.horarios?.[aulaIdx]?.inicio || '--:--'}
+                                                            </div>
+                                                        </td>
+                                                        {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
+                                                            const val = selectedProfessor.solicitacao_pendente?.dados_temp?.[turno.id]?.[dia.id]?.[aulaIdx];
+                                                            
+                                                            return (
+                                                                <td key={dia.id} className={cn(
+                                                                    "p-1 border-r last:border-r-0",
+                                                                    val === 'indisponivel' ? "bg-red-50" : val === 'planejamento' ? "bg-blue-50" : ""
+                                                                )}>
+                                                                    <div className="flex items-center justify-center h-full">
+                                                                        {val === 'indisponivel' && <Ban className="h-5 w-5 text-red-500" />}
+                                                                        {val === 'planejamento' && <PenSquare className="h-5 w-5 text-blue-500" />}
+                                                                        {!val && <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />}
+                                                                    </div>
+                                                                </td>
+                                                            )
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </TabsContent>
+                            ))}
+                        </Tabs>
+                    )}
+                </div>
+              </ScrollArea>
+
+              <AlertDialogFooter className="p-6 border-t bg-slate-50 flex-row items-center justify-between sm:justify-between gap-4">
+                  <div className="flex gap-2">
+                    <Button 
+                        variant="ghost" 
+                        disabled={isActionPending} 
+                        onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'rejeitar')} 
+                        className="text-destructive hover:bg-destructive/10 font-bold"
+                    >
+                        <XCircle className="mr-2 h-4 w-4" /> Descartar
+                    </Button>
+                    <AlertDialogCancel className="mt-0">Fechar</AlertDialogCancel>
                   </div>
-              </div>
-              <AlertDialogFooter>
-                  <Button variant="ghost" disabled={isActionPending} onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'rejeitar')} className="text-destructive hover:bg-destructive/10">
-                      <XCircle className="mr-2 h-4 w-4" /> Descartar Resposta
-                  </Button>
-                  <AlertDialogCancel>Fechar</AlertDialogCancel>
-                  <Button disabled={isActionPending} onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'confirmar')} className="bg-blue-600 hover:bg-blue-700">
+                  <Button 
+                    disabled={isActionPending} 
+                    onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'confirmar')} 
+                    className="bg-blue-600 hover:bg-blue-700 font-bold px-8 shadow-lg"
+                  >
                       {isActionPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                       Confirmar e Aplicar
                   </Button>
