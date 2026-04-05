@@ -33,6 +33,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
   const [aulasVagas, setAulasVagas] = useState<any[]>([]);
   const [substitutos, setSubstitutos] = useState<Record<number, ProfessorComDados[]>>({});
   const [isSearching, startSearching] = useTransition();
+  const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleBuscar = () => {
@@ -40,11 +41,14 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
 
     setError(null);
     setSubstitutos({});
+    setHasSearched(false);
+    
     startSearching(async () => {
         const result = await getProfessorAulasNoDia(turnoId, professorId, dia);
         if (result.error) {
             setError(result.error);
             setAulasVagas([]);
+            setHasSearched(true);
             return;
         }
         
@@ -60,6 +64,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
             }
         }
         setSubstitutos(newSubstitutos);
+        setHasSearched(true);
     });
   };
 
@@ -75,7 +80,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
         <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-muted-foreground">Turno</label>
-            <Select value={turnoId} onValueChange={setTurnoId}>
+            <Select value={turnoId} onValueChange={(v) => { setTurnoId(v); setHasSearched(false); }}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
                 {turnos.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
@@ -85,7 +90,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
 
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-muted-foreground">Dia da Semana</label>
-            <Select value={dia} onValueChange={setDia}>
+            <Select value={dia} onValueChange={(v) => { setDia(v); setHasSearched(false); }}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
                 {DIAS_SEMANA.map(d => <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>)}
@@ -95,7 +100,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
 
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-muted-foreground">Professor Ausente</label>
-            <Select value={professorId} onValueChange={setProfessorId}>
+            <Select value={professorId} onValueChange={(v) => { setProfessorId(v); setHasSearched(false); }}>
               <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
               <SelectContent>
                 {professores.map(p => <SelectItem key={p.id} value={p.id}>{p.nome_horario}</SelectItem>)}
@@ -170,7 +175,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
         </div>
       )}
 
-      {!isSearching && aulasVagas.length === 0 && !error && professorId && (
+      {hasSearched && aulasVagas.length === 0 && !error && (
           <div className="p-12 text-center border-2 border-dashed rounded-xl bg-muted/10">
               <UserCheck className="h-10 w-10 text-green-500/30 mx-auto mb-3" />
               <p className="text-muted-foreground">O professor selecionado não possui aulas oficiais publicadas para este dia no turno escolhido.</p>
