@@ -32,11 +32,11 @@ export default async function LoginPage() {
       </div>
       <div className="relative hidden bg-muted md:block">
         <Image
-          src="/img/estudantes.jpeg"
-          alt="Estudantes estudando"
+          src="/img/FPerin.png"
+          alt="Fachada Escola"
           fill
           className="object-cover"
-          data-ai-hint="students studying"
+          data-ai-hint="school building"
         />
         <div className="absolute inset-0 bg-blue-950/60" />
         <div className="absolute bottom-10 left-10 text-white bg-black/30 p-6 rounded-lg backdrop-blur-sm max-w-md">

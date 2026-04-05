@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Users, Calendar, Undo2, Printer } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho } from '../actions';
@@ -23,6 +23,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 type Props = {
   horario: HorarioCompleto;
@@ -38,6 +46,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   const [viewMode, setViewMode] = useState<'single' | 'all' | 'teachers' | 'by-day'>('single');
   const [teacherViewMode, setTeacherViewMode] = useState<'individual' | 'all'>('individual');
   const [isActionPending, startAction] = useTransition();
+  const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
+  const [itemsPerPage, setItemsPerPage] = useState<1 | 2>(1);
   const { toast } = useToast();
 
   const turmas = useMemo(() => {
@@ -419,7 +429,19 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   };
 
   const handlePrint = () => {
-      window.print();
+      if (viewMode === 'all') {
+          setIsPrintDialogOpen(true);
+      } else {
+          window.print();
+      }
+  }
+
+  const executePrint = (perPage: 1 | 2) => {
+      setItemsPerPage(perPage);
+      setIsPrintDialogOpen(false);
+      setTimeout(() => {
+          window.print();
+      }, 300);
   }
 
   return (
@@ -576,8 +598,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             <GradePorDia dayId={selectedDayId} turnoInfo={horario.turno} />
           ) : (
             <div className="grid grid-cols-1 gap-12 pt-4">
-                {turmas.map(turma => (
-                    <div key={turma.id} className="space-y-6 pb-12 border-b last:border-0 print:pb-0 print:border-none print:mb-0 print:break-after-page">
+                {turmas.map((turma, index) => (
+                    <div 
+                        key={turma.id} 
+                        className={cn(
+                            "space-y-6 pb-12 border-b last:border-0 print:border-none print:mb-0",
+                            itemsPerPage === 1 ? "print:break-after-page" : (index % 2 === 1 ? "print:break-after-page" : "print:pb-8")
+                        )}
+                    >
                         <div className="flex items-center gap-3">
                             <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg print:hidden">
                                 {turma.nome.charAt(0)}
@@ -609,6 +637,46 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* DIÁLOGO DE CONFIGURAÇÃO DE IMPRESSÃO */}
+      <Dialog open={isPrintDialogOpen} onOpenChange={setIsPrintDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                      <Layout className="h-5 w-5 text-primary" />
+                      Configurar Impressão
+                  </DialogTitle>
+                  <DialogDescription>
+                      Como você deseja organizar as turmas no papel? (A4 Paisagem é recomendado)
+                  </DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-4 py-4">
+                  <Button 
+                    variant={itemsPerPage === 1 ? "default" : "outline"} 
+                    className="h-24 flex flex-col gap-2"
+                    onClick={() => setItemsPerPage(1)}
+                  >
+                      <span className="text-lg font-bold">1 Turma</span>
+                      <span className="text-[10px] uppercase opacity-70">Por página</span>
+                  </Button>
+                  <Button 
+                    variant={itemsPerPage === 2 ? "default" : "outline"} 
+                    className="h-24 flex flex-col gap-2"
+                    onClick={() => setItemsPerPage(2)}
+                  >
+                      <span className="text-lg font-bold">2 Turmas</span>
+                      <span className="text-[10px] uppercase opacity-70">Por página (Econômico)</span>
+                  </Button>
+              </div>
+              <DialogFooter>
+                  <Button variant="ghost" onClick={() => setIsPrintDialogOpen(false)}>Cancelar</Button>
+                  <Button onClick={() => executePrint(itemsPerPage)}>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Imprimir Agora
+                  </Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
     </div>
   );
 }
