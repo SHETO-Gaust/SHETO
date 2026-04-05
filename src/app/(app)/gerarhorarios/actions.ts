@@ -1,4 +1,3 @@
-
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -61,7 +60,6 @@ export async function iniciarGeracaoHorario(
     if (turmasDoTurno.length === 0) return { error: 'Não há turmas cadastradas para este turno.' };
     if (!turno) return { error: 'Turno não encontrado.' };
 
-    // MELHORIA ITEM 2: Busca ocupações GLOBAIS (em todas as escolas) para os professores envolvidos
     const professorIds = allProfessores?.map(p => p.id) || [];
     
     const { data: ocupacoesAtivas } = await supabase
@@ -75,7 +73,7 @@ export async function iniciarGeracaoHorario(
         `)
         .in('professor_id', professorIds)
         .eq('horarios.status', 'publicado')
-        .neq('horarios.turno_id', turnoId); // Exclui o próprio turno se estiver re-gerando
+        .neq('horarios.turno_id', turnoId);
 
     const result = gerarHorarioAlgoritmico(
         turno as any,
@@ -144,61 +142,27 @@ async function salvarNovaGrade(escolaId: string, turnoId: string, nome: string, 
     return { data: novoHorario };
 }
 
-// MELHORIA ITEM 1: Função para mover aula manualmente
-export async function moverAulaManualmente(aulaId: string, diaNovo: string, indexNovo: number) {
-    const supabase = await createClient();
-    
-    // 1. Verificar se o slot de destino está ocupado na mesma turma
-    const { data: aulaAtual } = await supabase.from('horario_aulas').select('horario_id, turma_id').eq('id', aulaId).single();
-    if (!aulaAtual) return { error: 'Aula não encontrada.' };
-
-    const { data: ocupante } = await supabase
-        .from('horario_aulas')
-        .select('id')
-        .eq('horario_id', aulaAtual.horario_id)
-        .eq('turma_id', aulaAtual.turma_id)
-        .eq('dia_semana', diaNovo)
-        .eq('aula_index', indexNovo)
-        .eq('tipo', 'presencial')
-        .single();
-
-    if (ocupante) {
-        // Se houver ocupante, faz o SWAP (troca)
-        const { error: error1 } = await supabase.from('horario_aulas').update({ dia_semana: 'temp', aula_index: -1 }).eq('id', aulaId);
-        const { data: original } = await supabase.from('horario_aulas').select('dia_semana, aula_index').eq('id', aulaId).single(); // mock logic
-        // Buscando dados reais da aula que será movida para o lugar da outra
-        const { data: aulaOrigem } = await supabase.from('horario_aulas').select('dia_semana, aula_index').eq('id', aulaId).single();
-        
-        // Simplesmente atualiza ambos
-        // Esta lógica de swap precisa ser atômica ou usar um valor temporário
-    }
-
-    const { error } = await supabase
-        .from('horario_aulas')
-        .update({ dia_semana: diaNovo, aula_index: indexNovo })
-        .eq('id', aulaId);
-
-    if (error) return { error: 'Falha ao mover aula.' };
-    
-    revalidatePath('/gerarhorarios');
-    return { success: true };
-}
-
 export async function swapAulasManualmente(aula1Id: string, dia1: string, idx1: number, aula2Id: string | null, dia2: string, idx2: number) {
     const supabase = await createClient();
 
-    // Move a primeira para o novo lugar
-    const { error: err1 } = await supabase.from('horario_aulas').update({ dia_semana: dia2, aula_index: idx2 }).eq('id', aula1Id);
-    if (err1) return { error: 'Erro ao mover aula principal.' };
+    try {
+        if (aula2Id) {
+            // Swap: Aula 1 vai para Slot 2, Aula 2 vai para Slot 1
+            // Usamos um valor temporário para evitar conflitos de restrição única se houver
+            await supabase.from('horario_aulas').update({ dia_semana: 'temp', aula_index: -99 }).eq('id', aula1Id);
+            await supabase.from('horario_aulas').update({ dia_semana: dia1, aula_index: idx1 }).eq('id', aula2Id);
+            await supabase.from('horario_aulas').update({ dia_semana: dia2, aula_index: idx2 }).eq('id', aula1Id);
+        } else {
+            // Apenas move para o slot vazio
+            await supabase.from('horario_aulas').update({ dia_semana: dia2, aula_index: idx2 }).eq('id', aula1Id);
+        }
 
-    // Se houver uma aula no destino, move ela para a origem (Swap)
-    if (aula2Id) {
-        const { error: err2 } = await supabase.from('horario_aulas').update({ dia_semana: dia1, aula_index: idx1 }).eq('id', aula2Id);
-        if (err2) return { error: 'Erro ao completar a troca de aulas.' };
+        revalidatePath('/gerarhorarios');
+        return { success: true };
+    } catch (error) {
+        console.error('Erro no swap de aulas:', error);
+        return { error: 'Falha ao processar a troca de horários.' };
     }
-
-    revalidatePath('/gerarhorarios');
-    return { success: true };
 }
 
 export async function consolidarHorario(id: string) {

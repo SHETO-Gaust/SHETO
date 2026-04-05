@@ -51,6 +51,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   const { toast } = useToast();
 
   const [draggedAula, setDraggedDraggedAula] = useState<{ id: string, dia: string, index: number, professorId: string | null } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ dia: string, index: number } | null>(null);
 
   const turmas = useMemo(() => {
     const map = new Map();
@@ -164,29 +165,60 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     });
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, dia: string, index: number) => {
     e.preventDefault();
+    if (dropTarget?.dia !== dia || dropTarget?.index !== index) {
+        setDropTarget({ dia, index });
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDropTarget(null);
   };
 
   const handleDrop = (diaDestino: string, indexDestino: number, targetAulaId?: string) => {
+    setDropTarget(null);
     if (!draggedAula || horario.status === 'publicado') return;
+    
     if (draggedAula.dia === diaDestino && draggedAula.index === indexDestino) {
         setDraggedDraggedAula(null);
         return;
     }
 
-    const hasConflict = horario.aulas.some(a => 
+    // 1. Validar conflito do professor que está sendo arrastado no destino
+    // Excluímos a aula de destino se ela for sair de lá (swap)
+    const hasConflictOrigemNoDestino = horario.aulas.some(a => 
         a.id !== draggedAula.id &&
+        (targetAulaId ? a.id !== targetAulaId : true) &&
         a.professor_id === draggedAula.professorId && 
         a.dia_semana === diaDestino && 
         a.aula_index === indexDestino &&
         a.tipo === 'presencial'
     );
 
-    if (hasConflict) {
+    if (hasConflictOrigemNoDestino) {
         toast({ title: 'Conflito de Professor!', description: 'O professor já tem aula neste horário em outra turma.', variant: 'destructive' });
         setDraggedDraggedAula(null);
         return;
+    }
+
+    // 2. Se for swap (tem aula no destino), validar se o professor do destino pode ir para a origem
+    if (targetAulaId) {
+        const targetAula = horario.aulas.find(a => a.id === targetAulaId);
+        const hasConflictDestinoNaOrigem = horario.aulas.some(a => 
+            a.id !== targetAulaId &&
+            a.id !== draggedAula.id &&
+            a.professor_id === targetAula?.professor_id &&
+            a.dia_semana === draggedAula.dia &&
+            a.aula_index === draggedAula.index &&
+            a.tipo === 'presencial'
+        );
+
+        if (hasConflictDestinoNaOrigem) {
+            toast({ title: 'Conflito de Professor!', description: `O professor ${targetAula?.professor?.nome_horario} já possui aula na posição de origem deste movimento.`, variant: 'destructive' });
+            setDraggedDraggedAula(null);
+            return;
+        }
     }
 
     startAction(async () => {
@@ -237,14 +269,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
     const getAulaNoSlot = (dia: string, index: number) => {
         return sourceData.find((a: any) => 
-            (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && 
+            (isProfessorView ? true : a.turma_id === targetId) && 
             a.dia_semana === dia && 
             a.aula_index === index &&
             a.tipo === tipo
         );
     };
 
-    const hasAulas = sourceData.some((a: any) => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
+    const hasAulas = sourceData.some((a: any) => (isProfessorView ? true : a.turma_id === targetId) && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial' && !isProfessorView) return null;
     
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
@@ -261,9 +293,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 <div className={cn("w-2 h-2 rounded-full print:hidden", tipo === 'presencial' ? "bg-primary" : "bg-orange-400")} />
                 {label} ({turnoInfo.nome})
             </h3>
-            <div className="rounded-xl border bg-card overflow-hidden print:border-black print:rounded-none">
+            <div className="rounded-xl border bg-card overflow-hidden print:border-black print:rounded-none shadow-sm">
                 <div className="overflow-x-auto">
-                <table className="w-full text-sm print:table-fixed">
+                <table className="w-full text-sm print:table-fixed border-collapse">
                     <thead>
                     <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
                         <th className="p-2 print:p-1 text-left font-medium border-r w-24 print:w-16 print:border-black print:text-[8px]">Horário</th>
@@ -286,6 +318,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         {diasAtivosLocal.map(dia => {
                             const aula = getAulaNoSlot(dia.id, aulaIndex);
                             const hole = isInconsistent(dia.id, aulaIndex);
+                            const isBeingHovered = dropTarget?.dia === dia.id && dropTarget?.index === aulaIndex && tipo === 'presencial' && !isProfessorView;
 
                             return (
                             <td 
@@ -293,21 +326,23 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                 className={cn(
                                     "p-1 text-center border-r last:border-r-0 print:border-black transition-all", 
                                     hole && "bg-destructive/5 print:bg-transparent",
-                                    !isProfessorView && !isActionPending && horario.status !== 'publicado' && tipo === 'presencial' && "cursor-pointer hover:bg-primary/5"
+                                    !isProfessorView && !isActionPending && horario.status !== 'publicado' && tipo === 'presencial' && "cursor-pointer hover:bg-primary/5",
+                                    isBeingHovered && "bg-primary/20 ring-2 ring-primary ring-inset"
                                 )}
-                                onDragOver={handleDragOver}
+                                onDragOver={(e) => handleDragOver(e, dia.id, aulaIndex)}
+                                onDragLeave={handleDragLeave}
                                 onDrop={() => handleDrop(dia.id, aulaIndex, aula?.id)}
                             >
                                 {aula ? (
                                 <div 
-                                    className="group relative flex flex-col items-center justify-center gap-0.5"
+                                    className="group relative flex flex-col items-center justify-center gap-0.5 cursor-grab active:cursor-grabbing"
                                     draggable={!isProfessorView && horario.status !== 'publicado' && tipo === 'presencial'}
                                     onDragStart={() => handleDragStart(aula)}
                                 >
                                     <div className={cn(
-                                        "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white print:text-[8px] transition-transform",
+                                        "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white print:text-[8px] transition-all",
                                         tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black",
-                                        draggedAula?.id === aula.id && "opacity-20 scale-95"
+                                        draggedAula?.id === aula.id && "opacity-20 scale-95 grayscale"
                                     )}>
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
@@ -316,8 +351,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                     </div>
                                     
                                     {!isProfessorView && horario.status !== 'publicado' && tipo === 'presencial' && (
-                                        <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity print:hidden">
-                                            <div className="bg-primary text-white rounded-full p-0.5 shadow-lg">
+                                        <div className="absolute -top-1 -right-1 print:hidden">
+                                            <div className="bg-primary/10 text-primary rounded-full p-0.5 shadow-sm opacity-40 group-hover:opacity-100 transition-opacity">
                                                 <GripVertical className="h-2 w-2" />
                                             </div>
                                         </div>
@@ -425,7 +460,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 </div>
             </div>
 
-            <div className="rounded-xl border bg-card overflow-hidden print:border-black print:rounded-none">
+            <div className="rounded-xl border bg-card overflow-hidden print:border-black print:rounded-none shadow-sm">
                 <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse print:table-fixed">
                     <thead>
@@ -505,7 +540,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
               <Move className="h-4 w-4 text-primary" />
               <AlertTitle className="text-xs font-bold uppercase">Edição Manual Ativada</AlertTitle>
               <AlertDescription className="text-xs">
-                  Você pode **clicar e arrastar** as disciplinas na "Grade Regular" para trocar os horários manualmente. O sistema validará conflitos de professor globalmente.
+                  Você pode **clicar e arrastar** as disciplinas na "Grade Regular" para trocar os horários manualmente. O sistema validará conflitos de professor globalmente e destacará o slot de destino.
               </AlertDescription>
           </Alert>
       )}
