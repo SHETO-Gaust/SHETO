@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -200,8 +199,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     };
 
     return (
-        <div className="space-y-3 break-inside-avoid">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black">
+        <div className="space-y-3 break-inside-avoid w-full">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black">
                 <div className={cn("w-2 h-2 rounded-full print:hidden", tipo === 'presencial' ? "bg-primary" : "bg-orange-400")} />
                 {label} ({turnoInfo.nome})
             </h3>
@@ -210,9 +209,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 <table className="w-full text-sm">
                     <thead>
                     <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
-                        <th className="p-3 text-left font-medium border-r w-32 print:border-black">Horário</th>
+                        <th className="p-2 text-left font-medium border-r w-24 print:border-black">Horário</th>
                         {diasAtivosLocal.map(dia => (
-                        <th key={dia.id} className="p-3 text-center font-medium min-w-[120px] print:border-black">
+                        <th key={dia.id} className="p-2 text-center font-medium min-w-[100px] print:border-black print:text-[10px]">
                             {dia.label}
                         </th>
                         ))}
@@ -220,10 +219,10 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     </thead>
                     <tbody>
                     {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => (
-                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/10 transition-colors h-20 print:border-black">
-                        <td className="p-3 font-medium bg-muted/20 border-r print:border-black print:bg-white">
-                            <div className="font-semibold text-primary print:text-black">{aulaIndex + 1}ª Aula</div>
-                            <div className="text-[10px] text-muted-foreground font-normal">
+                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/10 transition-colors h-16 print:border-black">
+                        <td className="p-2 font-medium bg-muted/20 border-r print:border-black print:bg-white">
+                            <div className="font-bold text-primary print:text-black print:text-[10px]">{aulaIndex + 1}ª Aula</div>
+                            <div className="text-[9px] text-muted-foreground font-normal">
                             {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} às {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
                             </div>
                         </td>
@@ -240,29 +239,29 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             }
 
                             return (
-                            <td key={dia.id} className={cn("p-2 text-center border-r last:border-r-0 print:border-black", hole && "bg-destructive/5 print:bg-transparent")}>
+                            <td key={dia.id} className={cn("p-1 text-center border-r last:border-r-0 print:border-black", hole && "bg-destructive/5 print:bg-transparent")}>
                                 {aula ? (
-                                <div className="flex flex-col items-center justify-center gap-1">
+                                <div className="flex flex-col items-center justify-center gap-0.5">
                                     <div className={cn(
-                                        "font-bold text-xs leading-tight uppercase px-2 py-1 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white",
+                                        "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white",
                                         tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black"
                                     )}>
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground font-bold truncate w-full uppercase print:text-black" title={isProfessorView ? `Turma ${aula.turma.nome}` : aula.professor?.nome_horario}>
+                                    <div className="text-[8px] text-muted-foreground font-bold truncate w-full uppercase print:text-black" title={isProfessorView ? `Turma ${aula.turma.nome}` : aula.professor?.nome_horario}>
                                         {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
                                     </div>
                                 </div>
                                 ) : isPlanning ? (
                                     <div className="flex flex-col items-center justify-center gap-1">
-                                        <div className="font-bold text-[9px] uppercase px-2 py-1 rounded w-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm opacity-80 print:bg-gray-100 print:text-black print:border-black">
+                                        <div className="font-bold text-[8px] uppercase px-1 py-0.5 rounded w-full bg-blue-100 text-blue-700 border border-blue-200 shadow-sm opacity-80 print:bg-gray-100 print:text-black print:border-black">
                                             Planejamento
                                         </div>
                                     </div>
                                 ) : hole ? (
                                     <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse print:animate-none print:text-gray-300">
-                                        <AlertCircle className="h-4 w-4 print:hidden" />
-                                        <span className="text-[9px] font-bold uppercase">Vago</span>
+                                        <AlertCircle className="h-3 w-3 print:hidden" />
+                                        <span className="text-[8px] font-bold uppercase">Vago</span>
                                     </div>
                                 ) : (
                                 <span className="text-muted-foreground/10">-</span>
@@ -588,7 +587,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         
                         <RenderPendencias turmaId={turma.id} />
 
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 print:grid-cols-1">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4">
                             <GradeHoraria 
                                 targetId={turma.id} 
                                 isProfessorView={false}
