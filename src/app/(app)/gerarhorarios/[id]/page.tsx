@@ -1,4 +1,3 @@
-
 import { getHorarioDetalhado } from "../actions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
@@ -25,7 +24,7 @@ export default async function DetalhesHorarioPage({ params }: { params: { id: st
               <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>
             </Link>
           </CardContent>
-        </div>
+        </Card>
       </div>
     );
   }
