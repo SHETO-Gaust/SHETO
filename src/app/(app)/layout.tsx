@@ -1,3 +1,4 @@
+
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
@@ -30,6 +31,7 @@ const moduleMap: { [key: string]: string } = {
     '/ensino': 'ensino',
     '/serie': 'serie',
     '/auditoria': 'auditoria',
+    '/substituicoes': 'horarios',
 };
 
 export default async function AppLayout({
@@ -47,14 +49,18 @@ export default async function AppLayout({
     return redirect('/login');
   }
 
-  let userProfile: Profile | null = null;
-  if (user) {
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select(`*, escolas(*)`)
-        .eq('id', user.id)
-        .single();
-      userProfile = profileData as Profile;
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select(`*, escolas(*)`)
+    .eq('id', user.id)
+    .single();
+  
+  const userProfile = profileData as Profile | null;
+
+  // Se o usuário está desativado no perfil, desloga
+  if (userProfile && userProfile.active === false) {
+    await supabase.auth.signOut();
+    return redirect('/login?error=Usuário desativado');
   }
   
   const { data: allEscolasData } = await supabase
@@ -64,7 +70,7 @@ export default async function AppLayout({
   const allEscolas = allEscolasData as Escola[] || [];
 
   const headerList = await headers();
-  const pathname = headerList.get('x-next-url') || '';
+  const pathname = headerList.get('x-next-url') || '/dashboard';
   
   const requiredModuleKey = Object.keys(moduleMap).find(key => pathname.startsWith(key));
   let hasPermission = true;
@@ -78,13 +84,14 @@ export default async function AppLayout({
       } else if (moduleName === 'dashboard') {
         hasPermission = true;
       } else {
+        const userModules = Array.isArray(userProfile?.modules) ? userProfile.modules : [];
         const groupModule = ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'].includes(moduleName) ? 'dados-horario'
                             : moduleName === 'horarios' ? 'horarios' : null;
 
         if(groupModule) {
-            hasPermission = userProfile?.modules?.includes(groupModule) || false;
+            hasPermission = userModules.includes(groupModule);
         } else {
-            hasPermission = userProfile?.modules?.includes(moduleName) || false;
+            hasPermission = userModules.includes(moduleName);
         }
       }
   }
@@ -116,7 +123,7 @@ export default async function AppLayout({
             <UserNav user={user} profile={userProfile} />
           </div>
         </header>
-        <div className="flex-1 bg-white p-4 sm:p-6">
+        <div className="flex-1 bg-white p-4 sm:p-6 overflow-auto">
             {hasPermission ? children : <AccessDenied />}
         </div>
         <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">

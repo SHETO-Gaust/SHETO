@@ -8,9 +8,11 @@ import { z } from 'zod';
 import { sendWelcomeEmail } from '@/lib/mail';
 
 export async function getUsers(): Promise<Profile[]> {
-    const supabase = await createClient();
+    // Usamos o Admin Client para garantir que o administrador veja todos os usuários,
+    // ignorando políticas de RLS que poderiam restringir a visão apenas ao próprio perfil.
+    const supabaseAdmin = await createAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from('profiles')
         .select('*, escolas(id, escolar)')
         .order('created_at', { ascending: false });
@@ -20,7 +22,7 @@ export async function getUsers(): Promise<Profile[]> {
         return [];
     }
 
-    return data as Profile[];
+    return (data || []) as Profile[];
 }
 
 export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user', ue: string | null | undefined) {
@@ -41,13 +43,16 @@ export async function updateUserPermissions(userId: string, modules: string[], r
 }
 
 export async function toggleUserStatus(userId: string, currentStatus: boolean) {
-    const supabase = await createClient();
-    const { error } = await supabase
+    const supabaseAdmin = await createAdminClient();
+    const { error } = await supabaseAdmin
         .from('profiles')
         .update({ active: !currentStatus })
         .eq('id', userId);
 
-    if (error) return { error: 'Erro ao alterar status do usuário.' };
+    if (error) {
+        console.error('Error toggling status:', error);
+        return { error: 'Erro ao alterar status do usuário.' };
+    }
     
     revalidatePath('/usuarios');
     return { success: true };
