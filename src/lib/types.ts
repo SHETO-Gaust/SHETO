@@ -68,12 +68,23 @@ export type Professor = {
     created_at: string;
 };
 
+export type SolicitacaoRestricao = {
+    id: string;
+    professor_id: string;
+    token: string;
+    status: 'pendente' | 'respondido' | 'concluido';
+    dados_temp: any;
+    expires_at: string;
+    created_at: string;
+};
+
 // This will be the type returned by the main get action
 export type ProfessorComDados = Professor & {
     componentes: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>[];
     turnos: Turno[];
     aulas_atribuidas?: number;
     alocacoes?: { turma_nome: string; serie_nome: string; aulas: number; componente_nome: string }[];
+    solicitacao_pendente?: SolicitacaoRestricao | null;
 };
 
 export type Serie = {

@@ -1,3 +1,4 @@
+
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
@@ -92,5 +93,69 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
   } catch (error) {
     console.error('Erro ao enviar e-mail:', error);
     return { error: 'Falha no envio do e-mail de boas-vindas.' };
+  }
+}
+
+export async function sendRestrictionRequestEmail(data: { to: string, name: string, schoolName: string, token: string }) {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sheto.vercel.app';
+  const requestUrl = `${baseUrl}/restricoes/${data.token}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'PT Sans', sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .header { text-align: center; margin-bottom: 25px; }
+        .content { background-color: #f8fafc; padding: 25px; border-radius: 8px; }
+        .button { display: inline-block; padding: 14px 28px; background-color: #2563eb; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+        .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 25px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
+        .warning { font-size: 12px; color: #ef4444; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h2 style="color: #1e3a8a; margin: 0;">Solicitação de Disponibilidade</h2>
+          <p style="color: #64748b;">Sistema de Horário Escolar (SHE)</p>
+        </div>
+        
+        <div class="content">
+          <p>Prezado(a) Professor(a) <strong>${data.name}</strong>,</p>
+          <p>A coordenação pedagógica da unidade <strong>${data.schoolName}</strong> solicita o preenchimento de suas restrições e disponibilidades de horário para a organização da nova grade escolar.</p>
+          
+          <p>Por favor, clique no botão abaixo para acessar sua grade individual. Você poderá marcar os horários de folga e planejamento diretamente na tela.</p>
+
+          <div style="text-align: center;">
+            <a href="${requestUrl}" class="button">Preencher Minhas Restrições</a>
+          </div>
+
+          <p class="warning">Atenção: Este link é pessoal e expira em 48 horas. Pode ser preenchido apenas uma vez.</p>
+          
+          <p style="font-size: 13px; color: #475569; margin-top: 20px;">
+            Não é necessário senha ou login para este acesso temporário.
+          </p>
+        </div>
+
+        <div class="footer">
+          <p>Secretaria da Educação do Estado do Tocantins - Todos os direitos reservados © 2026</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"SHE - Sistema de Horário Escolar" <${process.env.GMAIL_EMAIL}>`,
+      to: data.to,
+      subject: `Solicitação de Restrições - ${data.schoolName}`,
+      html: html,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao enviar e-mail de restrição:', error);
+    return { error: 'Falha no envio do e-mail para o professor.' };
   }
 }
