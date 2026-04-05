@@ -79,10 +79,14 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
                                     {user.role === 'admin' ? (
                                         <Badge>Acesso Total</Badge>
                                     ) : (
-                                        user.modules?.map(mod => {
-                                            const moduleLabel = allModules.find(m => m.id === mod)?.label || mod;
-                                            return <Badge key={mod} variant="outline">{moduleLabel}</Badge>
-                                        }) || <span className="text-xs text-muted-foreground">Nenhum</span>
+                                        Array.isArray(user.modules) && user.modules.length > 0 ? (
+                                            user.modules.map(mod => {
+                                                const moduleLabel = allModules.find(m => m.id === mod)?.label || mod;
+                                                return <Badge key={mod} variant="outline">{moduleLabel}</Badge>
+                                            })
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground">Nenhum</span>
+                                        )
                                     )}
                                    </div>
                                 </TableCell>

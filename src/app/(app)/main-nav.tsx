@@ -50,6 +50,9 @@ const linkGroups = [
 export function MainNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
 
+  console.log('PROFILE NAV:', profile);
+  console.log('ROLE NAV:', profile?.role);
+
   const hasAccess = (module: string) => {
       if (profile?.role === 'admin') return true;
       if (module === 'dashboard') return true;
