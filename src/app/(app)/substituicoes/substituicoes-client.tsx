@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useTransition } from 'react';
@@ -6,7 +5,7 @@ import type { Turno, ProfessorComDados } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Calendar as CalendarIcon, UserX, Search, UserCheck, Loader2, AlertCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, UserX, Search, UserCheck, Loader2, AlertCircle, Clock } from 'lucide-react';
 import { getProfessorAulasNoDia, buscarSubstitutosDisponiveis } from './actions';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
