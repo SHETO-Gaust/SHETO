@@ -134,7 +134,7 @@ export async function updateProfessorComponentes(professorId: string, componente
     const { error: deleteError } = await supabase.from('professores_componentes').delete().eq('professor_id', professorId);
     if (deleteError) return { error: 'Não foi possível limpar as disciplinas antigas.' };
     if (componenteIds.length > 0) {
-        const linksToInsert = componenteIds.map(componente_id => ({ professor_id: professorId, componente_id }));
+        const linksToInsert = componente_ids.map(componente_id => ({ professor_id: professorId, componente_id }));
         const { error: insertError } = await supabase.from('professores_componentes').insert(linksToInsert);
         if (insertError) return { error: 'Não foi possível salvar as novas disciplinas.' };
     }
@@ -257,16 +257,17 @@ export async function responderSolicitacao(token: string, restricoes: any) {
 /* -------------------------------------------------------------------------- */
 /* ADMIN: APLICAR RESPOSTA                             */
 /* -------------------------------------------------------------------------- */
-export async function processarRespostaRestricao(solicitacaoId: string, acao: 'confirmar' | 'rejeitar') {
+export async function processarRespostaRestricao(solicitacaoId: string, acao: 'confirmar' | 'rejeitar', dadosFinais?: any) {
     const supabase = await createClient();
     
     const { data: sol } = await supabase.from('solicitacoes_restricoes').select('*').eq('id', solicitacaoId).single();
     if (!sol) return { error: 'Solicitação não encontrada.' };
 
     if (acao === 'confirmar') {
+        const dadosParaAplicar = dadosFinais || sol.dados_temp;
         const { error: pError } = await supabase
             .from('professores')
-            .update({ restricoes: sol.dados_temp })
+            .update({ restricoes: dadosParaAplicar })
             .eq('id', sol.professor_id);
         
         if (pError) return { error: 'Erro ao aplicar restrições ao cadastro do professor.' };

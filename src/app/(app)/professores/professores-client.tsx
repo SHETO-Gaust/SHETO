@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import type { ProfessorComDados, Turno, ComponenteCurricular } from '@/lib/types';
 import {
   Table,
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye, Ban, PenSquare } from 'lucide-react';
+import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye, Ban, PenSquare, MousePointer2 } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -67,6 +67,7 @@ export function ProfessoresClient({
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [reviewData, setReviewData] = useState<any>(null);
   const [isSendingMail, setIsSendingMail] = useState<string | null>(null);
   const [isActionPending, startAction] = useTransition();
   const { toast } = useToast();
@@ -94,17 +95,41 @@ export function ProfessoresClient({
       });
   };
 
+  const handleReviewCellClick = (turnoId: string, diaId: string, aulaIdx: number) => {
+      setReviewData((prev: any) => {
+          const newData = JSON.parse(JSON.stringify(prev || {}));
+          if (!newData[turnoId]) newData[turnoId] = {};
+          if (!newData[turnoId][diaId]) newData[turnoId][diaId] = {};
+
+          const currentVal = newData[turnoId][diaId][aulaIdx];
+          
+          // Impede mexer no planejamento (regra da coordenação)
+          if (currentVal === 'planejamento') {
+              toast({ title: 'Campo Bloqueado', description: 'O planejamento deve ser editado no cadastro principal do professor.' });
+              return prev;
+          }
+
+          if (currentVal === 'indisponivel') {
+              delete newData[turnoId][diaId][aulaIdx];
+          } else {
+              newData[turnoId][diaId][aulaIdx] = 'indisponivel';
+          }
+          return newData;
+      });
+  };
+
   const handleReviewAction = (solicitacaoId: string, acao: 'confirmar' | 'rejeitar') => {
       startAction(async () => {
-          const result = await processarRespostaRestricao(solicitacaoId, acao);
+          const result = await processarRespostaRestricao(solicitacaoId, acao, reviewData);
           if (result.error) {
               toast({ title: 'Erro ao processar', description: result.error, variant: 'destructive' });
           } else {
               toast({ 
                   title: acao === 'confirmar' ? 'Restrições Aplicadas!' : 'Resposta Descartada',
-                  description: acao === 'confirmar' ? 'O cadastro do professor foi atualizado.' : 'A sugestão do professor foi ignorada.'
+                  description: acao === 'confirmar' ? 'O cadastro do professor foi atualizado com seus ajustes.' : 'A sugestão do professor foi ignorada.'
               });
               setIsReviewOpen(false);
+              setReviewData(null);
               fetchAndUpdateProfessores();
           }
       });
@@ -122,6 +147,7 @@ export function ProfessoresClient({
 
   const openReview = (professor: ProfessorComDados) => {
       setSelectedProfessor(professor);
+      setReviewData(professor.solicitacao_pendente?.dados_temp || {});
       setIsReviewOpen(true);
   };
   
@@ -129,6 +155,7 @@ export function ProfessoresClient({
     setActiveSheet(null);
     setIsDialogOpen(false);
     setIsReviewOpen(false);
+    setReviewData(null);
     setTimeout(() => {
         setSelectedProfessor(null);
     }, 300);
@@ -262,43 +289,29 @@ export function ProfessoresClient({
               <AlertDialogHeader className="p-6 pb-2">
                   <AlertDialogTitle className="flex items-center gap-2">
                       <CheckCircle2 className="text-blue-600" /> 
-                      Revisar Disponibilidade Enviada
+                      Revisar e Ajustar Disponibilidade
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                      O professor <strong>{selectedProfessor?.nome_completo}</strong> preencheu sua grade. Veja o espelho abaixo e confirme se deseja aplicar estas restrições ao cadastro oficial.
+                      Confira o que o professor <strong>{selectedProfessor?.nome_completo}</strong> preencheu. <br />
+                      <strong>Dica:</strong> Você pode clicar nos campos para adicionar ou remover indisponibilidades antes de salvar.
                   </AlertDialogDescription>
               </AlertDialogHeader>
               
               <ScrollArea className="flex-1 px-6">
                 <div className="space-y-6 pb-6 pt-2">
-                    <div className="bg-muted/50 p-4 rounded-xl border grid grid-cols-2 gap-4">
-                        <div className="bg-white p-3 rounded-lg border shadow-sm">
-                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Total Indisponível</p>
-                            <p className="text-2xl font-black text-red-600">
-                                {selectedProfessor?.solicitacao_pendente?.dados_temp ? 
-                                    Object.values(selectedProfessor.solicitacao_pendente.dados_temp).reduce((acc: number, turno: any) => 
-                                        acc + Object.values(turno).reduce((acc2: number, dia: any) => 
-                                            acc2 + Object.values(dia).filter(v => v === 'indisponivel').length, 0
-                                        ), 0
-                                    ) : 0
-                                }
-                            </p>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border shadow-sm">
-                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Planejamentos (Mantidos)</p>
-                            <p className="text-2xl font-black text-blue-600">
-                                {selectedProfessor?.solicitacao_pendente?.dados_temp ? 
-                                    Object.values(selectedProfessor.solicitacao_pendente.dados_temp).reduce((acc: number, turno: any) => 
-                                        acc + Object.values(turno).reduce((acc2: number, dia: any) => 
-                                            acc2 + Object.values(dia).filter(v => v === 'planejamento').length, 0
-                                        ), 0
-                                    ) : 0
-                                }
-                            </p>
+                    <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
+                        <Info className="h-5 w-5 text-primary shrink-0" />
+                        <div className="space-y-1">
+                            <p className="text-xs font-bold text-primary uppercase tracking-tight">Legenda de Edição:</p>
+                            <div className="flex gap-4 text-[10px] text-muted-foreground">
+                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-sm"/> Indisponível (Clicável)</div>
+                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded-sm"/> Planejamento (Bloqueado)</div>
+                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-white border rounded-sm"/> Livre (Clicável)</div>
+                            </div>
                         </div>
                     </div>
 
-                    {selectedProfessor && (
+                    {selectedProfessor && reviewData && (
                         <Tabs defaultValue={selectedProfessor.turnos_ids[0]} className="w-full">
                             <TabsList className="bg-muted w-full justify-start overflow-x-auto h-auto p-1">
                                 {selectedProfessor.turnos.map(t => (
@@ -329,17 +342,30 @@ export function ProfessoresClient({
                                                             </div>
                                                         </td>
                                                         {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
-                                                            const val = selectedProfessor.solicitacao_pendente?.dados_temp?.[turno.id]?.[dia.id]?.[aulaIdx];
+                                                            const val = reviewData[turno.id]?.[dia.id]?.[aulaIdx];
+                                                            const isIndisponivel = val === 'indisponivel';
+                                                            const isPlanejamento = val === 'planejamento';
                                                             
                                                             return (
-                                                                <td key={dia.id} className={cn(
-                                                                    "p-1 border-r last:border-r-0",
-                                                                    val === 'indisponivel' ? "bg-red-50" : val === 'planejamento' ? "bg-blue-50" : ""
-                                                                )}>
-                                                                    <div className="flex items-center justify-center h-full">
-                                                                        {val === 'indisponivel' && <Ban className="h-5 w-5 text-red-500" />}
-                                                                        {val === 'planejamento' && <PenSquare className="h-5 w-5 text-blue-500" />}
+                                                                <td 
+                                                                    key={dia.id} 
+                                                                    className={cn(
+                                                                        "p-1 border-r last:border-r-0 transition-colors group",
+                                                                        !isPlanejamento && "cursor-pointer hover:bg-slate-50",
+                                                                        isIndisponivel ? "bg-red-50" : isPlanejamento ? "bg-blue-50" : ""
+                                                                    )}
+                                                                    onClick={() => handleReviewCellClick(turno.id, dia.id, aulaIdx)}
+                                                                >
+                                                                    <div className="flex items-center justify-center h-full relative">
+                                                                        {isIndisponivel && <Ban className="h-5 w-5 text-red-500" />}
+                                                                        {isPlanejamento && <PenSquare className="h-5 w-5 text-blue-500" />}
                                                                         {!val && <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />}
+                                                                        
+                                                                        {!isPlanejamento && (
+                                                                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/5 rounded">
+                                                                                <MousePointer2 className="h-3 w-3 text-slate-400" />
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </td>
                                                             )
@@ -364,9 +390,9 @@ export function ProfessoresClient({
                         onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'rejeitar')} 
                         className="text-destructive hover:bg-destructive/10 font-bold"
                     >
-                        <XCircle className="mr-2 h-4 w-4" /> Descartar
+                        <XCircle className="mr-2 h-4 w-4" /> Descartar Resposta
                     </Button>
-                    <AlertDialogCancel className="mt-0">Fechar</AlertDialogCancel>
+                    <AlertDialogCancel className="mt-0">Fechar sem Salvar</AlertDialogCancel>
                   </div>
                   <Button 
                     disabled={isActionPending} 
