@@ -19,11 +19,21 @@ export default async function LoginPage() {
       <div className="flex flex-col items-center justify-center p-8 bg-background">
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
           <div className="flex flex-col space-y-2 text-center">
+             <div className="flex justify-center mb-4">
+                <Image 
+                  src="/img/seduc.png" 
+                  alt="SEDUC Logo" 
+                  width={220} 
+                  height={80} 
+                  className="object-contain"
+                  priority
+                />
+             </div>
              <div className="flex items-center justify-center gap-2 text-2xl font-bold">
                 <Clock className="h-6 w-6 text-primary" />
                 <h1 className="font-bold">SHE</h1>
             </div>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Entre com seu email para acessar o Sistema de Horário Escolar.
             </p>
           </div>
