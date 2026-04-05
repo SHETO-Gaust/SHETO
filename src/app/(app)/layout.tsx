@@ -49,13 +49,21 @@ export default async function AppLayout({
     return redirect('/login');
   }
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select(`*, escolas(*)`)
     .eq('id', user.id)
     .single();
   
-  const userProfile = profileData as Profile | null;
+  // Resiliência: Se o perfil não existir, criamos um objeto básico para não quebrar a UI
+  const userProfile = (profileData as Profile | null) || {
+      id: user.id,
+      email: user.email!,
+      role: 'user',
+      active: true,
+      modules: ['dashboard'],
+      name: user.user_metadata?.name || user.email?.split('@')[0]
+  };
 
   // Se o usuário está desativado no perfil, desloga
   if (userProfile && userProfile.active === false) {
@@ -67,7 +75,7 @@ export default async function AppLayout({
     .from('escolas')
     .select('*')
     .order('escolar', { ascending: true });
-  const allEscolas = allEscolasData as Escola[] || [];
+  const allEscolas = (allEscolasData as Escola[]) || [];
 
   const headerList = await headers();
   const pathname = headerList.get('x-next-url') || '/dashboard';
@@ -108,19 +116,18 @@ export default async function AppLayout({
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <MainNav profile={userProfile} />
+          <MainNav profile={userProfile as any} />
         </SidebarContent>
-        <SidebarFooter>
-        </SidebarFooter>
+        <SidebarFooter />
       </Sidebar>
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
           <SidebarTrigger className="md:hidden" />
            <div className="flex-1">
-            {userProfile && <SchoolSelector userProfile={userProfile} allEscolas={allEscolas} />}
+            {userProfile && <SchoolSelector userProfile={userProfile as any} allEscolas={allEscolas} />}
           </div>
           <div className="ml-auto flex items-center gap-4">
-            <UserNav user={user} profile={userProfile} />
+            <UserNav user={user} profile={userProfile as any} />
           </div>
         </header>
         <div className="flex-1 bg-white p-4 sm:p-6 overflow-auto">

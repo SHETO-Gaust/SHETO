@@ -8,10 +8,9 @@ import { z } from 'zod';
 import { sendWelcomeEmail } from '@/lib/mail';
 
 export async function getUsers(): Promise<Profile[]> {
-    // Usamos o Admin Client para garantir que o administrador veja todos os usuários,
-    // ignorando políticas de RLS que poderiam restringir a visão apenas ao próprio perfil.
     const supabaseAdmin = await createAdminClient();
 
+    // O Admin Client com a Service Role ignora RLS automaticamente
     const { data, error } = await supabaseAdmin
         .from('profiles')
         .select('*, escolas(id, escolar)')
@@ -26,11 +25,15 @@ export async function getUsers(): Promise<Profile[]> {
 }
 
 export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user', ue: string | null | undefined) {
-    const supabase = await createClient();
+    const supabaseAdmin = await createAdminClient();
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
         .from('profiles')
-        .update({ modules, role, ue: role === 'admin' ? null : ue })
+        .update({ 
+            modules, 
+            role, 
+            ue: role === 'admin' ? null : (ue === 'null' ? null : ue) 
+        })
         .eq('id', userId);
 
     if (error) {
@@ -58,7 +61,6 @@ export async function toggleUserStatus(userId: string, currentStatus: boolean) {
     return { success: true };
 }
 
-
 const createUserSchema = z.object({
   name: z.string().optional(),
   email: z.string().email({ message: "Email inválido." }),
@@ -82,6 +84,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
     
     const { email, password, name, role, modules, ue } = validatedFields.data;
 
+    // 1. Criar no Authentication
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: email,
         password: password,
@@ -91,17 +94,17 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
 
     if (authError) {
         console.error('Error creating auth user:', authError);
-        if (authError.message.includes('User already registered')) {
+        if (authError.message.includes('already registered')) {
             return { error: 'Um usuário com este email já existe.' };
         }
-        return { error: `Ocorreu um erro ao criar o usuário: ${authError.message}` };
+        return { error: `Erro no Auth: ${authError.message}` };
     }
     
     if (!authData.user) {
-        return { error: 'Não foi possível criar o usuário, tente novamente.' };
+        return { error: 'Não foi possível criar o usuário no Auth.' };
     }
 
-    // Usar UPSERT para garantir que o perfil exista mesmo se o trigger falhar
+    // 2. Criar explicitamente na tabela Profiles (backup caso o trigger falhe)
     const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .upsert({
@@ -112,47 +115,39 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
             email: email,
             ue: ue === 'null' ? null : ue,
             active: true,
-        });
+        }, { onConflict: 'id' });
 
     if (profileError) {
-        console.error('Error creating/updating profile:', profileError);
-        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-        return { error: `Ocorreu um erro ao criar o perfil do usuário: ${profileError.message}` };
+        console.error('Error creating profile:', profileError);
+        // Não deletamos o user do auth aqui para permitir tentativas de correção manual, 
+        // mas reportamos o erro.
+        return { error: `Usuário criado, mas erro ao salvar perfil: ${profileError.message}` };
     }
 
-    // Envio de email
+    // 3. Envio de email
     try {
+        let schoolData = { escolar: 'Administração Central', regional: 'Seduc Sede', cidade: 'Palmas', inep: 'Global' };
+        
         if (ue && ue !== 'null') {
             const { data: escola } = await supabaseAdmin
                 .from('escolas')
                 .select('*')
                 .eq('id', ue)
                 .single();
-
-            if (escola) {
-                await sendWelcomeEmail({
-                    to: email,
-                    name: name || 'Usuário(a)',
-                    password: password,
-                    schoolName: escola.escolar,
-                    regional: escola.regional || 'Não informada',
-                    city: escola.cidade || 'Não informada',
-                    inep: escola.inep || 'N/A'
-                });
-            }
-        } else if (role === 'admin') {
-            await sendWelcomeEmail({
-                to: email,
-                name: name || 'Administrador(a)',
-                password: password,
-                schoolName: 'Administração Central',
-                regional: 'Seduc Sede',
-                city: 'Palmas',
-                inep: 'Global'
-            });
+            if (escola) schoolData = escola;
         }
+
+        await sendWelcomeEmail({
+            to: email,
+            name: name || 'Usuário(a)',
+            password: password,
+            schoolName: schoolData.escolar,
+            regional: schoolData.regional || 'Não informada',
+            city: schoolData.cidade || 'Não informada',
+            inep: schoolData.inep || 'N/A'
+        });
     } catch (mailErr) {
-        console.warn('Usuário criado mas erro ao enviar email:', mailErr);
+        console.warn('Erro ao enviar email:', mailErr);
     }
 
     revalidatePath('/usuarios');

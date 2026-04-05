@@ -53,9 +53,10 @@ type CreateUserSheetProps = {
   setIsOpen: (open: boolean) => void;
   allModules: Module[];
   allEscolas: Escola[];
+  onUserCreated?: () => void;
 };
 
-export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: CreateUserSheetProps) {
+export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onUserCreated }: CreateUserSheetProps) {
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
 
@@ -91,9 +92,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: C
 
     const onSubmit = async (data: CreateUserFormValues) => {
         setLoading(true);
-        const ueValue = data.role === 'admin' ? null : (data.ue === 'null' ? null : data.ue);
-        const payload = { ...data, modules: data.role === 'admin' ? [] : data.modules || [], ue: ueValue };
-        const result = await createUser(payload as any);
+        const result = await createUser(data as any);
         setLoading(false);
 
         if (result.error) {
@@ -105,9 +104,10 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas }: C
         } else {
             toast({
                 title: 'Usuário Criado!',
-                description: `O usuário ${data.email} foi criado com sucesso.`,
+                description: `O usuário ${data.email} foi criado com sucesso e o email enviado.`,
             });
             form.reset();
+            onUserCreated?.();
             setIsOpen(false);
         }
     };

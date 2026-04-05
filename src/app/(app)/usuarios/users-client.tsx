@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Edit, UserPlus, UserX, UserCheck, Loader2 } from 'lucide-react';
 import { EditUserPermissionsSheet } from './edit-permissions-sheet';
 import { CreateUserSheet } from './create-user-sheet';
-import { toggleUserStatus } from './actions';
+import { toggleUserStatus, getUsers } from './actions';
 import { useToast } from '@/hooks/use-toast';
 
 const allModules = [
@@ -44,9 +44,10 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
         setIsEditSheetOpen(true);
     };
 
-    const handleUpdate = (updatedUser: Profile) => {
-        setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
-    }
+    const refreshList = async () => {
+        const updatedUsers = await getUsers();
+        setUsers(updatedUsers);
+    };
 
     const handleToggleStatus = (user: Profile) => {
         startTransition(async () => {
@@ -55,7 +56,7 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
                 toast({ title: 'Erro', description: result.error, variant: 'destructive' });
             } else {
                 toast({ title: user.active ? 'Usuário Suspenso' : 'Usuário Reativado' });
-                handleUpdate({ ...user, active: !user.active });
+                setUsers(prev => prev.map(u => u.id === user.id ? { ...u, active: !user.active } : u));
             }
         });
     };
@@ -125,7 +126,7 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
                     setIsOpen={setIsEditSheetOpen}
                     user={selectedUser}
                     allModules={allModules}
-                    onUserUpdate={handleUpdate}
+                    onUserUpdate={refreshList}
                     allEscolas={allEscolas}
                 />
             )}
@@ -134,6 +135,7 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
                 setIsOpen={setIsCreateSheetOpen}
                 allModules={allModules}
                 allEscolas={allEscolas}
+                onUserCreated={refreshList}
             />
         </>
     );
