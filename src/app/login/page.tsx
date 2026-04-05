@@ -34,7 +34,7 @@ export default async function LoginPage() {
                 <h1 className="font-bold">SHE</h1>
             </div>
             <p className="text-muted-foreground text-sm">
-              Entre com seu email para acessar o Sistema de Horário Escolar.
+              Entre com o email de sua Unidade Escolar para acessar o Sistema de Horário Escolar.
             </p>
           </div>
           <AuthForm />

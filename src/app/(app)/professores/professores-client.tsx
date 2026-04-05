@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
@@ -13,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye, Ban, PenSquare, MousePointer2 } from 'lucide-react';
+import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye, Ban, PenSquare, MousePointer2, Info } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -103,7 +102,6 @@ export function ProfessoresClient({
 
           const currentVal = newData[turnoId][diaId][aulaIdx];
           
-          // Impede mexer no planejamento (regra da coordenação)
           if (currentVal === 'planejamento') {
               toast({ title: 'Campo Bloqueado', description: 'O planejamento deve ser editado no cadastro principal do professor.' });
               return prev;

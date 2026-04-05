@@ -21,9 +21,7 @@ export function AuthForm() {
     try {
       await signIn(formData);
     } catch (e) {
-      // Errors are handled by redirecting with a search param
     } finally {
-      // This may not be reached if a redirect happens
       setLoading(false);
     }
   };
@@ -42,7 +40,7 @@ export function AuthForm() {
             id="email-signin"
             name="email"
             type="email"
-            placeholder="admin@seduc.to.gov.br"
+            placeholder="escola@ue.seduc.to.gov.br"
             required
           />
         </div>
