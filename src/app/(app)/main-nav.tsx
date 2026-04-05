@@ -15,6 +15,7 @@ import {
   Layers,
   Search,
   UserX,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -36,6 +37,7 @@ const allLinks = [
   { href: '/visualizarhorario', label: 'Visualizar Horário', icon: Search, module: 'horarios', group: 'horarios', step: 8 },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios', step: 9 },
   { href: '/substituicoes', label: 'Substituições', icon: UserX, module: 'horarios', group: 'horarios', step: 10 },
+  { href: '/auditoria', label: 'Auditoria de Dados', icon: ShieldCheck, module: 'auditoria', group: 'management' },
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
 ];
 

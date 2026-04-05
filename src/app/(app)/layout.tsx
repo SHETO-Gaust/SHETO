@@ -1,3 +1,4 @@
+
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
@@ -29,6 +30,7 @@ const moduleMap: { [key: string]: string } = {
     '/turno': 'turno',
     '/ensino': 'ensino',
     '/serie': 'serie',
+    '/auditoria': 'auditoria',
 };
 
 export default async function AppLayout({

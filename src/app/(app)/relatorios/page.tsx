@@ -55,7 +55,7 @@ export default async function RelatoriosPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Passo 8: Relatórios</CardTitle>
+          <CardTitle>Passo 9: Relatórios</CardTitle>
           <CardDescription>
             Selecione o turno e o tipo de relatório que deseja visualizar.
           </CardDescription>
