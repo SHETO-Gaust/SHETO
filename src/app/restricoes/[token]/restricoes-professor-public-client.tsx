@@ -63,7 +63,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
               toast({ title: 'Erro ao enviar', description: result.error, variant: 'destructive' });
           } else {
               setSubmitted(true);
-              toast({ title: 'Resposta enviada!', description: 'Obrigado por informar sua disponibilidade.' });
+              toast({ title: 'Informações enviadas!', description: 'Obrigado por informar sua disponibilidade.' });
           }
       });
   };
@@ -77,7 +77,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                   </div>
                   <div className="space-y-2">
                       <h2 className="text-2xl font-bold text-green-900">Tudo pronto!</h2>
-                      <p className="text-green-700">Suas informações de folga foram enviadas para a coordenação.</p>
+                      <p className="text-green-700">Suas informações de disponibilidade foram enviadas para a coordenação.</p>
                   </div>
                   <p className="text-xs text-green-600/60 pt-4 uppercase font-bold">Você já pode fechar esta aba.</p>
               </CardContent>
@@ -90,11 +90,11 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
       <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl flex items-start gap-4 shadow-sm">
           <div className="bg-blue-600 text-white h-10 w-10 rounded-full flex items-center justify-center font-bold shrink-0">?</div>
           <div className="space-y-1">
-              <p className="font-bold text-blue-900 text-lg">Como informar sua folga?</p>
+              <p className="font-bold text-blue-900 text-lg">Como informar sua disponibilidade?</p>
               <ul className="text-blue-800 text-sm space-y-1.5 opacity-90">
-                  <li>• Clique nos horários que você estará <span className="font-bold text-red-600">INDISPONÍVEL</span> (Folga).</li>
+                  <li>• Clique nos horários que você estará <span className="font-bold text-red-600">INDISPONÍVEL</span>.</li>
                   <li>• Os horários em branco são considerados <span className="font-bold">LIVRES</span> para alocação de aulas.</li>
-                  <li>• Horários de <span className="font-bold text-blue-600">PLANEJAMENTO</span> são bloqueados para edição do docente.</li>
+                  <li>• Horários de <span className="font-bold text-blue-600">PLANEJAMENTO</span> são definidos pela coordenação e bloqueados para edição.</li>
               </ul>
           </div>
       </div>
@@ -102,7 +102,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
       <Card className="shadow-2xl border-none overflow-hidden">
         <CardHeader className="bg-slate-900 text-white pb-8">
             <CardTitle>Minha Grade de Disponibilidade</CardTitle>
-            <CardDescription className="text-slate-400">Marque apenas os horários que você não poderá estar na escola.</CardDescription>
+            <CardDescription className="text-slate-400">Marque apenas os horários que você possui restrição de atendimento na escola.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
             <Tabs defaultValue={turnos[0]?.id} className="w-full">
@@ -153,7 +153,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                                                             {status === 'indisponivel' ? (
                                                                 <>
                                                                     <Ban className="h-6 w-6 mb-1" />
-                                                                    <span className="text-[9px] font-black uppercase">Folga</span>
+                                                                    <span className="text-[9px] font-black uppercase">Indisponível</span>
                                                                 </>
                                                             ) : isCoordinationSet ? (
                                                                 <>
@@ -181,7 +181,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
         <CardFooter className="p-8 bg-slate-50 border-t flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-1 text-center md:text-left">
                 <p className="font-bold text-slate-900">Finalizou o preenchimento?</p>
-                <p className="text-sm text-slate-500">Ao enviar, a coordenação analisará suas folgas para gerar o horário.</p>
+                <p className="text-sm text-slate-500">Ao enviar, a coordenação analisará suas restrições para gerar o horário.</p>
             </div>
             <Button 
                 size="lg" 

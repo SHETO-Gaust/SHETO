@@ -3,22 +3,31 @@ import { getSolicitacaoByToken } from "@/app/(app)/professores/actions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { RestricoesProfessorPublicClient } from "./restricoes-professor-public-client";
-import Image from "next/image";
 
 export default async function PublicRestrictionPage({ params }: { params: { token: string } }) {
   const { token } = await params;
   const { data, error } = await getSolicitacaoByToken(token);
 
   if (error || !data) {
+    const isAlreadyResponded = error?.includes('já foi respondida');
+
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
         <Card className="max-w-md w-full text-center py-8">
           <CardHeader>
-            <div className="mx-auto bg-destructive/10 h-16 w-16 rounded-full flex items-center justify-center mb-4">
-                <AlertTriangle className="h-8 w-8 text-destructive" />
+            <div className={cn("mx-auto h-16 w-16 rounded-full flex items-center justify-center mb-4", isAlreadyResponded ? "bg-green-100" : "bg-destructive/10")}>
+                {isAlreadyResponded ? (
+                    <CheckCircle2 className="h-8 w-8 text-green-600" />
+                ) : (
+                    <AlertTriangle className="h-8 w-8 text-destructive" />
+                )}
             </div>
-            <CardTitle>Link Inválido ou Expirado</CardTitle>
-            <CardDescription>{error || 'Esta solicitação não está mais disponível.'}</CardDescription>
+            <CardTitle>{isAlreadyResponded ? 'Solicitação Respondida' : 'Link Inválido ou Expirado'}</CardTitle>
+            <CardDescription>
+                {isAlreadyResponded 
+                    ? 'Esta solicitação de disponibilidade já foi preenchida e enviada para a coordenação.' 
+                    : (error || 'Esta solicitação não está mais disponível.')}
+            </CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -46,7 +55,7 @@ export default async function PublicRestrictionPage({ params }: { params: { toke
           <div className="space-y-2">
               <h1 className="text-3xl font-black text-slate-900 leading-tight">Olá, Prof. {professor.nome_horario}</h1>
               <p className="text-slate-600 text-lg">
-                  Informe abaixo seus horários de <strong>folga</strong> e <strong>planejamento</strong> para que possamos organizar a grade horária.
+                  Informe abaixo seus horários de <strong>indisponibilidade</strong> para que possamos organizar a grade horária.
               </p>
           </div>
 
@@ -63,3 +72,5 @@ export default async function PublicRestrictionPage({ params }: { params: { toke
     </div>
   );
 }
+
+import { cn } from "@/lib/utils";

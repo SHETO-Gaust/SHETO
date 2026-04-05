@@ -100,7 +100,7 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
     if (error.code === '23505') {
         return { error: `Um professor com o nome "${dataToUpsert.nome_completo}" já existe.` };
     }
-    return { error: 'Não foi possível salvar o professor.' };
+    return { error: 'Não foi possível salvar the professor.' };
   }
 
   if (componente_ids !== undefined) {
@@ -147,7 +147,7 @@ export async function updateProfessorComponentes(professorId: string, componente
 /* -------------------------------------------------------------------------- */
 export async function updateProfessorRestricoes(professorId: string, restricoes: any) {
     const supabase = await createClient();
-    const { error } = await supabase.from('professores').update({ restricoes }).eq('id', professorId);
+    const { error: error } = await supabase.from('professores').update({ restricoes }).eq('id', professorId);
     if (error) return { error: 'Não foi possível salvar as restrições de horário.' };
     revalidatePath('/professores');
     return { success: true };
@@ -194,7 +194,7 @@ export async function solicitarRestricoesEmail(professorId: string) {
 /* PÁGINA PÚBLICA: GET POR TOKEN                       */
 /* -------------------------------------------------------------------------- */
 export async function getSolicitacaoByToken(token: string) {
-    const supabase = await createAdminClient(); // Usar admin para contornar RLS em rota pública controlada por token
+    const supabase = await createAdminClient(); 
     
     const { data: sol, error } = await supabase
         .from('solicitacoes_restricoes')
@@ -213,7 +213,7 @@ export async function getSolicitacaoByToken(token: string) {
         .single();
 
     if (error || !sol) return { error: 'Link inválido ou expirado.' };
-    if (sol.status === 'concluido') return { error: 'Esta solicitação já foi finalizada.' };
+    if (sol.status === 'respondido' || sol.status === 'concluido') return { error: 'Esta solicitação já foi respondida e não pode ser alterada.' };
     if (new Date(sol.expires_at) < new Date()) return { error: 'Este link expirou.' };
 
     const professor = (sol as any).professor;
