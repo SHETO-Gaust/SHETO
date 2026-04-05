@@ -2,8 +2,9 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import type { Profile } from '@/lib/types';
+import type { Profile, Escola } from '@/lib/types';
 import { z } from 'zod';
+import { sendWelcomeEmail } from '@/lib/mail';
 
 export async function getUsers(): Promise<Profile[]> {
     const supabase = await createClient();
@@ -98,6 +99,38 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         // Desfaz a criação do usuário na autenticação para evitar usuários órfãos
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
         return { error: `Ocorreu um erro ao criar o perfil do usuário: ${profileError.message}` };
+    }
+
+    // --- ENVIO DE E-MAIL DE BOAS VINDAS ---
+    if (ue) {
+        const { data: escola } = await supabaseAdmin
+            .from('escolas')
+            .select('*')
+            .eq('id', ue)
+            .single();
+
+        if (escola) {
+            await sendWelcomeEmail({
+                to: email,
+                name: name || 'Usuário(a)',
+                password: password,
+                schoolName: escola.escolar,
+                regional: escola.regional || 'Não informada',
+                city: escola.cidade || 'Não informada',
+                inep: escola.inep || 'N/A'
+            });
+        }
+    } else if (role === 'admin') {
+        // Para admins globais sem escola vinculada
+        await sendWelcomeEmail({
+            to: email,
+            name: name || 'Administrador(a)',
+            password: password,
+            schoolName: 'Administração Central',
+            regional: 'Seduc Sede',
+            city: 'Palmas',
+            inep: 'Global'
+        });
     }
 
     revalidatePath('/usuarios');
