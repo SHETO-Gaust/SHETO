@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -209,8 +210,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     };
 
     return (
-        <div className="space-y-3 break-inside-avoid w-full">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black print:text-[9px]">
+        <div className="space-y-3 print:space-y-1 break-inside-avoid w-full">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black print:text-[8px]">
                 <div className={cn("w-2 h-2 rounded-full print:hidden", tipo === 'presencial' ? "bg-primary" : "bg-orange-400")} />
                 {label} ({turnoInfo.nome})
             </h3>
@@ -219,9 +220,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 <table className="w-full text-sm print:table-fixed">
                     <thead>
                     <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
-                        <th className="p-2 text-left font-medium border-r w-24 print:w-16 print:border-black print:text-[9px]">Horário</th>
+                        <th className="p-2 print:p-1 text-left font-medium border-r w-24 print:w-16 print:border-black print:text-[8px]">Horário</th>
                         {diasAtivosLocal.map(dia => (
-                        <th key={dia.id} className="p-2 text-center font-medium min-w-[100px] print:min-w-0 print:border-black print:text-[9px]">
+                        <th key={dia.id} className="p-2 print:p-1 text-center font-medium min-w-[100px] print:min-w-0 print:border-black print:text-[8px]">
                             {dia.label}
                         </th>
                         ))}
@@ -230,9 +231,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     <tbody>
                     {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => (
                         <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/10 transition-colors h-16 print:h-auto print:border-black">
-                        <td className="p-2 font-medium bg-muted/20 border-r print:border-black print:bg-white">
-                            <div className="font-bold text-primary print:text-black print:text-[9px]">{aulaIndex + 1}ª Aula</div>
-                            <div className="text-[9px] text-muted-foreground font-normal print:text-[8px]">
+                        <td className="p-2 print:p-1 font-medium bg-muted/20 border-r print:border-black print:bg-white">
+                            <div className="font-bold text-primary print:text-black print:text-[8px]">{aulaIndex + 1}ª Aula</div>
+                            <div className="text-[9px] text-muted-foreground font-normal print:text-[7px]">
                             {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} às {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
                             </div>
                         </td>
@@ -586,7 +587,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             teacherViewMode === 'individual' ? (
                 <TeacherIndividualView professorId={selectedProfessorId} />
             ) : (
-                <div className="grid grid-cols-1 gap-16 pt-4">
+                <div className="grid grid-cols-1 gap-16 pt-4 print:gap-4">
                     {professores.map(prof => (
                         <div key={prof.id} className="pb-16 border-b last:border-0 print:pb-0 print:border-none print:break-after-page">
                             <TeacherIndividualView professorId={prof.id} />
@@ -597,25 +598,25 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           ) : viewMode === 'by-day' ? (
             <GradePorDia dayId={selectedDayId} turnoInfo={horario.turno} />
           ) : (
-            <div className="grid grid-cols-1 gap-12 pt-4">
+            <div className="grid grid-cols-1 gap-12 pt-4 print:gap-2 print:pt-0">
                 {turmas.map((turma, index) => (
                     <div 
                         key={turma.id} 
                         className={cn(
-                            "space-y-6 pb-12 border-b last:border-0 print:border-none print:mb-0",
-                            itemsPerPage === 1 ? "print:break-after-page" : (index % 2 === 1 ? "print:break-after-page" : "print:pb-8")
+                            "space-y-6 pb-12 border-b last:border-0 print:border-none print:mb-0 print:space-y-2 print:pb-0",
+                            itemsPerPage === 1 ? "print:break-after-page" : (index % 2 === 1 ? "print:break-after-page" : "print:pb-4")
                         )}
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 print:gap-1">
                             <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg print:hidden">
                                 {turma.nome.charAt(0)}
                             </div>
-                            <h2 className="text-xl font-bold tracking-tight print:text-black print:text-lg">Turma {turma.nome}</h2>
+                            <h2 className="text-xl font-bold tracking-tight print:text-black print:text-sm print:mb-0">Turma {turma.nome}</h2>
                         </div>
                         
                         <RenderPendencias turmaId={turma.id} />
 
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 print:grid-cols-2 print:gap-2">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4">
                             <GradeHoraria 
                                 targetId={turma.id} 
                                 isProfessorView={false}
