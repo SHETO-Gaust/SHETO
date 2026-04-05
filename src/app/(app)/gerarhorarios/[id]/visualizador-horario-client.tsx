@@ -50,7 +50,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   const [itemsPerPage, setItemsPerPage] = useState<1 | 2>(1);
   const { toast } = useToast();
 
-  // NOVO ESTADO PARA SELEÇÃO MANUAL (SUBSTITUI DRAG & DROP)
   const [selectedSlot, setSelectedSlot] = useState<{ 
     id: string, 
     dia: string, 
@@ -137,36 +136,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     return pendencias;
   };
 
-  const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
-    const pendencias = getPendencias(turmaId);
-    if (pendencias.length === 0) return null;
-
-    return (
-        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6 print:hidden">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
-            <AlertDescription className="text-xs mt-2">
-                <div className="flex flex-wrap gap-3">
-                    {pendencias.map((p, i) => (
-                        <div key={i} className="bg-destructive/10 text-destructive px-3 py-2 rounded font-medium border border-destructive/20 flex flex-col items-center text-center min-w-[120px] shadow-sm">
-                            <span className="font-bold text-[11px] leading-tight">{p.componente}</span>
-                            <span className="text-[10px] opacity-90">{p.missing} aula(s) {p.tipo}</span>
-                            <div className="mt-1.5 pt-1 border-t border-destructive/10 w-full text-[9px] uppercase font-bold text-destructive/70">
-                                {p.professor}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </AlertDescription>
-        </Alert>
-    );
-  };
-
-  // NOVA LÓGICA DE MANIPULAÇÃO POR CLIQUE
   const handleCellClick = (diaDestino: string, indexDestino: number, targetAula?: any) => {
     if (horario.status === 'publicado' || isActionPending) return;
 
-    // 1. Se não houver nada selecionado, tenta selecionar a aula clicada
     if (!selectedSlot) {
         if (targetAula) {
             setSelectedSlot({
@@ -181,16 +153,13 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         return;
     }
 
-    // 2. Se já houver algo selecionado e clicar na mesma coisa, cancela
     if (selectedSlot.dia === diaDestino && selectedSlot.index === indexDestino) {
         setSelectedSlot(null);
         return;
     }
 
-    // 3. Processar a troca/mudança
     const targetAulaId = targetAula?.id || null;
 
-    // Validações de conflito
     const hasConflictOrigemNoDestino = horario.aulas.some(a => 
         a.id !== selectedSlot.id &&
         (targetAulaId ? a.id !== targetAulaId : true) &&
@@ -223,7 +192,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         }
     }
 
-    // Executa a ação
     startAction(async () => {
         const result = await swapAulasManualmente(
             selectedSlot.id, selectedSlot.dia, selectedSlot.index,
@@ -263,6 +231,31 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           }
       });
   }
+
+  const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
+    const pendencias = getPendencias(turmaId);
+    if (pendencias.length === 0) return null;
+
+    return (
+        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6 print:hidden">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
+            <AlertDescription className="text-xs mt-2">
+                <div className="flex flex-wrap gap-3">
+                    {pendencias.map((p, i) => (
+                        <div key={i} className="bg-destructive/10 text-destructive px-3 py-2 rounded font-medium border border-destructive/20 flex flex-col items-center text-center min-w-[120px] shadow-sm">
+                            <span className="font-bold text-[11px] leading-tight">{p.componente}</span>
+                            <span className="text-[10px] opacity-90">{p.missing} aula(s) {p.tipo}</span>
+                            <div className="mt-1.5 pt-1 border-t border-destructive/10 w-full text-[9px] uppercase font-bold text-destructive/70">
+                                {p.professor}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </AlertDescription>
+        </Alert>
+    );
+  };
 
   const GradeHoraria = ({ targetId, isProfessorView, tipo, label, turnoInfo, dataset }: any) => {
     if (!turnoInfo) return null;
