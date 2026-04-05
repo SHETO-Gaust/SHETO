@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -51,7 +50,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   const [itemsPerPage, setItemsPerPage] = useState<1 | 2>(1);
   const { toast } = useToast();
 
-  // Estados para Drag & Drop
   const [draggedAula, setDraggedDraggedAula] = useState<{ id: string, dia: string, index: number, professorId: string | null } | null>(null);
 
   const turmas = useMemo(() => {
@@ -94,62 +92,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     if (diasAtivos.length > 0 && !selectedDayId) setSelectedDayId(diasAtivos[0].id);
   }, [turmas, professores, diasAtivos]);
 
-  // Funções de Drag and Drop
-  const handleDragStart = (aula: any) => {
-    if (horario.status === 'publicado') return;
-    setDraggedDraggedAula({
-        id: aula.id,
-        dia: aula.dia_semana,
-        index: aula.aula_index,
-        professorId: aula.professor_id
-    });
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (diaDestino: string, indexDestino: number, targetAulaId?: string) => {
-    if (!draggedAula || horario.status === 'publicado') return;
-    
-    // Se soltou no mesmo lugar, cancela
-    if (draggedAula.dia === diaDestino && draggedAula.index === indexDestino) {
-        setDraggedDraggedAula(null);
-        return;
-    }
-
-    // MELHORIA ITEM 1: Validação de conflitos em tempo real (simplificada no cliente)
-    const hasConflict = horario.aulas.some(a => 
-        a.id !== draggedAula.id &&
-        a.professor_id === draggedAula.professorId && 
-        a.dia_semana === diaDestino && 
-        a.aula_index === indexDestino &&
-        a.tipo === 'presencial'
-    );
-
-    if (hasConflict) {
-        toast({ title: 'Conflito de Professor!', description: 'O professor já tem aula neste horário em outra turma.', variant: 'destructive' });
-        setDraggedDraggedAula(null);
-        return;
-    }
-
-    startAction(async () => {
-        const result = await swapAulasManualmente(
-            draggedAula.id, draggedAula.dia, draggedAula.index,
-            targetAulaId || null, diaDestino, indexDestino
-        );
-        
-        if (result.error) {
-            toast({ title: 'Erro ao mover', description: result.error, variant: 'destructive' });
-        } else {
-            toast({ title: 'Grade Ajustada!', description: 'A alteração manual foi salva com sucesso.' });
-            window.location.reload();
-        }
-    });
-
-    setDraggedDraggedAula(null);
-  };
-
   const getPendencias = (turmaId: string) => {
     const config = horario.turmas_config?.find(c => c.id === turmaId);
     if (!config) return [];
@@ -187,6 +129,83 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     return pendencias;
   };
 
+  const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
+    const pendencias = getPendencias(turmaId);
+    if (pendencias.length === 0) return null;
+
+    return (
+        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6 print:hidden">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
+            <AlertDescription className="text-xs mt-2">
+                <div className="flex flex-wrap gap-3">
+                    {pendencias.map((p, i) => (
+                        <div key={i} className="bg-destructive/10 text-destructive px-3 py-2 rounded font-medium border border-destructive/20 flex flex-col items-center text-center min-w-[120px] shadow-sm">
+                            <span className="font-bold text-[11px] leading-tight">{p.componente}</span>
+                            <span className="text-[10px] opacity-90">{p.missing} aula(s) {p.tipo}</span>
+                            <div className="mt-1.5 pt-1 border-t border-destructive/10 w-full text-[9px] uppercase font-bold text-destructive/70">
+                                {p.professor}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </AlertDescription>
+        </Alert>
+    );
+  };
+
+  const handleDragStart = (aula: any) => {
+    if (horario.status === 'publicado') return;
+    setDraggedDraggedAula({
+        id: aula.id,
+        dia: aula.dia_semana,
+        index: aula.aula_index,
+        professorId: aula.professor_id
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (diaDestino: string, indexDestino: number, targetAulaId?: string) => {
+    if (!draggedAula || horario.status === 'publicado') return;
+    if (draggedAula.dia === diaDestino && draggedAula.index === indexDestino) {
+        setDraggedDraggedAula(null);
+        return;
+    }
+
+    const hasConflict = horario.aulas.some(a => 
+        a.id !== draggedAula.id &&
+        a.professor_id === draggedAula.professorId && 
+        a.dia_semana === diaDestino && 
+        a.aula_index === indexDestino &&
+        a.tipo === 'presencial'
+    );
+
+    if (hasConflict) {
+        toast({ title: 'Conflito de Professor!', description: 'O professor já tem aula neste horário em outra turma.', variant: 'destructive' });
+        setDraggedDraggedAula(null);
+        return;
+    }
+
+    startAction(async () => {
+        const result = await swapAulasManualmente(
+            draggedAula.id, draggedAula.dia, draggedAula.index,
+            targetAulaId || null, diaDestino, indexDestino
+        );
+        
+        if (result.error) {
+            toast({ title: 'Erro ao mover', description: result.error, variant: 'destructive' });
+        } else {
+            toast({ title: 'Grade Ajustada!', description: 'A alteração manual foi salva com sucesso.' });
+            window.location.reload();
+        }
+    });
+
+    setDraggedDraggedAula(null);
+  };
+
   const handleConsolidar = () => {
       startAction(async () => {
           const result = await consolidarHorario(horario.id);
@@ -211,13 +230,13 @@ export function VisualizadorHorarioClient({ horario }: Props) {
       });
   }
 
-  const GradeHoraria = ({ targetId, isProfessorView, tipo, label, turnoInfo, dataset }: { targetId: string, isProfessorView: boolean, tipo: 'presencial' | 'nao_presencial', label: string, turnoInfo: Turno | null, dataset?: any[] }) => {
+  const GradeHoraria = ({ targetId, isProfessorView, tipo, label, turnoInfo, dataset }: any) => {
     if (!turnoInfo) return null;
 
     const sourceData = dataset || horario.aulas;
 
     const getAulaNoSlot = (dia: string, index: number) => {
-        return sourceData.find(a => 
+        return sourceData.find((a: any) => 
             (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && 
             a.dia_semana === dia && 
             a.aula_index === index &&
@@ -225,7 +244,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         );
     };
 
-    const hasAulas = sourceData.some(a => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
+    const hasAulas = sourceData.some((a: any) => (isProfessorView ? a.professor_id === targetId : a.turma_id === targetId) && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial' && !isProfessorView) return null;
     
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
@@ -341,7 +360,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         if (hasSomethingInCurrent) turnosMap.set(horario.turno.id, horario.turno);
 
         horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId).forEach(a => {
-            const turnoAula = a.horario?.turno;
+            const turnoAula = (a as any).horario?.turno;
             if (turnoAula) turnosMap.set(turnoAula.id, turnoAula);
         });
 
@@ -351,7 +370,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     Object.values(d).includes('planejamento')
                 );
                 if (isPlanningInTurno && !turnosMap.has(tId)) {
-                    const publishedTurno = horario.outras_aulas_publicadas?.find(a => a.horario?.turno_id === tId)?.horario?.turno;
+                    const publishedTurno = horario.outras_aulas_publicadas?.find(a => (a as any).horario?.turno_id === tId)?.horario?.turno;
                     if (publishedTurno) turnosMap.set(tId, publishedTurno);
                 }
             });
@@ -381,7 +400,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         tipo="presencial" 
                         label={`Grade: ${turno.nome}`} 
                         turnoInfo={turno} 
-                        dataset={allTeacherAulas.filter(a => (a.tipo === 'presencial' && (a.horario_id === horario.id ? horario.turno_id === turno.id : a.horario.turno_id === turno.id)))}
+                        dataset={allTeacherAulas.filter(a => (a.tipo === 'presencial' && (a.horario_id === horario.id ? horario.turno_id === turno.id : (a as any).horario.turno_id === turno.id)))}
                     />
                 </div>
             ))}
@@ -683,7 +702,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         </CardContent>
       </Card>
 
-      {/* DIÁLOGO DE CONFIGURAÇÃO DE IMPRESSÃO */}
       <Dialog open={isPrintDialogOpen} onOpenChange={setIsPrintDialogOpen}>
           <DialogContent className="sm:max-w-md">
               <DialogHeader>
