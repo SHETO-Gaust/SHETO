@@ -51,6 +51,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
           <p>Você foi vinculado(a) à seguinte unidade escolar:</p>
           
           <div class="school-info">
+            <p style="margin: 0;"><strong>Responsável:</strong> ${data.name}</p>
             <p style="margin: 0;"><strong>Escola:</strong> ${data.schoolName}</p>
             <p style="margin: 0;"><strong>Regional:</strong> ${data.regional}</p>
             <p style="margin: 0;"><strong>Município:</strong> ${data.city}</p>
@@ -74,7 +75,6 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
         </p>
 
         <div class="footer">
-          <p>Desenvolvido pela Diretoria de Tecnologia e Inovação Educacional</p>
           <p>Secretaria da Educação do Estado do Tocantins</p>
         </div>
       </div>

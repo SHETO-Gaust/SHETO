@@ -10,21 +10,17 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        getAll() {
+          return cookieStore.getAll()
         },
-        set(name: string, value: string, options: CookieOptions) {
+        setAll(cookiesToSet) {
           try {
-            cookieStore.set({ name, value, ...options })
-          } catch (error) {
-            // Lida com o erro em Server Components
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options })
-          } catch (error) {
-            // Lida com o erro em Server Components
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // O método `setAll` foi chamado de um Server Component.
+            // Isso pode ser ignorado se você tiver um middleware atualizando as sessões.
           }
         },
       },
@@ -34,11 +30,26 @@ export async function createClient() {
 
 // Use isso APENAS em Server Actions/Components para tarefas administrativas
 export async function createAdminClient() {
+  const cookieStore = await cookies()
+
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!, // Certifique-se de ter essa variável no seu .env
     {
-      cookies: {},
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch {
+            // O método `setAll` foi chamado de um Server Component.
+          }
+        },
+      },
     }
   )
 }
