@@ -210,8 +210,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     };
 
     return (
-        <div className="space-y-3 print:space-y-1 break-inside-avoid w-full">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black print:text-[8px]">
+        <div className="space-y-3 print:space-y-0.5 break-inside-avoid w-full">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black print:text-[7px]">
                 <div className={cn("w-2 h-2 rounded-full print:hidden", tipo === 'presencial' ? "bg-primary" : "bg-orange-400")} />
                 {label} ({turnoInfo.nome})
             </h3>
@@ -598,25 +598,25 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           ) : viewMode === 'by-day' ? (
             <GradePorDia dayId={selectedDayId} turnoInfo={horario.turno} />
           ) : (
-            <div className="grid grid-cols-1 gap-12 pt-4 print:gap-2 print:pt-0">
+            <div className="grid grid-cols-1 gap-12 pt-4 print:gap-0 print:pt-0">
                 {turmas.map((turma, index) => (
                     <div 
                         key={turma.id} 
                         className={cn(
-                            "space-y-6 pb-12 border-b last:border-0 print:border-none print:mb-0 print:space-y-2 print:pb-0",
-                            itemsPerPage === 1 ? "print:break-after-page" : (index % 2 === 1 ? "print:break-after-page" : "print:pb-4")
+                            "space-y-6 pb-12 border-b last:border-0 print:border-none print:mb-0 print:space-y-0.5 print:pb-0",
+                            itemsPerPage === 1 ? "print:break-after-page" : (index % 2 === 1 ? "print:break-after-page" : "print:pb-1")
                         )}
                     >
-                        <div className="flex items-center gap-3 print:gap-1">
+                        <div className="flex items-center gap-3 print:gap-0.5">
                             <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg print:hidden">
                                 {turma.nome.charAt(0)}
                             </div>
-                            <h2 className="text-xl font-bold tracking-tight print:text-black print:text-sm print:mb-0">Turma {turma.nome}</h2>
+                            <h2 className="text-xl font-bold tracking-tight print:text-black print:text-[10px] print:mb-0">Turma {turma.nome}</h2>
                         </div>
                         
                         <RenderPendencias turmaId={turma.id} />
 
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 print:grid-cols-2 print:gap-4">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 print:grid-cols-2 print:gap-x-4 print:gap-y-0">
                             <GradeHoraria 
                                 targetId={turma.id} 
                                 isProfessorView={false}
