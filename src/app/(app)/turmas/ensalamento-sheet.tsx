@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -214,17 +213,19 @@ export function AlocacaoProfessoresSheet({ isOpen, setIsOpen, turma, dependencie
         <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
           <AlertDialogHeader>
             <AlertDialogTitle>Professor com Carga Horária Excedida</AlertDialogTitle>
-            <AlertDialogDescription>
-              A seguinte alocação excederá a carga horária disponível dos professores:
-              <ul className="list-disc pl-5 mt-2 text-foreground font-normal">
-                {overloadInfo.map(info => (
-                  <li key={info.name}>
-                    <span className="font-semibold">{info.name}</span> excederá em <span className="font-semibold">{info.aulas}</span> {info.aulas > 1 ? 'aulas' : 'aula'}.
-                  </li>
-                ))}
-              </ul>
-              <br />
-              Deseja salvar mesmo assim?
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-muted-foreground">
+                A seguinte alocação excederá a carga horária disponível dos professores:
+                <ul className="list-disc pl-5 mt-2 text-foreground font-normal">
+                  {overloadInfo.map(info => (
+                    <li key={info.name}>
+                      <span className="font-semibold">{info.name}</span> excederá em <span className="font-semibold">{info.aulas}</span> {info.aulas > 1 ? 'aulas' : 'aula'}.
+                    </li>
+                  ))}
+                </ul>
+                <br />
+                Deseja salvar mesmo assim?
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

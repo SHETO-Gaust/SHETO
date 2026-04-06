@@ -437,15 +437,17 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                             <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>
                                                 <AlertDialogHeader>
                                                     <AlertDialogTitle className={isPublicado ? "text-destructive" : ""}>Excluir {isPublicado ? "Grade PUBLICADA" : "Versão"}?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        {isPublicado ? (
-                                                            <div className="space-y-3">
-                                                                <p className="font-bold text-foreground">Atenção: Este horário está PUBLICADO.</p>
-                                                                <p>Ao excluir esta grade, a escola ficará sem um horário oficial para o turno <strong>{selectedTurno.nome}</strong> e ele desaparecerá da consulta pública imediatamente.</p>
-                                                            </div>
-                                                        ) : (
-                                                            <>Isso apagará permanentemente o rascunho <strong>{h.nome}</strong>. Esta ação não pode ser desfeita.</>
-                                                        )}
+                                                    <AlertDialogDescription asChild>
+                                                        <div className="text-sm text-muted-foreground">
+                                                            {isPublicado ? (
+                                                                <div className="space-y-3">
+                                                                    <p className="font-bold text-foreground">Atenção: Este horário está PUBLICADO.</p>
+                                                                    <p>Ao excluir esta grade, a escola ficará sem um horário oficial para o turno <strong>{selectedTurno.nome}</strong> e ele desaparecerá da consulta pública imediatamente.</p>
+                                                                </div>
+                                                            ) : (
+                                                                <p>Isso apagará permanentemente o rascunho <strong>{h.nome}</strong>. Esta ação não pode ser desfeita.</p>
+                                                            )}
+                                                        </div>
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
