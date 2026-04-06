@@ -5,10 +5,13 @@ import type { Turno, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Ban, PenSquare, Loader2, CheckCircle2, Send, Info, Star } from 'lucide-react';
+import { Ban, PenSquare, Loader2, CheckCircle2, Send, Info, Star, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { responderSolicitacao } from '@/app/(app)/professores/actions';
 import { useToast } from '@/hooks/use-toast';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 type Props = {
   token: string;
@@ -31,6 +34,8 @@ const PERIODOS_LABELS: Record<LivreDocenciaPeriodo, string> = {
 export function RestricoesProfessorPublicClient({ token, professor, turnos }: Props) {
   const [restricoes, setRestricoes] = useState<any>(professor.restricoes || {});
   const [livreDocencia, setLivreDocencia] = useState<LivreDocenciaItem[]>(professor.livre_docencia || []);
+  const [semPreferencia, setSemPreferencia] = useState(professor.sem_preferencia_livre_docencia || false);
+  const [justificativa, setJustificativa] = useState('');
   const [isPending, startTransition] = useTransition();
   const [submitted, setSubmitted] = useState(false);
   const { toast } = useToast();
@@ -73,6 +78,8 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
   };
 
   const toggleLivreDocencia = (periodo: LivreDocenciaPeriodo, diaId: string) => {
+      if (semPreferencia) return;
+
       const current = [...livreDocencia];
       const isSelected = current.some(item => item.periodo === periodo && item.dia === diaId);
       
@@ -88,13 +95,13 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
   };
 
   const handleSubmit = () => {
-      if (livreDocencia.length < 2) {
-          toast({ title: 'Livre Docência Incompleta', description: 'Por favor, selecione 2 meios períodos para sua livre docência antes de enviar.', variant: 'destructive' });
+      if (!semPreferencia && livreDocencia.length < 2) {
+          toast({ title: 'Livre Docência Incompleta', description: 'Por favor, selecione 2 meios períodos para sua livre docência ou marque "Sem Preferência".', variant: 'destructive' });
           return;
       }
 
       startTransition(async () => {
-          const result = await responderSolicitacao(token, restricoes, livreDocencia);
+          const result = await responderSolicitacao(token, restricoes, semPreferencia ? [] : livreDocencia, semPreferencia, justificativa);
           if (result.error) {
               toast({ title: 'Erro ao enviar', description: result.error, variant: 'destructive' });
           } else {
@@ -128,7 +135,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
           <div className="space-y-2">
               <p className="font-bold text-blue-900 text-lg">Preferências e Regras</p>
               <ul className="text-blue-800 text-sm space-y-2 opacity-90">
-                  <li>• <strong>Livre Docência:</strong> Você deve escolher obrigatoriamente <strong>2 meios períodos</strong> (blocos de Manhã, Tarde ou Noite) livres na semana.</li>
+                  <li>• <strong>Livre Docência:</strong> Você deve escolher obrigatoriamente <strong>2 meios períodos</strong> (blocos de Manhã, Tarde ou Noite) livres ou optar por <strong>Sem Preferência</strong>.</li>
                   <li>• <strong>Indisponibilidade:</strong> Clique na grade para marcar horários que você possui outros vínculos ou restrições totais.</li>
                   <li>• <strong>Nota:</strong> Estas informações são <strong>sugestões</strong>. A coordenação priorizará seu atendimento, mas a grade final depende das necessidades da escola.</li>
               </ul>
@@ -136,49 +143,73 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
       </div>
 
       <Card className="shadow-lg border-primary/10 overflow-hidden">
-          <CardHeader className="bg-primary/5 border-b">
-              <CardTitle className="text-lg flex items-center gap-2">
-                  <Star className="h-5 w-5 text-primary fill-primary" />
-                  1. Selecione sua Livre Docência (Obrigatório: 2)
-              </CardTitle>
-              <CardDescription>Escolha dois períodos reais em que você prefere não ter nenhuma aula alocada.</CardDescription>
+          <CardHeader className="bg-primary/5 border-b flex flex-row items-center justify-between">
+              <div className="space-y-1">
+                <CardTitle className="text-lg flex items-center gap-2">
+                    <Star className="h-5 w-5 text-primary fill-primary" />
+                    1. Selecione sua Livre Docência (Obrigatório: 2)
+                </CardTitle>
+                <CardDescription>Escolha dois períodos reais em que você prefere não ter nenhuma aula alocada.</CardDescription>
+              </div>
+              
+              <div className="flex items-center space-x-3 bg-white/50 p-2 px-4 rounded-full border border-primary/20 shadow-sm">
+                  <Label htmlFor="sem-pref" className="text-xs font-black uppercase text-primary cursor-pointer">Sem Preferência</Label>
+                  <Switch 
+                    id="sem-pref"
+                    checked={semPreferencia} 
+                    onCheckedChange={(checked) => {
+                        setSemPreferencia(checked);
+                        if (checked) setLivreDocencia([]);
+                    }} 
+                  />
+              </div>
           </CardHeader>
           <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {availablePeriods.map(periodo => (
-                      <div key={periodo} className="space-y-3">
-                          <h4 className="font-black text-xs uppercase text-primary border-b border-primary/10 pb-1 tracking-widest">{PERIODOS_LABELS[periodo]}</h4>
-                          <div className="grid grid-cols-2 gap-2">
-                              {DIAS_SEMANA_MAP.map(dia => {
-                                  const isSelected = livreDocencia.some(item => item.periodo === periodo && item.dia === dia.id);
-                                  return (
-                                      <div 
-                                        key={dia.id}
-                                        onClick={() => toggleLivreDocencia(periodo, dia.id)}
-                                        className={cn(
-                                            "flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all",
-                                            isSelected ? "bg-primary border-primary text-white shadow-md scale-[1.02]" : "bg-background border-muted hover:border-primary/30"
-                                        )}
-                                      >
-                                          <div className={cn("h-4 w-4 rounded-sm border flex items-center justify-center", isSelected ? "bg-white border-white" : "border-primary/30")}>
-                                              {isSelected && <CheckCircle2 className="h-3 w-3 text-primary" />}
-                                          </div>
-                                          <span className="text-xs font-bold uppercase">{dia.label}</span>
-                                      </div>
-                                  );
-                              })}
-                          </div>
-                      </div>
-                  ))}
-              </div>
-              <div className="mt-6 flex items-center justify-between bg-muted/30 p-4 rounded-xl border border-dashed">
-                  <span className="text-sm font-medium">Períodos selecionados:</span>
-                  <div className="flex gap-2">
-                      {Array.from({ length: 2 }).map((_, i) => (
-                          <div key={i} className={cn("h-3 w-8 rounded-full transition-colors", i < livreDocencia.length ? "bg-primary" : "bg-muted-foreground/20")} />
-                      ))}
+              {!semPreferencia ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {availablePeriods.map(periodo => (
+                            <div key={periodo} className="space-y-3">
+                                <h4 className="font-black text-xs uppercase text-primary border-b border-primary/10 pb-1 tracking-widest">{PERIODOS_LABELS[periodo]}</h4>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {DIAS_SEMANA_MAP.map(dia => {
+                                        const isSelected = livreDocencia.some(item => item.periodo === periodo && item.dia === dia.id);
+                                        return (
+                                            <div 
+                                                key={dia.id}
+                                                onClick={() => toggleLivreDocencia(periodo, dia.id)}
+                                                className={cn(
+                                                    "flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all",
+                                                    isSelected ? "bg-primary border-primary text-white shadow-md scale-[1.02]" : "bg-background border-muted hover:border-primary/30"
+                                                )}
+                                            >
+                                                <div className={cn("h-4 w-4 rounded-sm border flex items-center justify-center", isSelected ? "bg-white border-white" : "border-primary/30")}>
+                                                    {isSelected && <CheckCircle2 className="h-3 w-3 text-primary" />}
+                                                </div>
+                                                <span className="text-xs font-bold uppercase">{dia.label}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-6 flex items-center justify-between bg-muted/30 p-4 rounded-xl border border-dashed">
+                        <span className="text-sm font-medium">Períodos selecionados:</span>
+                        <div className="flex gap-2">
+                            {Array.from({ length: 2 }).map((_, i) => (
+                                <div key={i} className={cn("h-3 w-8 rounded-full transition-colors", i < livreDocencia.length ? "bg-primary" : "bg-muted-foreground/20")} />
+                            ))}
+                        </div>
+                    </div>
+                  </>
+              ) : (
+                  <div className="p-12 text-center border-2 border-dashed rounded-2xl bg-primary/5 border-primary/20 animate-in zoom-in-95 duration-300">
+                      <Star className="h-12 w-12 text-primary/20 mx-auto mb-4" />
+                      <p className="text-primary font-bold">Você optou por não definir dias específicos.</p>
+                      <p className="text-sm text-primary/60">O sistema distribuirá seus períodos livres de acordo com a disponibilidade da escola.</p>
                   </div>
-              </div>
+              )}
           </CardContent>
       </Card>
 
@@ -264,7 +295,25 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                 ))}
             </Tabs>
         </CardContent>
-        <CardFooter className="p-8 bg-slate-50 border-t flex flex-col md:flex-row items-center justify-between gap-6">
+      </Card>
+
+      <Card className="shadow-lg border-primary/10 overflow-hidden">
+          <CardHeader className="bg-slate-50 border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-primary" />
+                  3. Justificativa
+              </CardTitle>
+              <CardDescription>Explique resumidamente os motivos das suas escolhas de indisponibilidade e livre docência.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+              <Textarea 
+                placeholder="Ex: Trabalho em outra escola na terça à tarde; quarta-feira preciso de livre docência para compromissos familiares..." 
+                className="min-h-[120px] resize-none"
+                value={justificativa}
+                onChange={(e) => setJustificativa(e.target.value)}
+              />
+          </CardContent>
+          <CardFooter className="p-8 bg-slate-50 border-t flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-1 text-center md:text-left max-w-md">
                 <p className="font-bold text-slate-900">Revisou suas escolhas?</p>
                 <p className="text-xs text-slate-500">Lembre-se que a escola priorizará sua livre docência, mas o horário final depende da organização de todas as turmas.</p>

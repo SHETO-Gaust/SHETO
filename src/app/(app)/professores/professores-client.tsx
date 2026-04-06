@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Ban, PenSquare, MousePointer2, Info, Star } from 'lucide-react';
+import { PlusCircle, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Ban, PenSquare, MousePointer2, Info, Star, MessageSquare } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -39,6 +39,8 @@ import {
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 type ProfessoresClientProps = {
   initialProfessores: ProfessorComDados[];
@@ -74,6 +76,8 @@ export function ProfessoresClient({
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewData, setReviewData] = useState<any>(null);
   const [reviewLivreDocencia, setReviewLivreDocencia] = useState<LivreDocenciaItem[]>([]);
+  const [reviewSemPreferencia, setReviewSemPreferencia] = useState(false);
+  const [reviewJustificativa, setReviewJustificativa] = useState('');
   const [isSendingMail, setIsSendingMail] = useState<string | null>(null);
   const [isActionPending, startAction] = useTransition();
   const { toast } = useToast();
@@ -135,6 +139,7 @@ export function ProfessoresClient({
   };
 
   const toggleReviewLivreDocencia = (periodo: LivreDocenciaPeriodo, diaId: string) => {
+      if (reviewSemPreferencia) return;
       const isSelected = reviewLivreDocencia.some(item => item.periodo === periodo && item.dia === diaId);
       if (isSelected) {
           setReviewLivreDocencia(prev => prev.filter(item => !(item.periodo === periodo && item.dia === diaId)));
@@ -146,7 +151,7 @@ export function ProfessoresClient({
 
   const handleReviewAction = (solicitacaoId: string, acao: 'confirmar' | 'rejeitar') => {
       startAction(async () => {
-          const result = await processarRespostaRestricao(solicitacaoId, acao, reviewData, reviewLivreDocencia);
+          const result = await processarRespostaRestricao(solicitacaoId, acao, reviewData, reviewLivreDocencia, reviewSemPreferencia, reviewJustificativa);
           if (result.error) {
               toast({ title: 'Erro ao processar', description: result.error, variant: 'destructive' });
           } else {
@@ -176,6 +181,8 @@ export function ProfessoresClient({
       setSelectedProfessor(professor);
       setReviewData(professor.solicitacao_pendente?.dados_temp || {});
       setReviewLivreDocencia(professor.solicitacao_pendente?.livre_docencia_temp || []);
+      setReviewSemPreferencia(professor.solicitacao_pendente?.sem_preferencia_livre_docencia_temp || false);
+      setReviewJustificativa(professor.solicitacao_pendente?.justificativa || '');
       setIsReviewOpen(true);
   };
   
@@ -185,6 +192,8 @@ export function ProfessoresClient({
     setIsReviewOpen(false);
     setReviewData(null);
     setReviewLivreDocencia([]);
+    setReviewSemPreferencia(false);
+    setReviewJustificativa('');
     setTimeout(() => {
         setSelectedProfessor(null);
     }, 300);
@@ -339,34 +348,65 @@ export function ProfessoresClient({
                         </div>
                     </div>
 
+                    {/* SEÇÃO JUSTIFICATIVA REVISÃO */}
+                    {reviewJustificativa && (
+                        <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl space-y-2">
+                            <p className="text-xs font-bold text-orange-800 uppercase flex items-center gap-2">
+                                <MessageSquare className="h-4 w-4" /> Justificativa do Docente:
+                            </p>
+                            <p className="text-sm italic text-orange-900 leading-relaxed">
+                                "{reviewJustificativa}"
+                            </p>
+                        </div>
+                    )}
+
                     {/* SEÇÃO LIVRE DOCÊNCIA REVISÃO */}
                     <div className="space-y-4">
-                        <div className="flex items-center gap-2 text-primary font-bold uppercase text-xs tracking-widest border-b pb-2">
-                            <Star className="h-4 w-4 fill-primary" /> Sugestão de Livre Docência
+                        <div className="flex items-center justify-between border-b pb-2">
+                            <div className="flex items-center gap-2 text-primary font-bold uppercase text-xs tracking-widest">
+                                <Star className="h-4 w-4 fill-primary" /> Sugestão de Livre Docência
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Label className="text-[10px] font-black uppercase text-primary">Sem Preferência</Label>
+                                <Switch 
+                                    checked={reviewSemPreferencia} 
+                                    onCheckedChange={(checked) => {
+                                        setReviewSemPreferencia(checked);
+                                        if (checked) setReviewLivreDocencia([]);
+                                    }} 
+                                />
+                            </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {availablePeriods.map(periodo => (
-                                <div key={periodo} className="space-y-2">
-                                    <p className="text-[10px] font-black text-muted-foreground uppercase">{PERIODOS_LABELS[periodo]}</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {DIAS_SEMANA_MAP.map(dia => {
-                                            const isSelected = reviewLivreDocencia.some(item => item.periodo === periodo && item.dia === dia.id);
-                                            return (
-                                                <Button 
-                                                    key={dia.id}
-                                                    variant={isSelected ? "default" : "outline"}
-                                                    size="sm"
-                                                    className={cn("h-8 text-[10px] font-bold", isSelected && "bg-primary")}
-                                                    onClick={() => toggleReviewLivreDocencia(periodo, dia.id)}
-                                                >
-                                                    {dia.label}
-                                                </Button>
-                                            );
-                                        })}
+                        
+                        {!reviewSemPreferencia ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {availablePeriods.map(periodo => (
+                                    <div key={periodo} className="space-y-2">
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase">{PERIODOS_LABELS[periodo]}</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {DIAS_SEMANA_MAP.map(dia => {
+                                                const isSelected = reviewLivreDocencia.some(item => item.periodo === periodo && item.dia === dia.id);
+                                                return (
+                                                    <Button 
+                                                        key={dia.id}
+                                                        variant={isSelected ? "default" : "outline"}
+                                                        size="sm"
+                                                        className={cn("h-8 text-[10px] font-bold", isSelected && "bg-primary")}
+                                                        onClick={() => toggleReviewLivreDocencia(periodo, dia.id)}
+                                                    >
+                                                        {dia.label}
+                                                    </Button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-6 text-center border-2 border-dashed rounded-xl bg-muted/5">
+                                <p className="text-sm font-medium text-muted-foreground">O docente optou por não escolher dias específicos.</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* SEÇÃO INDISPONIBILIDADE REVISÃO */}
@@ -459,7 +499,7 @@ export function ProfessoresClient({
                     <AlertDialogCancel className="mt-0">Fechar</AlertDialogCancel>
                   </div>
                   <Button 
-                    disabled={isActionPending || reviewLivreDocencia.length !== 2} 
+                    disabled={isActionPending || (!reviewSemPreferencia && reviewLivreDocencia.length !== 2)} 
                     onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'confirmar')} 
                     className="bg-blue-600 hover:bg-blue-700 font-bold px-8 shadow-lg"
                   >

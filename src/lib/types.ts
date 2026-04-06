@@ -73,6 +73,8 @@ export type Professor = {
     aulas_planejamento: number;
     restricoes?: any; // JSONB for restrictions
     livre_docencia?: LivreDocenciaItem[]; // JSONB for free shifts
+    sem_preferencia_livre_docencia?: boolean;
+    justificativa?: string | null;
     created_at: string;
 };
 
@@ -83,6 +85,8 @@ export type SolicitacaoRestricao = {
     status: 'pendente' | 'respondido' | 'concluido';
     dados_temp: any;
     livre_docencia_temp?: LivreDocenciaItem[];
+    sem_preferencia_livre_docencia_temp?: boolean;
+    justificativa?: string | null;
     expires_at: string;
     created_at: string;
 };
@@ -215,12 +219,12 @@ export type HorarioCompleto = Horario & {
     turno_oposto?: Turno;
     aulas: (HorarioAulaGerada & {
         componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
-        professor: Pick<Professor, 'id' | 'nome_horario' | 'restricoes' | 'livre_docencia'> | null;
+        professor: Pick<Professor, 'id' | 'nome_horario' | 'restricoes' | 'livre_docencia' | 'sem_preferencia_livre_docencia'> | null;
         turma: Pick<Turma, 'id' | 'nome'>;
     })[];
     outras_aulas_publicadas?: (HorarioAulaGerada & {
         componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
-        professor: Pick<Professor, 'id' | 'nome_horario' | 'restricoes' | 'livre_docencia'> | null;
+        professor: Pick<Professor, 'id' | 'nome_horario' | 'restricoes' | 'livre_docencia' | 'sem_preferencia_livre_docencia'> | null;
         turma: Pick<Turma, 'id' | 'nome'>;
         horario: { turno: Turno };
     })[];

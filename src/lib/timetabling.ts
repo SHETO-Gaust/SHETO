@@ -161,7 +161,9 @@ export function gerarHorarioAlgoritmico(
                     const prof = professores.find(pr => pr.id === b.professor_id);
                     
                     // Verificação de Livre Docência baseada no período real da aula
-                    if (!ignorarLivreDocencia && prof?.livre_docencia) {
+                    // Se o professor marcou "Sem Preferência", ignoramos o bloqueio rígido aqui,
+                    // permitindo que o algoritmo coloque as aulas onde for mais fácil.
+                    if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false && prof?.livre_docencia) {
                         for (let k = 0; k < b.size; k++) {
                             const periodoAula = getPeriodoDaAula(turno, i + k);
                             if (prof.livre_docencia.some(ld => ld.dia === d && ld.periodo === periodoAula)) {
@@ -245,7 +247,7 @@ export function gerarHorarioAlgoritmico(
                     if (b.professor_id) {
                         const prof = professores.find(pr => pr.id === b.professor_id);
                         const periodoAula = getPeriodoDaAula(turnoOposto, i);
-                        const isLivreShift = !ignorarLivreDocencia && prof?.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodoAula);
+                        const isLivreShift = !ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false && prof?.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodoAula);
                         if (isLivreShift) weight += 1000;
                     }
                     slotsNP.push({ d, i, weight });

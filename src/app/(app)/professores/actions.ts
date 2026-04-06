@@ -1,4 +1,3 @@
-
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -82,6 +81,8 @@ const upsertProfessorSchema = z.object({
   componente_ids: z.array(z.string()).optional(),
   restricoes: z.any().optional(),
   livre_docencia: z.array(z.any()).optional(),
+  sem_preferencia_livre_docencia: z.boolean().optional(),
+  justificativa: z.string().nullable().optional(),
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
@@ -220,6 +221,8 @@ export async function getSolicitacaoByToken(token: string) {
                 nome_horario, 
                 restricoes,
                 livre_docencia,
+                sem_preferencia_livre_docencia,
+                justificativa,
                 escola:escolas(escolar),
                 turnos_ids
             )
@@ -246,7 +249,7 @@ export async function getSolicitacaoByToken(token: string) {
 /* -------------------------------------------------------------------------- */
 /* PÁGINA PÚBLICA: ENVIAR RESPOSTA                     */
 /* -------------------------------------------------------------------------- */
-export async function responderSolicitacao(token: string, restricoes: any, livreDocencia: LivreDocenciaItem[]) {
+export async function responderSolicitacao(token: string, restricoes: any, livreDocencia: LivreDocenciaItem[], semPreferencia: boolean, justificativa: string) {
     const supabase = await createAdminClient();
     
     const { data: sol } = await supabase.from('solicitacoes_restricoes').select('id, status').eq('token', token).maybeSingle();
@@ -257,6 +260,8 @@ export async function responderSolicitacao(token: string, restricoes: any, livre
         .update({
             dados_temp: restricoes,
             livre_docencia_temp: livreDocencia,
+            sem_preferencia_livre_docencia_temp: semPreferencia,
+            justificativa: justificativa,
             status: 'respondido'
         })
         .eq('token', token);
@@ -268,7 +273,14 @@ export async function responderSolicitacao(token: string, restricoes: any, livre
 /* -------------------------------------------------------------------------- */
 /* ADMIN: APLICAR RESPOSTA                             */
 /* -------------------------------------------------------------------------- */
-export async function processarRespostaRestricao(solicitacaoId: string, acao: 'confirmar' | 'rejeitar', dadosFinais?: any, livreDocenciaFinal?: LivreDocenciaItem[]) {
+export async function processarRespostaRestricao(
+    solicitacaoId: string, 
+    acao: 'confirmar' | 'rejeitar', 
+    dadosFinais?: any, 
+    livreDocenciaFinal?: LivreDocenciaItem[],
+    semPreferenciaFinal?: boolean,
+    justificativaFinal?: string
+) {
     const supabase = await createClient();
     
     const { data: sol } = await supabase.from('solicitacoes_restricoes').select('*').eq('id', solicitacaoId).maybeSingle();
@@ -277,12 +289,16 @@ export async function processarRespostaRestricao(solicitacaoId: string, acao: 'c
     if (acao === 'confirmar') {
         const dadosParaAplicar = dadosFinais || sol.dados_temp;
         const livreParaAplicar = livreDocenciaFinal || sol.livre_docencia_temp;
+        const semPrefParaAplicar = semPreferenciaFinal !== undefined ? semPreferenciaFinal : sol.sem_preferencia_livre_docencia_temp;
+        const justParaAplicar = justificativaFinal !== undefined ? justificativaFinal : sol.justificativa;
         
         const { error: pError } = await supabase
             .from('professores')
             .update({ 
                 restricoes: dadosParaAplicar,
-                livre_docencia: livreParaAplicar
+                livre_docencia: livreParaAplicar,
+                sem_preferencia_livre_docencia: semPrefParaAplicar,
+                justificativa: justParaAplicar
             })
             .eq('id', sol.professor_id);
         

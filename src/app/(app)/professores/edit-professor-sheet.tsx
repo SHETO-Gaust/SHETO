@@ -10,13 +10,15 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star } from 'lucide-react';
+import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star, MessageSquare } from 'lucide-react';
 import { upsertProfessor } from './actions';
 import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, validateCPF } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 
 const DIAS_SEMANA_MAP = [
   { id: 'segunda', label: 'Seg' }, { id: 'terca', label: 'Ter' },
@@ -45,7 +47,9 @@ const formSchema = z.object({
   livre_docencia: z.array(z.object({
       dia: z.string(),
       periodo: z.enum(['matutino', 'vespertino', 'noturno'])
-  })).max(2, 'No máximo 2 períodos de livre docência.')
+  })).max(2, 'No máximo 2 períodos de livre docência.'),
+  sem_preferencia_livre_docencia: z.boolean().default(false),
+  justificativa: z.string().nullable().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -88,6 +92,8 @@ export function EditProfessorSheet({
       aulas_planejamento: 5,
       restricoes: {},
       livre_docencia: [],
+      sem_preferencia_livre_docencia: false,
+      justificativa: '',
     },
   });
 
@@ -108,6 +114,8 @@ export function EditProfessorSheet({
         aulas_planejamento: professor?.aulas_planejamento ?? 5,
         restricoes: professor?.restricoes ?? {},
         livre_docencia: professor?.livre_docencia ?? [],
+        sem_preferencia_livre_docencia: professor?.sem_preferencia_livre_docencia ?? false,
+        justificativa: professor?.justificativa ?? '',
       });
     }
   }, [isOpen, professor, escolaId, form]);
@@ -159,6 +167,8 @@ export function EditProfessorSheet({
   };
 
   const toggleLivreDocencia = (periodo: LivreDocenciaPeriodo, diaId: string) => {
+      if (form.watch('sem_preferencia_livre_docencia')) return;
+
       const current = form.getValues('livre_docencia') || [];
       const isSelected = current.some(item => item.periodo === periodo && item.dia === diaId);
       
@@ -206,6 +216,7 @@ export function EditProfessorSheet({
     }
   };
 
+  const semPreferencia = form.watch('sem_preferencia_livre_docencia');
   const livreDocenciaCount = form.watch('livre_docencia')?.length || 0;
 
   return (
@@ -367,40 +378,63 @@ export function EditProfessorSheet({
               ) : (
                 <div className="space-y-8">
                     <Card className="border-primary/20 shadow-sm overflow-hidden">
-                        <CardHeader className="bg-primary/5 py-4">
+                        <CardHeader className="bg-primary/5 py-4 flex flex-row items-center justify-between">
                             <CardTitle className="text-sm flex items-center gap-2">
                                 <Star className="h-4 w-4 text-primary fill-primary" />
                                 Livre Docência (2 meios períodos)
                             </CardTitle>
+                            
+                            <FormField control={form.control} name="sem_preferencia_livre_docencia" render={({ field }) => (
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormLabel className="text-[10px] font-black uppercase text-primary">Sem Preferência</FormLabel>
+                                    <FormControl>
+                                        <Switch 
+                                            checked={field.value} 
+                                            onCheckedChange={(checked) => {
+                                                field.onChange(checked);
+                                                if (checked) form.setValue('livre_docencia', [], { shouldDirty: true });
+                                            }} 
+                                        />
+                                    </FormControl>
+                                </FormItem>
+                            )} />
                         </CardHeader>
                         <CardContent className="p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {availablePeriods.map(periodo => (
-                                    <div key={periodo} className="space-y-3">
-                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b pb-1">{PERIODOS_LABELS[periodo]}</p>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {DIAS_SEMANA_MAP.map(dia => {
-                                                const livreDocs = form.watch('livre_docencia') || [];
-                                                const isSelected = livreDocs.some(item => item.periodo === periodo && item.dia === dia.id);
-                                                return (
-                                                    <Button 
-                                                        key={dia.id}
-                                                        type="button"
-                                                        variant={isSelected ? "default" : "outline"}
-                                                        className={cn("h-10 text-[10px] font-bold uppercase", isSelected && "bg-primary")}
-                                                        onClick={() => toggleLivreDocencia(periodo, dia.id)}
-                                                    >
-                                                        {dia.label}
-                                                    </Button>
-                                                );
-                                            })}
-                                        </div>
+                            {!semPreferencia ? (
+                                <>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {availablePeriods.map(periodo => (
+                                            <div key={periodo} className="space-y-3">
+                                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b pb-1">{PERIODOS_LABELS[periodo]}</p>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {DIAS_SEMANA_MAP.map(dia => {
+                                                        const livreDocs = form.watch('livre_docencia') || [];
+                                                        const isSelected = livreDocs.some(item => item.periodo === periodo && item.dia === dia.id);
+                                                        return (
+                                                            <Button 
+                                                                key={dia.id}
+                                                                type="button"
+                                                                variant={isSelected ? "default" : "outline"}
+                                                                className={cn("h-10 text-[10px] font-bold uppercase", isSelected && "bg-primary")}
+                                                                onClick={() => toggleLivreDocencia(periodo, dia.id)}
+                                                            >
+                                                                {dia.label}
+                                                            </Button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
-                            <div className={cn("mt-4 p-2 rounded text-[10px] font-bold text-center uppercase tracking-tighter", livreDocenciaCount === 2 ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")}>
-                                {livreDocenciaCount}/2 Períodos Selecionados
-                            </div>
+                                    <div className={cn("mt-4 p-2 rounded text-[10px] font-bold text-center uppercase tracking-tighter", livreDocenciaCount === 2 ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")}>
+                                        {livreDocenciaCount}/2 Períodos Selecionados
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="p-8 text-center border-2 border-dashed rounded-xl bg-muted/5">
+                                    <p className="text-sm font-medium text-muted-foreground">O sistema escolherá os melhores períodos livres automaticamente.</p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -469,6 +503,25 @@ export function EditProfessorSheet({
                             </div>
                         )}
                     </div>
+
+                    <Separator />
+
+                    <FormField control={form.control} name="justificativa" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel className="flex items-center gap-2">
+                                <MessageSquare className="h-4 w-4" /> Justificativa / Observações Internas
+                            </FormLabel>
+                            <FormControl>
+                                <Textarea 
+                                    placeholder="Motivo das restrições ou observações sobre a Livre Docência..." 
+                                    className="min-h-[100px] resize-none"
+                                    {...field}
+                                    value={field.value ?? ''}
+                                />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )} />
                 </div>
               )}
             </div>
@@ -484,7 +537,7 @@ export function EditProfessorSheet({
               ) : (
                 <>
                     <Button type="button" variant="outline" onClick={() => setStep('info')}><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Button>
-                    <Button type="submit" form="professor-form" disabled={loading || livreDocenciaCount !== 2} className="min-w-[160px] font-bold shadow-lg">
+                    <Button type="submit" form="professor-form" disabled={loading || (!semPreferencia && livreDocenciaCount !== 2)} className="min-w-[160px] font-bold shadow-lg">
                         {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Finalizar e Salvar
                     </Button>
                 </>
