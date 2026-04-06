@@ -1,3 +1,4 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -60,20 +61,35 @@ export async function iniciarGeracaoHorario(
     if (turmasDoTurno.length === 0) return { error: 'Não há turmas cadastradas para este turno.' };
     if (!turno) return { error: 'Turno não encontrado.' };
 
-    const professorIds = allProfessores?.map(p => p.id) || [];
+    // Identificar CPFs dos professores da escola para detectar conflitos em OUTRAS escolas
+    const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
     
+    // Buscar todos os IDs de professores em TODO o sistema que possuam esses CPFs
+    const { data: globalProfessors } = await supabase
+        .from('professores')
+        .select('id')
+        .in('cpf', cpfs);
+    
+    const professorIdsGlobais = globalProfessors?.map(p => p.id) || [];
+
+    // Buscar ocupações de horários publicados para detecção de conflitos e realocação
+    // Agora incluindo ocupações de OUTRAS escolas via CPF
     const { data: ocupacoesAtivas } = await supabase
         .from('horario_aulas')
         .select(`
             id, professor_id, dia_semana, aula_index, tipo, horario_id,
-            professor:professores(nome_horario, restricoes),
+            professor:professores(nome_horario, restricoes, cpf),
             turma:turmas(nome),
             componente:componentes_curriculares(nome),
-            horario:horarios!inner(id, status, turno_id, escola_id)
+            horario:horarios!inner(id, status, turno_id, escola_id, escola:escolas(escolar))
         `)
-        .in('professor_id', professorIds)
+        .in('professor_id', professorIdsGlobais)
         .eq('horarios.status', 'publicado')
-        .neq('horarios.turno_id', turnoId);
+        .neq('horario_id', 'none'); // Garante que pegamos apenas publicadas reais
+
+    // Filtramos para remover a própria grade que estamos tentando gerar agora (se fosse o caso de re-geração)
+    // Mas o algoritmo já cuida de ignorar o turno_id atual se passado corretamente.
+    const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
 
     const result = gerarHorarioAlgoritmico(
         turno as any,
@@ -82,7 +98,7 @@ export async function iniciarGeracaoHorario(
         allTurnos || [],
         configGerminacao,
         force,
-        ocupacoesAtivas || []
+        ocupacoesFiltradas || []
     );
 
     if (result.sugestao && result.sugestao.length > 0) {
@@ -103,6 +119,7 @@ export async function confirmarGeracaoComRealocacao(
 ) {
     const supabase = await createClient();
 
+    // 1. Atualizar aulas dos horários publicados (realocação)
     for (const sug of sugestoes) {
         const { error: updateError } = await supabase
             .from('horario_aulas')
@@ -112,6 +129,7 @@ export async function confirmarGeracaoComRealocacao(
         if (updateError) return { error: `Falha ao realocar aula: ${updateError.message}` };
     }
 
+    // 2. Salvar a nova grade gerada
     return salvarNovaGrade(escolaId, turnoId, nomeHorario, aulas, false);
 }
 
@@ -139,6 +157,8 @@ async function salvarNovaGrade(escolaId: string, turnoId: string, nome: string, 
     }
 
     revalidatePath('/gerarhorarios');
+    revalidatePath('/dashboard');
+    revalidatePath('/visualizarhorario');
     return { data: novoHorario };
 }
 
@@ -148,7 +168,6 @@ export async function swapAulasManualmente(aula1Id: string, dia1: string, idx1: 
     try {
         if (aula2Id) {
             // Swap: Aula 1 vai para Slot 2, Aula 2 vai para Slot 1
-            // Usamos um valor temporário para evitar conflitos de restrição única se houver
             await supabase.from('horario_aulas').update({ dia_semana: 'temp', aula_index: -99 }).eq('id', aula1Id);
             await supabase.from('horario_aulas').update({ dia_semana: dia1, aula_index: idx1 }).eq('id', aula2Id);
             await supabase.from('horario_aulas').update({ dia_semana: dia2, aula_index: idx2 }).eq('id', aula1Id);
@@ -215,7 +234,7 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
 
     const { data: aulas } = await supabase
         .from('horario_aulas')
-        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario, restricoes), turma:turmas(id, nome)')
+        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario, cpf, restricoes), turma:turmas(id, nome)')
         .eq('horario_id', id)
         .order('aula_index', { ascending: true });
 
@@ -224,7 +243,7 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
         .select(`
             *, 
             componente:componentes_curriculares(id, nome, sigla), 
-            professor:professores(id, nome_horario, restricoes), 
+            professor:professores(id, nome_horario, cpf, restricoes), 
             turma:turmas(id, nome),
             horario:horarios!inner(id, status, turno_id, turno:turnos(*))
         `)

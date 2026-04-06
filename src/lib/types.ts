@@ -58,6 +58,7 @@ export type ComponenteCurricular = {
 export type Professor = {
     id: string;
     escola_id: string;
+    cpf: string;
     nome_completo: string;
     nome_horario: string;
     email?: string | null;

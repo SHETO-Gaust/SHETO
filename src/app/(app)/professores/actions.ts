@@ -7,6 +7,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestricao } from '@/lib/types';
 import { sendRestrictionRequestEmail } from '@/lib/mail';
 import { randomBytes } from 'crypto';
+import { validateCPF } from '@/lib/utils';
 
 /* -------------------------------------------------------------------------- */
 /* GET PROFESSORES                               */
@@ -71,6 +72,7 @@ export async function getProfessores(escolaId: string): Promise<{
 const upsertProfessorSchema = z.object({
   id: z.string().optional(),
   escola_id: z.string(),
+  cpf: z.string().refine(validateCPF, 'CPF inválido.'),
   nome_completo: z.string().min(3, 'O nome completo é obrigatório.'),
   nome_horario: z.string().min(2, 'O nome para o horário é obrigatório.'),
   email: z.string().email('Email inválido.').optional().or(z.literal('')),
@@ -78,6 +80,7 @@ const upsertProfessorSchema = z.object({
   aulas_disponiveis: z.coerce.number().min(0, 'As aulas disponíveis não podem ser negativas.'),
   aulas_planejamento: z.coerce.number().min(0, 'As aulas de planejamento não podem ser negativas.'),
   componente_ids: z.array(z.string()).optional(),
+  restricoes: z.any().optional(),
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
@@ -89,6 +92,15 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
   }
   
   const { id, componente_ids, ...dataToUpsert } = validated.data;
+
+  // 1. Verificar se o CPF já está vinculado a outras escolas para informar o usuário
+  const { data: outrosVinculos } = await supabase
+    .from('professores')
+    .select('escola:escolas(escolar)')
+    .eq('cpf', dataToUpsert.cpf)
+    .neq('escola_id', dataToUpsert.escola_id);
+
+  const escolasVinculadas = outrosVinculos?.map(v => (v.escola as any)?.escolar).filter(Boolean) || [];
   
   const { data: professor, error } = await supabase
     .from('professores')
@@ -98,9 +110,9 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
 
   if (error) {
     if (error.code === '23505') {
-        return { error: `Um professor com o nome "${dataToUpsert.nome_completo}" já existe.` };
+        return { error: `Este CPF já está cadastrado nesta unidade escolar.` };
     }
-    return { error: 'Não foi possível salvar the professor.' };
+    return { error: 'Não foi possível salvar o professor.' };
   }
 
   if (componente_ids !== undefined) {
@@ -112,7 +124,12 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
   }
 
   revalidatePath('/professores');
-  return { data: professor };
+  return { 
+    data: professor, 
+    alerta: escolasVinculadas.length > 0 
+        ? `Atenção: Este professor também possui vínculo nas escolas: ${escolasVinculadas.join(', ')}.` 
+        : null 
+  };
 }
 
 /* -------------------------------------------------------------------------- */

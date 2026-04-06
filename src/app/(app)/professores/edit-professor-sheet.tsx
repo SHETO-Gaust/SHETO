@@ -11,12 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare } from 'lucide-react';
+import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard } from 'lucide-react';
 import { upsertProfessor } from './actions';
 import type { ProfessorComDados, Turno, ComponenteCurricular } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from '@/lib/utils';
+import { cn, validateCPF } from '@/lib/utils';
 
 const DIAS_SEMANA_MAP = [
   { id: 'segunda', label: 'Seg' }, { id: 'terca', label: 'Ter' },
@@ -27,6 +27,7 @@ const DIAS_SEMANA_MAP = [
 const formSchema = z.object({
   id: z.string().optional(),
   escola_id: z.union([z.string(), z.number()]).transform(val => String(val)),
+  cpf: z.string().min(14, 'CPF deve ter 11 dígitos.').refine(validateCPF, 'CPF inválido.'),
   nome_completo: z.string().min(3, 'O nome completo é obrigatório.'),
   nome_horario: z.string().min(2, 'O nome para o horário é obrigatório.'),
   email: z.string().email('Email inválido.').optional().or(z.literal('')),
@@ -67,6 +68,7 @@ export function EditProfessorSheet({
     resolver: zodResolver(formSchema),
     defaultValues: {
       escola_id: String(escolaId),
+      cpf: '',
       nome_completo: '',
       nome_horario: '',
       email: '',
@@ -85,6 +87,7 @@ export function EditProfessorSheet({
       form.reset({
         id: professor?.id,
         escola_id: String(escolaId),
+        cpf: professor?.cpf ?? '',
         nome_completo: professor?.nome_completo ?? '',
         nome_horario: professor?.nome_horario ?? '',
         email: professor?.email ?? '',
@@ -102,6 +105,15 @@ export function EditProfessorSheet({
     turnosDaEscola.filter(t => selectedTurnosIds.includes(t.id)),
     [turnosDaEscola, selectedTurnosIds]
   );
+
+  const formatCPF = (value: string) => {
+    return value
+      .replace(/\D/g, '')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .slice(0, 14);
+  };
 
   const handleCellClick = (turnoId: string, dia: string, aulaIndex: number) => {
     const currentRestricoes = form.getValues('restricoes') || {};
@@ -136,10 +148,16 @@ export function EditProfessorSheet({
         toast({ title: 'Erro', description: result.error, variant: 'destructive' });
         return;
       }
-      toast({
-        title: isEdit ? 'Professor Atualizado' : 'Professor Criado',
-        description: `Os dados de "${data.nome_completo}" foram salvos.`,
-      });
+      
+      if (result.alerta) {
+          toast({ title: 'Importante', description: result.alerta, variant: 'default' });
+      } else {
+          toast({
+            title: isEdit ? 'Professor Atualizado' : 'Professor Criado',
+            description: `Os dados de "${data.nome_completo}" foram salvos.`,
+          });
+      }
+      
       setIsOpen(false);
       onProfessorUpdated();
     } catch (error) {
@@ -151,7 +169,7 @@ export function EditProfessorSheet({
 
   const nextStep = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
-    const isValid = await form.trigger(['nome_completo', 'nome_horario', 'turnos_ids', 'aulas_disponiveis']);
+    const isValid = await form.trigger(['cpf', 'nome_completo', 'nome_horario', 'turnos_ids', 'aulas_disponiveis']);
     if (isValid) setStep('restricoes');
   };
 
@@ -179,7 +197,23 @@ export function EditProfessorSheet({
               {step === 'info' ? (
                 <div className="space-y-6">
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Dados Básicos</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Identificação e Contato</h4>
+                    
+                    <FormField control={form.control} name="cpf" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2"><CreditCard className="h-3.5 w-3.5" /> CPF (Obrigatório)</FormLabel>
+                        <FormControl>
+                            <Input 
+                                placeholder="000.000.000-00" 
+                                {...field} 
+                                onChange={(e) => field.onChange(formatCPF(e.target.value))}
+                                maxLength={14}
+                            />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
                     <FormField control={form.control} name="nome_completo" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nome Completo</FormLabel>
