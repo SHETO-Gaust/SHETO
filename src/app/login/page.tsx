@@ -8,20 +8,13 @@ import { Clock } from 'lucide-react';
 export default async function LoginPage() {
   const supabase = await createClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Se houver sessão, verificamos se o perfil está ativo antes de mandar para o dashboard
-  if (session) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('active')
-      .eq('id', session.user.id)
-      .maybeSingle();
-
-    if (profile?.active !== false) {
-      redirect('/dashboard');
-    }
+  // Se o usuário já está logado, manda para o dashboard.
+  // O dashboard cuidará de mostrar a tela de "Suspenso" se necessário.
+  if (user) {
+    redirect('/dashboard');
   }
 
   return (

@@ -1,6 +1,5 @@
 
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import {
   SidebarProvider,
@@ -20,6 +19,7 @@ import { SchoolSelector } from '@/components/school-selector';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/login/actions';
+import { headers } from 'next/headers';
 
 const moduleMap: { [key: string]: string } = {
     '/dashboard': 'dashboard',
@@ -48,6 +48,8 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Se não houver usuário, manda para o login. 
+  // Isso não gera loop porque o login não redireciona usuários nulos.
   if (!user) {
     return redirect('/login');
   }
@@ -58,7 +60,6 @@ export default async function AppLayout({
     .eq('id', user.id)
     .maybeSingle();
   
-  // Resiliência: Se o perfil não existir, criamos um objeto básico para não quebrar a UI
   const userProfile = (profileData as Profile | null) || {
       id: user.id,
       email: user.email!,
@@ -68,7 +69,8 @@ export default async function AppLayout({
       name: user.user_metadata?.name || user.email?.split('@')[0]
   };
 
-  // Se o usuário está desativado no perfil, mostramos uma tela de bloqueio em vez de redirecionar (evita loop)
+  // Se o usuário está desativado, mostramos a tela de bloqueio em vez de redirecionar.
+  // Isso mata o loop de redirecionamentos.
   if (userProfile && userProfile.active === false) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/20 p-4">
@@ -150,7 +152,7 @@ export default async function AppLayout({
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
           <SidebarTrigger className="md:hidden" />
            <div className="flex-1 overflow-hidden">
-            {userProfile && <SchoolSelector userProfile={userProfile as any} allEscolas={allEscolas} />}
+            <SchoolSelector userProfile={userProfile as any} allEscolas={allEscolas} />
           </div>
           <div className="ml-auto flex items-center gap-4 shrink-0">
             <UserNav user={user} profile={userProfile as any} />
