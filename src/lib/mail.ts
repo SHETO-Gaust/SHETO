@@ -1,12 +1,24 @@
 import nodemailer from 'nodemailer';
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_EMAIL,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+/**
+ * Cria o transporte apenas se as credenciais existirem no .env
+ */
+function getTransporter() {
+  const user = process.env.GMAIL_EMAIL;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+
+  if (!user || !pass) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user,
+      pass,
+    },
+  });
+}
 
 export type WelcomeEmailData = {
   to: string;
@@ -19,6 +31,13 @@ export type WelcomeEmailData = {
 };
 
 export async function sendWelcomeEmail(data: WelcomeEmailData) {
+  const transporter = getTransporter();
+  
+  if (!transporter) {
+    console.error('ERRO DE CONFIGURAÇÃO: GMAIL_EMAIL ou GMAIL_APP_PASSWORD não definidos no .env');
+    return { error: 'Serviço de e-mail não configurado. Verifique as credenciais no .env' };
+  }
+
   const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://sheto.vercel.app'}/login`;
 
   const html = `
@@ -46,7 +65,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
         
         <div class="content">
           <p>Olá, <strong>${data.name}</strong>!</p>
-          <p>É com satisfação que informamos que seu acesso experimental ao sistema <strong>SHE</strong> foi liberado.</p>
+          <p>É com satisfação que informamos que seu acesso ao sistema <strong>SHE</strong> foi liberado.</p>
           
           <p>Você foi vinculado(a) à seguinte unidade escolar:</p>
           
@@ -83,7 +102,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
 
   try {
     await transporter.sendMail({
-      from: `"SHE - Sistema de Horário Escolar" <${process.env.GMAIL_EMAIL}>`,
+      from: `"SHE - Sistema de Horário Escolar" <${user}>`,
       to: data.to,
       subject: 'Acesso Liberado - Sistema de Horário Escolar (SHE)',
       html: html,
@@ -91,11 +110,19 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
     return { success: true };
   } catch (error) {
     console.error('Erro ao enviar e-mail:', error);
-    return { error: 'Falha no envio do e-mail de boas-vindas.' };
+    return { error: 'Falha no envio do e-mail de boas-vindas. Verifique a configuração SMTP.' };
   }
 }
 
 export async function sendRestrictionRequestEmail(data: { to: string, name: string, schoolName: string, token: string }) {
+  const transporter = getTransporter();
+  const user = process.env.GMAIL_EMAIL;
+
+  if (!transporter) {
+    console.error('ERRO: GMAIL_EMAIL ou GMAIL_APP_PASSWORD não configurados no .env');
+    return { error: 'Serviço de e-mail não configurado. Informe ao administrador do sistema.' };
+  }
+
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sheto.vercel.app';
   const requestUrl = `${baseUrl}/restricoes/${data.token}`;
 
@@ -116,13 +143,13 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
     <body>
       <div class="container">
         <div class="header">
-          <h2 style="color: #1e3a8a; margin: 0;">Preferências de Horário</h2>
+          <h2 style="color: #1e3a8a; margin: 0;">Preferências de Disponibilidade</h2>
           <p style="color: #64748b;">Sistema de Horário Escolar (SHE)</p>
         </div>
         
         <div class="content">
           <p>Prezado(a) Professor(a) <strong>${data.name}</strong>,</p>
-          <p>A coordenação pedagógica da unidade <strong>${data.schoolName}</strong> solicita que você informe suas preferências de disponibilidade e <strong>Livre Docência (2 meios períodos livres)</strong>.</p>
+          <p>A coordenação pedagógica da unidade <strong>${data.schoolName}</strong> solicita que você informe sua disponibilidade e sugestão de <strong>Livre Docência (2 meios períodos livres)</strong>.</p>
           
           <p>Clique no botão abaixo para acessar sua grade individual:</p>
 
@@ -131,7 +158,7 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
           </div>
 
           <div class="warning">
-            <strong>Nota Importante:</strong> As informações preenchidas são tratadas como <strong>preferências</strong>. 
+            <strong>Atenção:</strong> As informações preenchidas são tratadas como <strong>preferências</strong>. 
             A coordenação fará o possível para atendê-las, mas a definição final da grade depende das necessidades logísticas e pedagógicas da unidade escolar.
           </div>
           
@@ -150,7 +177,7 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
 
   try {
     await transporter.sendMail({
-      from: `"SHE - Sistema de Horário Escolar" <${process.env.GMAIL_EMAIL}>`,
+      from: `"SHE - Sistema de Horário Escolar" <${user}>`,
       to: data.to,
       subject: `Preferências de Horário - ${data.schoolName}`,
       html: html,
@@ -158,6 +185,6 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
     return { success: true };
   } catch (error) {
     console.error('Erro ao enviar e-mail de restrição:', error);
-    return { error: 'Falha no envio do e-mail para o professor.' };
+    return { error: 'Falha no envio do e-mail. Verifique a configuração SMTP do servidor.' };
   }
 }

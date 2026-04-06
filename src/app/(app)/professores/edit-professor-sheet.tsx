@@ -16,6 +16,7 @@ import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem 
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, validateCPF } from '@/lib/utils';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 const DIAS_SEMANA_MAP = [
   { id: 'segunda', label: 'Seg' }, { id: 'terca', label: 'Ter' },
@@ -26,7 +27,7 @@ const DIAS_SEMANA_MAP = [
 const formSchema = z.object({
   id: z.string().optional(),
   escola_id: z.union([z.string(), z.number()]).transform(val => String(val)),
-  cpf: z.string().min(14, 'CPF deve ter 11 dígitos.').refine(validateCPF, 'CPF inválido.'),
+  cpf: z.string().min(14, 'O CPF é obrigatório.').refine(validateCPF, 'CPF inválido.'),
   nome_completo: z.string().min(3, 'O nome completo é obrigatório.'),
   nome_horario: z.string().min(2, 'O nome para o horário é obrigatório.'),
   email: z.string().email('Email inválido.').optional().or(z.literal('')),
@@ -157,7 +158,8 @@ export function EditProfessorSheet({
 
   const onSubmit = async (data: FormValues) => {
     if (step === 'info') {
-      setStep('restricoes');
+      const isValid = await form.trigger(['cpf', 'nome_completo', 'nome_horario', 'turnos_ids', 'aulas_disponiveis']);
+      if (isValid) setStep('restricoes');
       return;
     }
 
@@ -185,12 +187,6 @@ export function EditProfessorSheet({
     } finally {
       setLoading(false);
     }
-  };
-
-  const nextStep = async (e?: React.MouseEvent) => {
-    if (e) e.preventDefault();
-    const isValid = await form.trigger(['cpf', 'nome_completo', 'nome_horario', 'turnos_ids', 'aulas_disponiveis']);
-    if (isValid) setStep('restricoes');
   };
 
   const livreDocenciaCount = form.watch('livre_docencia')?.length || 0;
@@ -353,7 +349,6 @@ export function EditProfessorSheet({
                 </div>
               ) : (
                 <div className="space-y-8">
-                    {/* SEÇÃO LIVRE DOCÊNCIA NO CADASTRO */}
                     <Card className="border-primary/20 shadow-sm overflow-hidden">
                         <CardHeader className="bg-primary/5 py-4">
                             <CardTitle className="text-sm flex items-center gap-2">
@@ -394,7 +389,6 @@ export function EditProfessorSheet({
 
                     <Separator />
 
-                    {/* SEÇÃO OUTRAS RESTRIÇÕES */}
                     <div className="space-y-4">
                         <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
                             <CalendarX className="h-4 w-4" /> Outras Indisponibilidades
@@ -466,7 +460,7 @@ export function EditProfessorSheet({
               {step === 'info' ? (
                 <>
                     <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-                    <Button type="button" onClick={nextStep} className="min-w-[160px] font-bold">
+                    <Button type="submit" form="professor-form" className="min-w-[160px] font-bold">
                         Restrições e Livre Docência <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                 </>
