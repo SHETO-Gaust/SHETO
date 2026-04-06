@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -61,7 +62,8 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, turma, 
   });
 
   const seriesPorTurno = useMemo(() => {
-    return series.reduce((acc, serie) => {
+    // 1. Agrupar
+    const grouped = series.reduce((acc, serie) => {
         const turnoNome = serie.turno?.nome || 'Sem Turno';
         if (!acc[turnoNome]) {
             acc[turnoNome] = [];
@@ -69,6 +71,16 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, turma, 
         acc[turnoNome].push(serie);
         return acc;
     }, {} as Record<string, typeof series>);
+
+    // 2. Ordenar Séries alfabeticamente dentro dos grupos
+    Object.keys(grouped).forEach(key => {
+        grouped[key].sort((a, b) => a.nome.localeCompare(b.nome));
+    });
+
+    // 3. Ordenar os Grupos (Turnos) alfabeticamente
+    return Object.fromEntries(
+        Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b))
+    );
   }, [series]);
 
   useEffect(() => {

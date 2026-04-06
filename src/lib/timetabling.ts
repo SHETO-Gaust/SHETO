@@ -76,7 +76,7 @@ export function gerarHorarioAlgoritmico(
     return blocos;
   };
 
-  const executarTentativa = (permitirMoverNP: boolean) => {
+  const executarTentativa = (permitirMoverNP: boolean, permitirUsoPlanejamento: boolean) => {
     const aulasGeradas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[] = [];
     const ocupacaoProfessoresLocal = new Set<string>();
     const ocupacaoTurmas = new Set<string>();
@@ -137,18 +137,31 @@ export function gerarHorarioAlgoritmico(
     for (const b of blocosPresenciais) {
         let alocado = false;
         const slots = [];
-        for(const d of dias) for(let i=0; i <= turno.aulas_por_dia - b.size; i++) slots.push({ d, i });
-        slots.sort(() => Math.random() - 0.5);
+        for(const d of dias) {
+            for(let i=0; i <= turno.aulas_por_dia - b.size; i++) {
+                let weight = Math.random();
+                // Heurística: Penalizar slots que usam planejamento se não for estritamente permitido ou preferível
+                if (b.professor_id) {
+                    const prof = professores.find(pr => pr.id === b.professor_id);
+                    for (let k = 0; k < b.size; k++) {
+                        if (prof?.restricoes?.[turno.id]?.[d]?.[i + k] === 'planejamento') {
+                            weight += 10; // Peso alto para evitar planejamento se possível
+                            break;
+                        }
+                    }
+                }
+                slots.push({ d, i, weight });
+            }
+        }
+        // Ordenar por peso (slots sem planejamento primeiro)
+        slots.sort((a, b) => a.weight - b.weight);
 
         for (const slot of slots) {
             const { d, i } = slot;
             let livre = true;
             const currentBumped = new Set<string>();
 
-            // Regra: Professor não dá disciplinas diferentes no mesmo dia para a mesma turma
             if (b.professor_id && turmaDiaProfessorDisciplina.get(`${d}-${b.turma_id}-${b.professor_id}`) && turmaDiaProfessorDisciplina.get(`${d}-${b.turma_id}-${b.professor_id}`) !== b.componente_id) livre = false;
-            
-            // Regra: Máximo de aulas por dia do componente (Geminação)
             if ((turmaDiaComponenteCount.get(`${d}-${b.turma_id}-${b.componente_id}`) || 0) + b.size > b.maxAulasPorDia) livre = false;
 
             if (!livre) continue;
@@ -159,8 +172,8 @@ export function gerarHorarioAlgoritmico(
                 if (b.serie_restricoes?.[d]?.[idx] === 'proibido') { livre = false; break; }
                 
                 if (b.professor_id) {
-                    if (ocupacaoProfessoresLocal.has(`${d}-${idx}-${b.professor_id}`)) { livre = false; break; }
                     if (ocupacaoFixaProfessores.has(`${d}-${idx}-${b.professor_id}`)) { livre = false; break; }
+                    if (ocupacaoProfessoresLocal.has(`${d}-${idx}-${b.professor_id}`)) { livre = false; break; }
                     
                     const npConflict = ocupacaoFlexivel.find(o => o.professor_id === b.professor_id && o.dia_semana === d && o.aula_index === idx);
                     if (npConflict) {
@@ -170,8 +183,10 @@ export function gerarHorarioAlgoritmico(
 
                     const prof = professores.find(pr => pr.id === b.professor_id);
                     const restricao = prof?.restricoes?.[turno.id]?.[d]?.[idx];
-                    // PLANEJAMENTO AGORA É TRATADO COMO INDISPONÍVEL (HARD BLOCK)
-                    if (restricao === 'indisponivel' || restricao === 'planejamento') { livre = false; break; }
+                    
+                    if (restricao === 'indisponivel') { livre = false; break; }
+                    // PLANEJAMENTO: Bloqueia se não estivermos no modo flexível de tentativas finais
+                    if (restricao === 'planejamento' && !permitirUsoPlanejamento) { livre = false; break; }
                 }
             }
 
@@ -207,13 +222,12 @@ export function gerarHorarioAlgoritmico(
                 if (b.professor_id) {
                     for (let k = 0; k < b.size; k++) {
                         const idx = i + k;
-                        const conflictKey = `${d}-${idx}-${b.professor_id}`;
-                        if (ocupacaoFixaProfessores.has(conflictKey)) { livre = false; break; }
+                        if (ocupacaoFixaProfessores.has(`${d}-${idx}-${b.professor_id}`)) { livre = false; break; }
                         
                         const prof = professores.find(pr => pr.id === b.professor_id);
                         const restricaoOposta = prof?.restricoes?.[turnoOposto.id]?.[d]?.[idx];
-                        // PLANEJAMENTO TAMBÉM BLOQUEIA CONTRATURNO
-                        if (restricaoOposta === 'indisponivel' || restricaoOposta === 'planejamento') { livre = false; break; }
+                        if (restricaoOposta === 'indisponivel') { livre = false; break; }
+                        if (restricaoOposta === 'planejamento' && !permitirUsoPlanejamento) { livre = false; break; }
                     }
                 }
 
@@ -235,65 +249,80 @@ export function gerarHorarioAlgoritmico(
 
   let melhorTentativa: any = null;
 
+  // PASS 1: Sem mover NP e SEM usar Planejamento
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = executarTentativa(false);
+    const res = executarTentativa(false, false);
     if (res.success) return { success: true, aulas: res.aulas };
     if (!melhorTentativa || res.pendentes.length < melhorTentativa.pendentes.length) melhorTentativa = res;
   }
 
+  // PASS 2: Permitindo mover NP mas SEM usar Planejamento
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = executarTentativa(true);
+    const res = executarTentativa(true, false);
     if (res.success) {
-        const sugestoes: SugestaoRealocacao[] = [];
-        let realocacaoPossivel = true;
-        const ocupacaoAtualTurno = new Set(res.aulas.map(a => `${a.dia_semana}-${a.aula_index}-${a.professor_id}`));
-
-        for (const npId of res.bumpedNPs) {
-            const aulaNP = ocupacaoFlexivel.find(o => o.id === npId);
-            if (!aulaNP) continue;
-
-            let acheiNovo = false;
-            for (const d of turno.dias_semana) {
-                for (let i = 0; i < turno.aulas_por_dia; i++) {
-                    const key = `${d}-${i}-${aulaNP.professor_id}`;
-                    if (!ocupacaoAtualTurno.has(key) && !ocupacaoFixaProfessores.has(key)) {
-                        sugestoes.push({
-                            horario_id: aulaNP.horario_id,
-                            aula_id: aulaNP.id,
-                            professor_nome: aulaNP.professor.nome_horario,
-                            turma_nome: aulaNP.turma.nome,
-                            disciplina_nome: aulaNP.componente.nome,
-                            dia_antigo: aulaNP.dia_semana,
-                            aula_idx_antigo: aulaNP.aula_index,
-                            dia_novo: d,
-                            aula_idx_novo: i
-                        });
-                        ocupacaoAtualTurno.add(key);
-                        acheiNovo = true;
-                        break;
-                    }
-                }
-                if (acheiNovo) break;
-            }
-            if (!acheiNovo) { realocacaoPossivel = false; break; }
-        }
-        if (realocacaoPossivel) return { success: true, aulas: res.aulas, sugestao: sugestoes };
+        const sugestoes = processarBumpedNPs(res.aulas, res.bumpedNPs, turno, ocupacaoFlexivel, ocupacaoFixaProfessores);
+        if (sugestoes) return { success: true, aulas: res.aulas, sugestao: sugestoes };
     }
+  }
+
+  // PASS 3: Tentativa desesperada permitindo Planejamento como reserva
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const res = executarTentativa(true, true);
+    if (res.success) {
+        const sugestoes = processarBumpedNPs(res.aulas, res.bumpedNPs, turno, ocupacaoFlexivel, ocupacaoFixaProfessores);
+        if (sugestoes) return { success: true, aulas: res.aulas, sugestao: sugestoes };
+    }
+    if (!melhorTentativa || res.pendentes.length < melhorTentativa.pendentes.length) melhorTentativa = res;
   }
 
   if (melhorTentativa) {
       const p = melhorTentativa.pendentes[0];
-      let diag = `Não foi possível alocar todas as aulas após ${MAX_ATTEMPTS} tentativas.\n\n`;
+      let diag = `Não foi possível alocar todas as aulas após as tentativas de otimização.\n\n`;
       diag += `GARGALO DETECTADO:\n`;
       diag += `A disciplina "${p.componente_nome}" do professor ${p.professor_nome} na Turma ${p.turma_nome} não encontrou espaço.\n\n`;
       diag += `SUGESTÕES DE CORREÇÃO:\n`;
-      diag += `1. Verifique se o professor ${p.professor_nome} possui muitas restrições de folga ou planejamento na aba "Professores".\n`;
+      diag += `1. Verifique se o professor ${p.professor_nome} possui muitas restrições de folga na aba "Professores".\n`;
       diag += `2. Tente desativar a "Geminação" para a disciplina ${p.componente_nome} no passo anterior da geração.\n`;
-      diag += `3. Verifique se este professor está sobrecarregado com muitas turmas simultâneas.\n`;
-      diag += `4. Se o erro persistir, você pode "Gerar Mesmo com Erros" para ver visualmente onde as janelas estão faltando.`;
+      diag += `3. Verifique se este professor possui aulas em excesso em outros turnos já publicados.`;
       
       return { success: force, aulas: melhorTentativa.aulas, error: diag };
   }
 
   return { success: force, aulas: [], error: `Erro desconhecido durante o processamento.` };
+}
+
+function processarBumpedNPs(aulas: any[], bumpedIds: string[], turno: Turno, ocupacaoFlexivel: any[], ocupacaoFixaProfessores: Set<string>) {
+    const sugestoes: SugestaoRealocacao[] = [];
+    const ocupacaoAtualTurno = new Set(aulas.map(a => `${a.dia_semana}-${a.aula_index}-${a.professor_id}`));
+
+    for (const npId of bumpedIds) {
+        const aulaNP = ocupacaoFlexivel.find(o => o.id === npId);
+        if (!aulaNP) continue;
+
+        let acheiNovo = false;
+        for (const d of turno.dias_semana) {
+            for (let i = 0; i < (aulaNP.horario?.turno?.aulas_por_dia || 5); i++) {
+                const key = `${d}-${i}-${aulaNP.professor_id}`;
+                if (!ocupacaoAtualTurno.has(key) && !ocupacaoFixaProfessores.has(key)) {
+                    sugestoes.push({
+                        horario_id: aulaNP.horario_id,
+                        aula_id: aulaNP.id,
+                        professor_nome: aulaNP.professor.nome_horario,
+                        turma_nome: aulaNP.turma.nome,
+                        disciplina_nome: aulaNP.componente.nome,
+                        dia_antigo: aulaNP.dia_semana,
+                        aula_idx_antigo: aulaNP.aula_index,
+                        dia_novo: d,
+                        aula_idx_novo: i
+                    });
+                    ocupacaoAtualTurno.add(key);
+                    acheiNovo = true;
+                    break;
+                }
+            }
+            if (acheiNovo) break;
+        }
+        if (!acheiNovo) return null;
+    }
+    return sugestoes;
 }

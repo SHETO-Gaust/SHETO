@@ -9,23 +9,26 @@ export type AuditoriaRow = {
     escola: Escola;
     turnos: (Turno & { 
         rascunhos_count: number;
+        publicado: Horario | null;
         rascunhos: (Horario & { dias_vida: number })[];
     })[];
+    status_global: 'sem_dados' | 'em_rascunho' | 'publicado';
 };
 
 export async function getAuditoriaData(): Promise<{ data?: AuditoriaRow[], error?: string }> {
     const supabase = await createClient();
 
     try {
-        // 1. Buscar Escolas
+        // 1. Buscar Todas as Escolas
         const { data: escolas, error: eError } = await supabase
             .from('escolas')
             .select('*')
+            .order('regional', { ascending: true })
             .order('escolar', { ascending: true });
 
         if (eError) throw eError;
 
-        // 2. Buscar Turnos Ativos
+        // 2. Buscar Todos os Turnos Ativos
         const { data: allTurnos, error: tError } = await supabase
             .from('turnos')
             .select('*')
@@ -33,11 +36,10 @@ export async function getAuditoriaData(): Promise<{ data?: AuditoriaRow[], error
 
         if (tError) throw tError;
 
-        // 3. Buscar Rascunhos
-        const { data: allRascunhos, error: rError } = await supabase
+        // 3. Buscar Todos os Horários (Oficiais e Rascunhos)
+        const { data: allHorarios, error: rError } = await supabase
             .from('horarios')
             .select('*')
-            .eq('status', 'em_rascunho')
             .order('created_at', { ascending: false });
 
         if (rError) throw rError;
@@ -48,8 +50,10 @@ export async function getAuditoriaData(): Promise<{ data?: AuditoriaRow[], error
             const turnosDaEscola = (allTurnos || [])
                 .filter(t => t.escola_id === escola.id)
                 .map(turno => {
-                    const rascunhos = (allRascunhos || [])
-                        .filter(r => r.turno_id === turno.id)
+                    const horariosDoTurno = (allHorarios || []).filter(h => h.turno_id === turno.id);
+                    const publicado = horariosDoTurno.find(h => h.status === 'publicado') || null;
+                    const rascunhos = horariosDoTurno
+                        .filter(h => h.status === 'em_rascunho')
                         .map(r => ({
                             ...r,
                             dias_vida: Math.floor((now.getTime() - new Date(r.created_at).getTime()) / (1000 * 60 * 60 * 24))
@@ -57,16 +61,26 @@ export async function getAuditoriaData(): Promise<{ data?: AuditoriaRow[], error
 
                     return {
                         ...turno,
+                        publicado,
                         rascunhos,
                         rascunhos_count: rascunhos.length
                     };
                 });
 
+            // Definir Status Global da Unidade
+            let status_global: 'sem_dados' | 'em_rascunho' | 'publicado' = 'sem_dados';
+            if (turnosDaEscola.some(t => t.publicado)) {
+                status_global = 'publicado';
+            } else if (turnosDaEscola.some(t => t.rascunhos_count > 0)) {
+                status_global = 'em_rascunho';
+            }
+
             return {
                 escola,
-                turnos: turnosDaEscola
+                turnos: turnosDaEscola,
+                status_global
             };
-        }).filter(row => row.turnos.length > 0); // Mostra apenas escolas que configuraram turnos
+        });
 
         return { data: result };
     } catch (error: any) {
