@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star } from 'lucide-react';
 import { upsertProfessor } from './actions';
-import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem } from '@/lib/types';
+import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, validateCPF } from '@/lib/utils';
@@ -23,6 +23,12 @@ const DIAS_SEMANA_MAP = [
   { id: 'quarta', label: 'Qua' }, { id: 'quinta', label: 'Qui' },
   { id: 'sexta', label: 'Sex' }, { id: 'sabado', label: 'Sáb' },
 ];
+
+const PERIODOS_LABELS: Record<LivreDocenciaPeriodo, string> = {
+    matutino: 'Manhã',
+    vespertino: 'Tarde',
+    noturno: 'Noite'
+};
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -37,8 +43,8 @@ const formSchema = z.object({
   aulas_planejamento: z.coerce.number().min(0, 'As aulas de planejamento não podem ser negativas.'),
   restricoes: z.any().optional(),
   livre_docencia: z.array(z.object({
-      turno_id: z.string(),
-      dia: z.string()
+      dia: z.string(),
+      periodo: z.enum(['matutino', 'vespertino', 'noturno'])
   })).max(2, 'No máximo 2 períodos de livre docência.')
 });
 
@@ -112,6 +118,17 @@ export function EditProfessorSheet({
     [turnosDaEscola, selectedTurnosIds]
   );
 
+  const availablePeriods = useMemo(() => {
+      const periods = new Set<LivreDocenciaPeriodo>();
+      turnosDaEscola.forEach(t => {
+          const n = t.nome.toLowerCase();
+          if (n.includes('matutino') || n.includes('integral')) periods.add('matutino');
+          if (n.includes('vespertino') || n.includes('integral')) periods.add('vespertino');
+          if (n.includes('noturno')) periods.add('noturno');
+      });
+      return Array.from(periods);
+  }, [turnosDaEscola]);
+
   const formatCPF = (value: string) => {
     return value
       .replace(/\D/g, '')
@@ -141,18 +158,18 @@ export function EditProfessorSheet({
     form.setValue('restricoes', newRestricoes, { shouldDirty: true });
   };
 
-  const toggleLivreDocencia = (turnoId: string, diaId: string) => {
+  const toggleLivreDocencia = (periodo: LivreDocenciaPeriodo, diaId: string) => {
       const current = form.getValues('livre_docencia') || [];
-      const isSelected = current.some(item => item.turno_id === turnoId && item.dia === diaId);
+      const isSelected = current.some(item => item.periodo === periodo && item.dia === diaId);
       
       if (isSelected) {
-          form.setValue('livre_docencia', current.filter(item => !(item.turno_id === turnoId && item.dia === diaId)), { shouldDirty: true });
+          form.setValue('livre_docencia', current.filter(item => !(item.periodo === periodo && item.dia === diaId)), { shouldDirty: true });
       } else {
           if (current.length >= 2) {
               toast({ title: 'Limite Atingido', description: 'O máximo são 2 períodos de livre docência.', variant: 'destructive' });
               return;
           }
-          form.setValue('livre_docencia', [...current, { turno_id: turnoId, dia: diaId }], { shouldDirty: true });
+          form.setValue('livre_docencia', [...current, { periodo, dia: diaId }], { shouldDirty: true });
       }
   };
 
@@ -358,20 +375,20 @@ export function EditProfessorSheet({
                         </CardHeader>
                         <CardContent className="p-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {selectedTurnos.map(turno => (
-                                    <div key={turno.id} className="space-y-3">
-                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b pb-1">{turno.nome}</p>
+                                {availablePeriods.map(periodo => (
+                                    <div key={periodo} className="space-y-3">
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b pb-1">{PERIODOS_LABELS[periodo]}</p>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
+                                            {DIAS_SEMANA_MAP.map(dia => {
                                                 const livreDocs = form.watch('livre_docencia') || [];
-                                                const isSelected = livreDocs.some(item => item.turno_id === turno.id && item.dia === dia.id);
+                                                const isSelected = livreDocs.some(item => item.periodo === periodo && item.dia === dia.id);
                                                 return (
                                                     <Button 
                                                         key={dia.id}
                                                         type="button"
                                                         variant={isSelected ? "default" : "outline"}
                                                         className={cn("h-10 text-[10px] font-bold uppercase", isSelected && "bg-primary")}
-                                                        onClick={() => toggleLivreDocencia(turno.id, dia.id)}
+                                                        onClick={() => toggleLivreDocencia(periodo, dia.id)}
                                                     >
                                                         {dia.label}
                                                     </Button>

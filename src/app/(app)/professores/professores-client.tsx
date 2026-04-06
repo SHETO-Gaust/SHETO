@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useTransition, useEffect } from 'react';
-import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem } from '@/lib/types';
+import { useState, useTransition, useEffect, useMemo } from 'react';
+import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import {
   Table,
   TableBody,
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye, Ban, PenSquare, MousePointer2, Info, Star } from 'lucide-react';
+import { PlusCircle, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Ban, PenSquare, MousePointer2, Info, Star } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -55,6 +55,12 @@ const DIAS_SEMANA_MAP = [
   { id: 'sexta', label: 'Sex' }, { id: 'sabado', label: 'Sáb' },
 ];
 
+const PERIODOS_LABELS: Record<LivreDocenciaPeriodo, string> = {
+    matutino: 'Manhã',
+    vespertino: 'Tarde',
+    noturno: 'Noite'
+};
+
 export function ProfessoresClient({
   initialProfessores,
   escolaId,
@@ -71,6 +77,17 @@ export function ProfessoresClient({
   const [isSendingMail, setIsSendingMail] = useState<string | null>(null);
   const [isActionPending, startAction] = useTransition();
   const { toast } = useToast();
+
+  const availablePeriods = useMemo(() => {
+      const periods = new Set<LivreDocenciaPeriodo>();
+      turnosDaEscola.forEach(t => {
+          const n = t.nome.toLowerCase();
+          if (n.includes('matutino') || n.includes('integral')) periods.add('matutino');
+          if (n.includes('vespertino') || n.includes('integral')) periods.add('vespertino');
+          if (n.includes('noturno')) periods.add('noturno');
+      });
+      return Array.from(periods);
+  }, [turnosDaEscola]);
 
   const fetchAndUpdateProfessores = async () => {
     const { data, error } = await getProfessores(escolaId);
@@ -117,13 +134,13 @@ export function ProfessoresClient({
       });
   };
 
-  const toggleReviewLivreDocencia = (turnoId: string, diaId: string) => {
-      const isSelected = reviewLivreDocencia.some(item => item.turno_id === turnoId && item.dia === diaId);
+  const toggleReviewLivreDocencia = (periodo: LivreDocenciaPeriodo, diaId: string) => {
+      const isSelected = reviewLivreDocencia.some(item => item.periodo === periodo && item.dia === diaId);
       if (isSelected) {
-          setReviewLivreDocencia(prev => prev.filter(item => !(item.turno_id === turnoId && item.dia === diaId)));
+          setReviewLivreDocencia(prev => prev.filter(item => !(item.periodo === periodo && item.dia === diaId)));
       } else {
           if (reviewLivreDocencia.length >= 2) return;
-          setReviewLivreDocencia(prev => [...prev, { turno_id: turnoId, dia: diaId }]);
+          setReviewLivreDocencia(prev => [...prev, { periodo, dia: diaId }]);
       }
   };
 
@@ -310,25 +327,37 @@ export function ProfessoresClient({
               
               <ScrollArea className="flex-1 px-6">
                 <div className="space-y-8 pb-6 pt-2">
+                    <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
+                        <Info className="h-5 w-5 text-primary shrink-0" />
+                        <div className="space-y-1">
+                            <p className="text-xs font-bold text-primary uppercase tracking-tight">Legenda de Edição:</p>
+                            <div className="flex gap-4 text-[10px] text-muted-foreground">
+                                <span className="flex items-center gap-1"><Ban className="h-3 w-3 text-red-500" /> Indisponibilidade (Edita)</span>
+                                <span className="flex items-center gap-1"><PenSquare className="h-3 w-3 text-blue-500" /> Planejamento (Protegido)</span>
+                                <span className="flex items-center gap-1"><Star className="h-3 w-3 text-primary fill-primary" /> Livre Docência (Edita)</span>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* SEÇÃO LIVRE DOCÊNCIA REVISÃO */}
                     <div className="space-y-4">
                         <div className="flex items-center gap-2 text-primary font-bold uppercase text-xs tracking-widest border-b pb-2">
                             <Star className="h-4 w-4 fill-primary" /> Sugestão de Livre Docência
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {selectedProfessor?.turnos.map(turno => (
-                                <div key={turno.id} className="space-y-2">
-                                    <p className="text-[10px] font-black text-muted-foreground uppercase">{turno.nome}</p>
+                            {availablePeriods.map(periodo => (
+                                <div key={periodo} className="space-y-2">
+                                    <p className="text-[10px] font-black text-muted-foreground uppercase">{PERIODOS_LABELS[periodo]}</p>
                                     <div className="flex flex-wrap gap-2">
-                                        {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
-                                            const isSelected = reviewLivreDocencia.some(item => item.turno_id === turno.id && item.dia === dia.id);
+                                        {DIAS_SEMANA_MAP.map(dia => {
+                                            const isSelected = reviewLivreDocencia.some(item => item.periodo === periodo && item.dia === dia.id);
                                             return (
                                                 <Button 
                                                     key={dia.id}
                                                     variant={isSelected ? "default" : "outline"}
                                                     size="sm"
                                                     className={cn("h-8 text-[10px] font-bold", isSelected && "bg-primary")}
-                                                    onClick={() => toggleReviewLivreDocencia(turno.id, dia.id)}
+                                                    onClick={() => toggleReviewLivreDocencia(periodo, dia.id)}
                                                 >
                                                     {dia.label}
                                                 </Button>
@@ -338,9 +367,6 @@ export function ProfessoresClient({
                                 </div>
                             ))}
                         </div>
-                        <p className="text-[10px] text-muted-foreground bg-muted p-2 rounded italic">
-                            A livre docência selecionada será tratada como bloqueio rígido na geração do horário.
-                        </p>
                     </div>
 
                     {/* SEÇÃO INDISPONIBILIDADE REVISÃO */}
@@ -433,7 +459,7 @@ export function ProfessoresClient({
                     <AlertDialogCancel className="mt-0">Fechar</AlertDialogCancel>
                   </div>
                   <Button 
-                    disabled={isActionPending} 
+                    disabled={isActionPending || reviewLivreDocencia.length !== 2} 
                     onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'confirmar')} 
                     className="bg-blue-600 hover:bg-blue-700 font-bold px-8 shadow-lg"
                   >

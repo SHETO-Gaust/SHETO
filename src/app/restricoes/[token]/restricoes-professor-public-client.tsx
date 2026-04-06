@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition, useMemo } from 'react';
-import type { Turno, LivreDocenciaItem } from '@/lib/types';
+import type { Turno, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,6 @@ import { Ban, PenSquare, Loader2, CheckCircle2, Send, Info, Star } from 'lucide-
 import { cn } from '@/lib/utils';
 import { responderSolicitacao } from '@/app/(app)/professores/actions';
 import { useToast } from '@/hooks/use-toast';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 
 type Props = {
   token: string;
@@ -24,12 +22,29 @@ const DIAS_SEMANA_MAP = [
   { id: 'sexta', label: 'Sexta' }, { id: 'sabado', label: 'Sábado' },
 ];
 
+const PERIODOS_LABELS: Record<LivreDocenciaPeriodo, string> = {
+    matutino: 'Manhã',
+    vespertino: 'Tarde',
+    noturno: 'Noite'
+};
+
 export function RestricoesProfessorPublicClient({ token, professor, turnos }: Props) {
   const [restricoes, setRestricoes] = useState<any>(professor.restricoes || {});
   const [livreDocencia, setLivreDocencia] = useState<LivreDocenciaItem[]>(professor.livre_docencia || []);
   const [isPending, startTransition] = useTransition();
   const [submitted, setSubmitted] = useState(false);
   const { toast } = useToast();
+
+  const availablePeriods = useMemo(() => {
+      const periods = new Set<LivreDocenciaPeriodo>();
+      turnos.forEach(t => {
+          const n = t.nome.toLowerCase();
+          if (n.includes('matutino') || n.includes('integral')) periods.add('matutino');
+          if (n.includes('vespertino') || n.includes('integral')) periods.add('vespertino');
+          if (n.includes('noturno')) periods.add('noturno');
+      });
+      return Array.from(periods);
+  }, [turnos]);
 
   const handleCellClick = (turnoId: string, dia: string, aulaIndex: number) => {
     const newRestricoes = JSON.parse(JSON.stringify(restricoes));
@@ -57,17 +72,18 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
     setRestricoes(newRestricoes);
   };
 
-  const toggleLivreDocencia = (turnoId: string, diaId: string) => {
-      const isSelected = livreDocencia.some(item => item.turno_id === turnoId && item.dia === diaId);
+  const toggleLivreDocencia = (periodo: LivreDocenciaPeriodo, diaId: string) => {
+      const current = [...livreDocencia];
+      const isSelected = current.some(item => item.periodo === periodo && item.dia === diaId);
       
       if (isSelected) {
-          setLivreDocencia(prev => prev.filter(item => !(item.turno_id === turnoId && item.dia === diaId)));
+          setLivreDocencia(current.filter(item => !(item.periodo === periodo && item.dia === diaId)));
       } else {
-          if (livreDocencia.length >= 2) {
+          if (current.length >= 2) {
               toast({ title: 'Limite Atingido', description: 'Você pode selecionar no máximo 2 meios períodos de livre docência.', variant: 'destructive' });
               return;
           }
-          setLivreDocencia(prev => [...prev, { turno_id: turnoId, dia: diaId }]);
+          setLivreDocencia([...current, { periodo, dia: diaId }]);
       }
   };
 
@@ -112,7 +128,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
           <div className="space-y-2">
               <p className="font-bold text-blue-900 text-lg">Preferências e Regras</p>
               <ul className="text-blue-800 text-sm space-y-2 opacity-90">
-                  <li>• <strong>Livre Docência:</strong> Você deve escolher obrigatoriamente <strong>2 meios períodos</strong> livres na semana.</li>
+                  <li>• <strong>Livre Docência:</strong> Você deve escolher obrigatoriamente <strong>2 meios períodos</strong> (blocos de Manhã, Tarde ou Noite) livres na semana.</li>
                   <li>• <strong>Indisponibilidade:</strong> Clique na grade para marcar horários que você possui outros vínculos ou restrições totais.</li>
                   <li>• <strong>Nota:</strong> Estas informações são <strong>sugestões</strong>. A coordenação priorizará seu atendimento, mas a grade final depende das necessidades da escola.</li>
               </ul>
@@ -125,20 +141,20 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                   <Star className="h-5 w-5 text-primary fill-primary" />
                   1. Selecione sua Livre Docência (Obrigatório: 2)
               </CardTitle>
-              <CardDescription>Escolha dois turnos em que você prefere não ter nenhuma aula alocada.</CardDescription>
+              <CardDescription>Escolha dois períodos reais em que você prefere não ter nenhuma aula alocada.</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {turnos.map(turno => (
-                      <div key={turno.id} className="space-y-3">
-                          <h4 className="font-bold text-xs uppercase text-muted-foreground tracking-widest px-1">{turno.nome}</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {availablePeriods.map(periodo => (
+                      <div key={periodo} className="space-y-3">
+                          <h4 className="font-black text-xs uppercase text-primary border-b border-primary/10 pb-1 tracking-widest">{PERIODOS_LABELS[periodo]}</h4>
                           <div className="grid grid-cols-2 gap-2">
-                              {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
-                                  const isSelected = livreDocencia.some(item => item.turno_id === turno.id && item.dia === dia.id);
+                              {DIAS_SEMANA_MAP.map(dia => {
+                                  const isSelected = livreDocencia.some(item => item.periodo === periodo && item.dia === dia.id);
                                   return (
                                       <div 
                                         key={dia.id}
-                                        onClick={() => toggleLivreDocencia(turno.id, dia.id)}
+                                        onClick={() => toggleLivreDocencia(periodo, dia.id)}
                                         className={cn(
                                             "flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all",
                                             isSelected ? "bg-primary border-primary text-white shadow-md scale-[1.02]" : "bg-background border-muted hover:border-primary/30"
@@ -156,7 +172,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                   ))}
               </div>
               <div className="mt-6 flex items-center justify-between bg-muted/30 p-4 rounded-xl border border-dashed">
-                  <span className="text-sm font-medium">Turnos selecionados:</span>
+                  <span className="text-sm font-medium">Períodos selecionados:</span>
                   <div className="flex gap-2">
                       {Array.from({ length: 2 }).map((_, i) => (
                           <div key={i} className={cn("h-3 w-8 rounded-full transition-colors", i < livreDocencia.length ? "bg-primary" : "bg-muted-foreground/20")} />
@@ -172,7 +188,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                 <Ban className="h-5 w-5" />
                 2. Outras Indisponibilidades
             </CardTitle>
-            <CardDescription className="text-slate-400">Marque apenas horários específicos de restrição (ex: outros empregos).</CardDescription>
+            <CardDescription className="text-slate-400">Marque apenas horários específicos de restrição em seus turnos de aula.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
             <Tabs defaultValue={turnos[0]?.id} className="w-full">

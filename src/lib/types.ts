@@ -54,9 +54,11 @@ export type ComponenteCurricular = {
     created_at: string;
 };
 
+export type LivreDocenciaPeriodo = 'matutino' | 'vespertino' | 'noturno';
+
 export type LivreDocenciaItem = {
-    turno_id: string;
     dia: string;
+    periodo: LivreDocenciaPeriodo;
 };
 
 export type Professor = {

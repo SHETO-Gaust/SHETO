@@ -1,4 +1,4 @@
-import type { Turno, TurmaComDados, ProfessorComDados, HorarioAulaGerada, ConfiguracaoGerminacao, LivreDocenciaItem } from './types';
+import type { Turno, TurmaComDados, ProfessorComDados, HorarioAulaGerada, ConfiguracaoGerminacao, LivreDocenciaItem, LivreDocenciaPeriodo } from './types';
 
 export type SugestaoRealocacao = {
   horario_id: string;
@@ -11,6 +11,28 @@ export type SugestaoRealocacao = {
   dia_novo: string;
   aula_idx_novo: number;
 };
+
+/**
+ * Heurística para determinar o período de uma aula baseada no turno e no horário.
+ */
+function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
+    const nome = turno.nome.toLowerCase();
+    if (nome.includes('matutino')) return 'matutino';
+    if (nome.includes('vespertino')) return 'vespertino';
+    if (nome.includes('noturno')) return 'noturno';
+    
+    // Para turnos integrais ou nomes genéricos, usamos a hora de início ou o índice
+    const h = turno.horarios?.[aulaIdx];
+    if (h?.inicio) {
+        const hora = parseInt(h.inicio.split(':')[0]);
+        if (hora < 13) return 'matutino';
+        if (hora < 18) return 'vespertino';
+        return 'noturno';
+    }
+    
+    // Fallback por índice (considerando 5 aulas por período)
+    return aulaIdx < 5 ? 'matutino' : 'vespertino';
+}
 
 /**
  * Algoritmo de Timetabling com Livre Docência, Reinicialização Aleatória e Heurística de Carga.
@@ -138,10 +160,15 @@ export function gerarHorarioAlgoritmico(
                 if (b.professor_id) {
                     const prof = professores.find(pr => pr.id === b.professor_id);
                     
-                    // Verificação de Livre Docência
-                    const isLivreDocenciaShift = !ignorarLivreDocencia && prof?.livre_docencia?.some(ld => ld.turno_id === turno.id && ld.dia === d);
-                    if (isLivreDocenciaShift) {
-                        weight += 1000; // Bloqueio quase total
+                    // Verificação de Livre Docência baseada no período real da aula
+                    if (!ignorarLivreDocencia && prof?.livre_docencia) {
+                        for (let k = 0; k < b.size; k++) {
+                            const periodoAula = getPeriodoDaAula(turno, i + k);
+                            if (prof.livre_docencia.some(ld => ld.dia === d && ld.periodo === periodoAula)) {
+                                weight += 1000;
+                                break;
+                            }
+                        }
                     }
 
                     for (let k = 0; k < b.size; k++) {
@@ -157,7 +184,7 @@ export function gerarHorarioAlgoritmico(
         slots.sort((a, b) => a.weight - b.weight);
 
         for (const slot of slots) {
-            if (slot.weight >= 1000) continue; // Pula slots de livre docência se não estivermos ignorando
+            if (slot.weight >= 1000) continue; 
 
             const { d, i } = slot;
             let livre = true;
@@ -217,7 +244,8 @@ export function gerarHorarioAlgoritmico(
                     let weight = Math.random();
                     if (b.professor_id) {
                         const prof = professores.find(pr => pr.id === b.professor_id);
-                        const isLivreShift = !ignorarLivreDocencia && prof?.livre_docencia?.some(ld => ld.turno_id === turnoOposto.id && ld.dia === d);
+                        const periodoAula = getPeriodoDaAula(turnoOposto, i);
+                        const isLivreShift = !ignorarLivreDocencia && prof?.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodoAula);
                         if (isLivreShift) weight += 1000;
                     }
                     slotsNP.push({ d, i, weight });
@@ -260,42 +288,31 @@ export function gerarHorarioAlgoritmico(
 
   // --- FLUXO DE TENTATIVAS ---
   
-  // 1. Tentar com todas as restrições rígidas (Livre Docência mantida)
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const res = executarTentativa(true, false, false);
     if (res.success) return { success: true, aulas: res.aulas };
   }
 
-  // 2. Tentar flexibilizando Planejamento (Livre Docência mantida)
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const res = executarTentativa(true, true, false);
     if (res.success) return { success: true, aulas: res.aulas };
   }
 
-  // 3. Tentar ignorando Livre Docência (Último recurso)
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const res = executarTentativa(true, true, true);
     if (res.success) {
-        // Encontrou solução mas quebrou a livre docência de alguém
         return { success: true, aulas: res.aulas, error: "AVISO: A grade foi gerada ignorando temporariamente a Livre Docência de alguns professores para possibilitar o fechamento." };
     }
   }
 
-  // Se nada funcionou, gerar diagnóstico detalhado
   const resFalha = executarTentativa(true, true, false);
   const p = resFalha.pendentes[0];
   if (p) {
-      const prof = professores.find(pr => pr.id === p.professor_id);
       let diag = `CONFLITO LÓGICO DETECTADO:\n`;
       diag += `A disciplina "${p.componente_nome}" do professor ${p.professor_nome} na Turma ${p.turma_nome} não encontrou espaço.\n\n`;
       diag += `CAUSAS PROVÁVEIS:\n`;
-      
-      const hasLDInThisTurno = prof?.livre_docencia?.some(ld => ld.turno_id === turno.id);
-      if (hasLDInThisTurno) {
-          diag += `• O professor ${p.professor_nome} tem um período de LIVRE DOCÊNCIA neste turno que pode estar bloqueando aulas necessárias.\n`;
-      }
-      
-      diag += `• O professor pode ter excesso de restrições de indisponibilidade.\n`;
+      diag += `• O professor pode ter excesso de restrições de indisponibilidade ou Livre Docência bloqueando turnos inteiros.\n`;
+      diag += `• Verifique se há janelas impossíveis de preencher ou se o professor está em muitas escolas simultaneamente.\n`;
       diag += `• A carga horária total da série pode estar excedendo a capacidade do turno.`;
       
       return { success: force, aulas: resFalha.aulas, error: diag };
