@@ -21,7 +21,6 @@ function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
     if (nome.includes('vespertino')) return 'vespertino';
     if (nome.includes('noturno')) return 'noturno';
     
-    // Para turnos integrais ou nomes genéricos, usamos a hora de início ou o índice
     const h = turno.horarios?.[aulaIdx];
     if (h?.inicio) {
         const hora = parseInt(h.inicio.split(':')[0]);
@@ -30,7 +29,6 @@ function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
         return 'noturno';
     }
     
-    // Fallback por índice (considerando 5 aulas por período)
     return aulaIdx < 5 ? 'matutino' : 'vespertino';
 }
 
@@ -160,14 +158,11 @@ export function gerarHorarioAlgoritmico(
                 if (b.professor_id) {
                     const prof = professores.find(pr => pr.id === b.professor_id);
                     
-                    // Verificação de Livre Docência baseada no período real da aula
-                    // Se o professor marcou "Sem Preferência", ignoramos o bloqueio rígido aqui,
-                    // permitindo que o algoritmo coloque as aulas onde for mais fácil.
                     if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false && prof?.livre_docencia) {
                         for (let k = 0; k < b.size; k++) {
                             const periodoAula = getPeriodoDaAula(turno, i + k);
                             if (prof.livre_docencia.some(ld => ld.dia === d && ld.periodo === periodoAula)) {
-                                weight += 1000;
+                                weight += 5000; // Aumento drástico para evitar qualquer brecha
                                 break;
                             }
                         }
@@ -246,9 +241,17 @@ export function gerarHorarioAlgoritmico(
                     let weight = Math.random();
                     if (b.professor_id) {
                         const prof = professores.find(pr => pr.id === b.professor_id);
-                        const periodoAula = getPeriodoDaAula(turnoOposto, i);
-                        const isLivreShift = !ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false && prof?.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodoAula);
-                        if (isLivreShift) weight += 1000;
+                        
+                        // CORREÇÃO CRÍTICA: Validar todos os slots do bloco NP contra a Livre Docência do turno oposto
+                        if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false && prof?.livre_docencia) {
+                            for (let k = 0; k < b.size; k++) {
+                                const periodoAula = getPeriodoDaAula(turnoOposto, i + k);
+                                if (prof.livre_docencia.some(ld => ld.dia === d && ld.periodo === periodoAula)) {
+                                    weight += 5000;
+                                    break;
+                                }
+                            }
+                        }
                     }
                     slotsNP.push({ d, i, weight });
                 }
@@ -288,37 +291,40 @@ export function gerarHorarioAlgoritmico(
     return { success: pendentes.length === 0, aulas: aulasGeradas, bumpedNPs: Array.from(bumpedNPs), pendentes };
   };
 
-  // --- FLUXO DE TENTATIVAS ---
+  // --- FLUXO DE TENTATIVAS REFORÇADO ---
   
+  // Tentativa 1: Respeito absoluto a tudo
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const res = executarTentativa(true, false, false);
     if (res.success) return { success: true, aulas: res.aulas };
   }
 
+  // Tentativa 2: Permite usar horário de planejamento se necessário
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const res = executarTentativa(true, true, false);
     if (res.success) return { success: true, aulas: res.aulas };
   }
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  // Se chegou aqui, falhou respeitando a Livre Docência. 
+  // Em vez de ignorar silenciosamente, retornamos erro para o usuário decidir.
+  if (!force) {
+      const resFalha = executarTentativa(true, true, false);
+      const p = resFalha.pendentes[0];
+      let diag = `IMPOSSÍVEL GERAR GRADE COM AS REGRAS ATUAIS:\n`;
+      diag += `O professor ${p.professor_nome} não tem espaço para "${p.componente_nome}" na Turma ${p.turma_nome}.\n\n`;
+      diag += `MOTIVO: As janelas de Livre Docência ou Indisponibilidades deste professor estão bloqueando o fechamento do horário.\n\n`;
+      diag += `SUGESTÃO: Tente alterar os dias de Livre Docência deste professor ou marcar "Sem Preferência" no cadastro dele para dar flexibilidade ao sistema.`;
+      
+      return { success: false, aulas: resFalha.aulas, error: diag };
+  }
+
+  // Apenas se o usuário clicar em "Gerar mesmo com erros", tentamos ignorar a Livre Docência
+  for (let attempt = 0; attempt < 20; attempt++) {
     const res = executarTentativa(true, true, true);
     if (res.success) {
-        return { success: true, aulas: res.aulas, error: "AVISO: A grade foi gerada ignorando temporariamente a Livre Docência de alguns professores para possibilitar o fechamento." };
+        return { success: true, aulas: res.aulas, error: "AVISO: A grade foi gerada ignorando a Livre Docência de alguns professores para possibilitar o fechamento." };
     }
   }
 
-  const resFalha = executarTentativa(true, true, false);
-  const p = resFalha.pendentes[0];
-  if (p) {
-      let diag = `CONFLITO LÓGICO DETECTADO:\n`;
-      diag += `A disciplina "${p.componente_nome}" do professor ${p.professor_nome} na Turma ${p.turma_nome} não encontrou espaço.\n\n`;
-      diag += `CAUSAS PROVÁVEIS:\n`;
-      diag += `• O professor pode ter excesso de restrições de indisponibilidade ou Livre Docência bloqueando turnos inteiros.\n`;
-      diag += `• Verifique se há janelas impossíveis de preencher ou se o professor está em muitas escolas simultaneamente.\n`;
-      diag += `• A carga horária total da série pode estar excedendo a capacidade do turno.`;
-      
-      return { success: force, aulas: resFalha.aulas, error: diag };
-  }
-
-  return { success: force, aulas: [], error: `Erro no processamento lógico da grade.` };
+  return { success: false, aulas: [], error: `Erro crítico no processamento lógico. Revise as restrições dos professores.` };
 }
