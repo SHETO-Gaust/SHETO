@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -71,7 +72,7 @@ export async function getProfessores(escolaId: string): Promise<{
 const upsertProfessorSchema = z.object({
   id: z.string().optional(),
   escola_id: z.string(),
-  cpf: z.string().refine(validateCPF, 'CPF inválido.'),
+  cpf: z.string().min(14, 'O CPF é obrigatório.').refine(validateCPF, 'CPF inválido.'),
   nome_completo: z.string().min(3, 'O nome completo é obrigatório.'),
   nome_horario: z.string().min(2, 'O nome para o horário é obrigatório.'),
   email: z.string().email('Email inválido.').optional().or(z.literal('')),
@@ -93,7 +94,7 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
   
   const { id, componente_ids, ...dataToUpsert } = validated.data;
 
-  // 1. Verificar se o CPF já está vinculado a outras escolas para informar o usuário
+  // 1. Verificar vínculos em outras escolas pelo CPF
   const { data: outrosVinculos } = await supabase
     .from('professores')
     .select('escola:escolas(escolar)')
@@ -176,7 +177,7 @@ export async function updateProfessorRestricoes(professorId: string, restricoes:
 export async function solicitarRestricoesEmail(professorId: string) {
     const supabase = await createClient();
     
-    const { data: prof, error: pError } = await supabase.from('professores').select('*, escola:escolas(*)').eq('id', professorId).single();
+    const { data: prof, error: pError } = await supabase.from('professores').select('*, escola:escolas(*)').eq('id', professorId).maybeSingle();
     if (pError || !prof) return { error: 'Professor não encontrado.' };
     if (!prof.email) return { error: 'Professor não possui e-mail institucional cadastrado.' };
 
@@ -224,7 +225,7 @@ export async function getSolicitacaoByToken(token: string) {
             )
         `)
         .eq('token', token)
-        .single();
+        .maybeSingle();
 
     if (error || !sol) return { error: 'Link inválido ou expirado.' };
     if (sol.status === 'respondido' || sol.status === 'concluido') return { error: 'Esta solicitação já foi respondida e não pode ser alterada.' };
@@ -248,7 +249,7 @@ export async function getSolicitacaoByToken(token: string) {
 export async function responderSolicitacao(token: string, restricoes: any, livreDocencia: LivreDocenciaItem[]) {
     const supabase = await createAdminClient();
     
-    const { data: sol } = await supabase.from('solicitacoes_restricoes').select('id, status').eq('token', token).single();
+    const { data: sol } = await supabase.from('solicitacoes_restricoes').select('id, status').eq('token', token).maybeSingle();
     if (!sol || sol.status !== 'pendente') return { error: 'Não é possível responder esta solicitação.' };
 
     const { error } = await supabase
@@ -270,7 +271,7 @@ export async function responderSolicitacao(token: string, restricoes: any, livre
 export async function processarRespostaRestricao(solicitacaoId: string, acao: 'confirmar' | 'rejeitar', dadosFinais?: any, livreDocenciaFinal?: LivreDocenciaItem[]) {
     const supabase = await createClient();
     
-    const { data: sol } = await supabase.from('solicitacoes_restricoes').select('*').eq('id', solicitacaoId).single();
+    const { data: sol } = await supabase.from('solicitacoes_restricoes').select('*').eq('id', solicitacaoId).maybeSingle();
     if (!sol) return { error: 'Solicitação não encontrada.' };
 
     if (acao === 'confirmar') {

@@ -1,3 +1,4 @@
+
 import { AuthForm } from '@/components/auth-form';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
@@ -10,8 +11,17 @@ export default async function LoginPage() {
     data: { session },
   } = await supabase.auth.getSession();
 
+  // Se houver sessão, verificamos se o perfil está ativo antes de mandar para o dashboard
   if (session) {
-    redirect('/dashboard');
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('active')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    if (profile?.active !== false) {
+      redirect('/dashboard');
+    }
   }
 
   return (

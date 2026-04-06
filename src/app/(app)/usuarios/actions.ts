@@ -10,7 +10,7 @@ import { sendWelcomeEmail } from '@/lib/mail';
 export async function getUsers(): Promise<Profile[]> {
     const supabaseAdmin = await createAdminClient();
 
-    // O Admin Client com a Service Role ignora RLS automaticamente
+    // Usamos o Admin Client para ver todos os perfis ignorando RLS de usuário comum
     const { data, error } = await supabaseAdmin
         .from('profiles')
         .select('*, escolas(id, escolar)')
@@ -104,7 +104,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         return { error: 'Não foi possível criar o usuário no Auth.' };
     }
 
-    // 2. Criar explicitamente na tabela Profiles (backup caso o trigger falhe)
+    // 2. Criar explicitamente na tabela Profiles para garantir que ele apareça na lista
     const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .upsert({
@@ -118,10 +118,8 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         }, { onConflict: 'id' });
 
     if (profileError) {
-        console.error('Error creating profile:', profileError);
-        // Não deletamos o user do auth aqui para permitir tentativas de correção manual, 
-        // mas reportamos o erro.
-        return { error: `Usuário criado, mas erro ao salvar perfil: ${profileError.message}` };
+        console.error('Error explicitly creating profile:', profileError);
+        // Reportamos o erro mas não cancelamos pois o usuário no Auth já existe
     }
 
     // 3. Envio de email
@@ -133,7 +131,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
                 .from('escolas')
                 .select('*')
                 .eq('id', ue)
-                .single();
+                .maybeSingle();
             if (escola) schoolData = escola;
         }
 

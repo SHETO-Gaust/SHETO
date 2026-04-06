@@ -15,8 +15,11 @@ import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
 import type { Profile, Escola } from '@/lib/types';
 import { AccessDenied } from '@/components/access-denied';
-import { Clock } from 'lucide-react';
+import { Clock, UserX, LogOut } from 'lucide-react';
 import { SchoolSelector } from '@/components/school-selector';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { signOut } from '@/app/login/actions';
 
 const moduleMap: { [key: string]: string } = {
     '/dashboard': 'dashboard',
@@ -49,11 +52,11 @@ export default async function AppLayout({
     return redirect('/login');
   }
 
-  const { data: profileData, error: profileError } = await supabase
+  const { data: profileData } = await supabase
     .from('profiles')
     .select(`*, escolas(*)`)
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
   
   // Resiliência: Se o perfil não existir, criamos um objeto básico para não quebrar a UI
   const userProfile = (profileData as Profile | null) || {
@@ -65,10 +68,33 @@ export default async function AppLayout({
       name: user.user_metadata?.name || user.email?.split('@')[0]
   };
 
-  // Se o usuário está desativado no perfil, desloga
+  // Se o usuário está desativado no perfil, mostramos uma tela de bloqueio em vez de redirecionar (evita loop)
   if (userProfile && userProfile.active === false) {
-    await supabase.auth.signOut();
-    return redirect('/login?error=Usuário desativado');
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/20 p-4">
+        <Card className="w-full max-w-md border-destructive shadow-2xl">
+          <CardHeader className="text-center">
+            <div className="mx-auto bg-destructive/10 p-3 rounded-full w-fit mb-4">
+                <UserX className="h-12 w-12 text-destructive" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-destructive">Acesso Suspenso</CardTitle>
+            <CardDescription className="text-base mt-2">
+              Seu acesso ao sistema SHE foi desativado pela coordenação ou administração central.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center text-sm text-muted-foreground">
+            Caso acredite que isso seja um erro, entre em contato com o suporte da Secretaria de Educação.
+          </CardContent>
+          <CardFooter className="flex justify-center border-t pt-6 mt-4">
+            <form action={signOut}>
+                <Button variant="outline" className="gap-2">
+                    <LogOut className="h-4 w-4" /> Sair do Sistema
+                </Button>
+            </form>
+          </CardFooter>
+        </Card>
+      </div>
+    );
   }
   
   const { data: allEscolasData } = await supabase
@@ -123,10 +149,10 @@ export default async function AppLayout({
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
           <SidebarTrigger className="md:hidden" />
-           <div className="flex-1">
+           <div className="flex-1 overflow-hidden">
             {userProfile && <SchoolSelector userProfile={userProfile as any} allEscolas={allEscolas} />}
           </div>
-          <div className="ml-auto flex items-center gap-4">
+          <div className="ml-auto flex items-center gap-4 shrink-0">
             <UserNav user={user} profile={userProfile as any} />
           </div>
         </header>
@@ -134,7 +160,7 @@ export default async function AppLayout({
             {hasPermission ? children : <AccessDenied />}
         </div>
         <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">
-          Desenvolvido pela Diretoria de Tecnologia e Inovação Educacional da Seduc Tocantins - Todos os direitos reservados © 2026
+          Desenvolvido pela Secretaria da Educação do Tocantins - Todos os direitos reservados © 2026
         </footer>
       </SidebarInset>
     </SidebarProvider>
