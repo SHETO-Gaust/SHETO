@@ -1,4 +1,3 @@
-
 export type ProfileRole = 'admin' | 'user';
 
 export type Escola = {
