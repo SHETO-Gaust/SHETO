@@ -1,5 +1,4 @@
-
-import type { Turno, TurmaComDados, ProfessorComDados, HorarioAulaGerada, ConfiguracaoGerminacao } from './types';
+import type { Turno, TurmaComDados, ProfessorComDados, HorarioAulaGerada, ConfiguracaoGerminacao, LivreDocenciaItem } from './types';
 
 export type SugestaoRealocacao = {
   horario_id: string;
@@ -14,7 +13,7 @@ export type SugestaoRealocacao = {
 };
 
 /**
- * Algoritmo de Timetabling com Reinicialização Aleatória, Heurística de Carga e Diagnóstico de Erros.
+ * Algoritmo de Timetabling com Livre Docência, Reinicialização Aleatória e Heurística de Carga.
  */
 export function gerarHorarioAlgoritmico(
   turno: Turno,
@@ -33,7 +32,6 @@ export function gerarHorarioAlgoritmico(
   
   const MAX_ATTEMPTS = 100; 
   
-  // 1. Identificar Turno Oposto para Contraturno
   const nomeTurnoLower = turno.nome.toLowerCase();
   const turnoOposto = todosTurnos.find(t => {
     if (nomeTurnoLower.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
@@ -43,7 +41,6 @@ export function gerarHorarioAlgoritmico(
 
   const numAulasOposto = turnoOposto?.aulas_por_dia || 5;
 
-  // Separar ocupações em Fixas (Presenciais) e Flexíveis (NP de outros turnos)
   const ocupacaoFixaProfessores = new Set<string>();
   const ocupacaoFlexivel = ocupacoesExistentes.filter(o => o.tipo === 'nao_presencial');
   
@@ -53,7 +50,6 @@ export function gerarHorarioAlgoritmico(
       }
   });
 
-  // Validação de Carga Pedagógica
   const cargaTotalPorProfessor = new Map<string, number>();
   turmas.forEach(t => {
     t.serie.componentes.forEach(c => {
@@ -76,7 +72,7 @@ export function gerarHorarioAlgoritmico(
     return blocos;
   };
 
-  const executarTentativa = (permitirMoverNP: boolean, permitirUsoPlanejamento: boolean) => {
+  const executarTentativa = (permitirMoverNP: boolean, permitirUsoPlanejamento: boolean, ignorarLivreDocencia: boolean = false) => {
     const aulasGeradas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[] = [];
     const ocupacaoProfessoresLocal = new Set<string>();
     const ocupacaoTurmas = new Set<string>();
@@ -133,19 +129,24 @@ export function gerarHorarioAlgoritmico(
 
     const dias = [...turno.dias_semana].sort(() => Math.random() - 0.5);
 
-    // --- ALOCAÇÃO PRESENCIAL ---
     for (const b of blocosPresenciais) {
         let alocado = false;
         const slots = [];
         for(const d of dias) {
             for(let i=0; i <= turno.aulas_por_dia - b.size; i++) {
                 let weight = Math.random();
-                // Heurística: Penalizar slots que usam planejamento se não for estritamente permitido ou preferível
                 if (b.professor_id) {
                     const prof = professores.find(pr => pr.id === b.professor_id);
+                    
+                    // Verificação de Livre Docência
+                    const isLivreDocenciaShift = !ignorarLivreDocencia && prof?.livre_docencia?.some(ld => ld.turno_id === turno.id && ld.dia === d);
+                    if (isLivreDocenciaShift) {
+                        weight += 1000; // Bloqueio quase total
+                    }
+
                     for (let k = 0; k < b.size; k++) {
                         if (prof?.restricoes?.[turno.id]?.[d]?.[i + k] === 'planejamento') {
-                            weight += 10; // Peso alto para evitar planejamento se possível
+                            weight += 10;
                             break;
                         }
                     }
@@ -153,10 +154,11 @@ export function gerarHorarioAlgoritmico(
                 slots.push({ d, i, weight });
             }
         }
-        // Ordenar por peso (slots sem planejamento primeiro)
         slots.sort((a, b) => a.weight - b.weight);
 
         for (const slot of slots) {
+            if (slot.weight >= 1000) continue; // Pula slots de livre docência se não estivermos ignorando
+
             const { d, i } = slot;
             let livre = true;
             const currentBumped = new Set<string>();
@@ -185,7 +187,6 @@ export function gerarHorarioAlgoritmico(
                     const restricao = prof?.restricoes?.[turno.id]?.[d]?.[idx];
                     
                     if (restricao === 'indisponivel') { livre = false; break; }
-                    // PLANEJAMENTO: Bloqueia se não estivermos no modo flexível de tentativas finais
                     if (restricao === 'planejamento' && !permitirUsoPlanejamento) { livre = false; break; }
                 }
             }
@@ -207,15 +208,25 @@ export function gerarHorarioAlgoritmico(
         if (alocado) b.placed = true;
     }
 
-    // --- ALOCAÇÃO NÃO PRESENCIAL (CONTRATURNO) ---
     if (turnoOposto) {
         for (const b of blocosNaoPresenciais) {
             let alocado = false;
             const slotsNP = [];
-            for(const d of dias) for(let i=0; i <= numAulasOposto - b.size; i++) slotsNP.push({ d, i });
-            slotsNP.sort(() => Math.random() - 0.5);
+            for(const d of dias) {
+                for(let i=0; i <= numAulasOposto - b.size; i++) {
+                    let weight = Math.random();
+                    if (b.professor_id) {
+                        const prof = professores.find(pr => pr.id === b.professor_id);
+                        const isLivreShift = !ignorarLivreDocencia && prof?.livre_docencia?.some(ld => ld.turno_id === turnoOposto.id && ld.dia === d);
+                        if (isLivreShift) weight += 1000;
+                    }
+                    slotsNP.push({ d, i, weight });
+                }
+            }
+            slotsNP.sort((a,b) => a.weight - b.weight);
 
             for (const slot of slotsNP) {
+                if (slot.weight >= 1000) continue;
                 const { d, i } = slot;
                 let livre = true;
 
@@ -247,82 +258,48 @@ export function gerarHorarioAlgoritmico(
     return { success: pendentes.length === 0, aulas: aulasGeradas, bumpedNPs: Array.from(bumpedNPs), pendentes };
   };
 
-  let melhorTentativa: any = null;
-
-  // PASS 1: Sem mover NP e SEM usar Planejamento
+  // --- FLUXO DE TENTATIVAS ---
+  
+  // 1. Tentar com todas as restrições rígidas (Livre Docência mantida)
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = executarTentativa(false, false);
+    const res = executarTentativa(true, false, false);
     if (res.success) return { success: true, aulas: res.aulas };
-    if (!melhorTentativa || res.pendentes.length < melhorTentativa.pendentes.length) melhorTentativa = res;
   }
 
-  // PASS 2: Permitindo mover NP mas SEM usar Planejamento
+  // 2. Tentar flexibilizando Planejamento (Livre Docência mantida)
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = executarTentativa(true, false);
+    const res = executarTentativa(true, true, false);
+    if (res.success) return { success: true, aulas: res.aulas };
+  }
+
+  // 3. Tentar ignorando Livre Docência (Último recurso)
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const res = executarTentativa(true, true, true);
     if (res.success) {
-        const sugestoes = processarBumpedNPs(res.aulas, res.bumpedNPs, turno, ocupacaoFlexivel, ocupacaoFixaProfessores);
-        if (sugestoes) return { success: true, aulas: res.aulas, sugestao: sugestoes };
+        // Encontrou solução mas quebrou a livre docência de alguém
+        return { success: true, aulas: res.aulas, error: "AVISO: A grade foi gerada ignorando temporariamente a Livre Docência de alguns professores para possibilitar o fechamento." };
     }
   }
 
-  // PASS 3: Tentativa desesperada permitindo Planejamento como reserva
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = executarTentativa(true, true);
-    if (res.success) {
-        const sugestoes = processarBumpedNPs(res.aulas, res.bumpedNPs, turno, ocupacaoFlexivel, ocupacaoFixaProfessores);
-        if (sugestoes) return { success: true, aulas: res.aulas, sugestao: sugestoes };
-    }
-    if (!melhorTentativa || res.pendentes.length < melhorTentativa.pendentes.length) melhorTentativa = res;
-  }
-
-  if (melhorTentativa) {
-      const p = melhorTentativa.pendentes[0];
-      let diag = `Não foi possível alocar todas as aulas após as tentativas de otimização.\n\n`;
-      diag += `GARGALO DETECTADO:\n`;
+  // Se nada funcionou, gerar diagnóstico detalhado
+  const resFalha = executarTentativa(true, true, false);
+  const p = resFalha.pendentes[0];
+  if (p) {
+      const prof = professores.find(pr => pr.id === p.professor_id);
+      let diag = `CONFLITO LÓGICO DETECTADO:\n`;
       diag += `A disciplina "${p.componente_nome}" do professor ${p.professor_nome} na Turma ${p.turma_nome} não encontrou espaço.\n\n`;
-      diag += `SUGESTÕES DE CORREÇÃO:\n`;
-      diag += `1. Verifique se o professor ${p.professor_nome} possui muitas restrições de folga na aba "Professores".\n`;
-      diag += `2. Tente desativar a "Geminação" para a disciplina ${p.componente_nome} no passo anterior da geração.\n`;
-      diag += `3. Verifique se este professor possui aulas em excesso em outros turnos já publicados.`;
+      diag += `CAUSAS PROVÁVEIS:\n`;
       
-      return { success: force, aulas: melhorTentativa.aulas, error: diag };
+      const hasLDInThisTurno = prof?.livre_docencia?.some(ld => ld.turno_id === turno.id);
+      if (hasLDInThisTurno) {
+          diag += `• O professor ${p.professor_nome} tem um período de LIVRE DOCÊNCIA neste turno que pode estar bloqueando aulas necessárias.\n`;
+      }
+      
+      diag += `• O professor pode ter excesso de restrições de indisponibilidade.\n`;
+      diag += `• A carga horária total da série pode estar excedendo a capacidade do turno.`;
+      
+      return { success: force, aulas: resFalha.aulas, error: diag };
   }
 
-  return { success: force, aulas: [], error: `Erro desconhecido durante o processamento.` };
-}
-
-function processarBumpedNPs(aulas: any[], bumpedIds: string[], turno: Turno, ocupacaoFlexivel: any[], ocupacaoFixaProfessores: Set<string>) {
-    const sugestoes: SugestaoRealocacao[] = [];
-    const ocupacaoAtualTurno = new Set(aulas.map(a => `${a.dia_semana}-${a.aula_index}-${a.professor_id}`));
-
-    for (const npId of bumpedIds) {
-        const aulaNP = ocupacaoFlexivel.find(o => o.id === npId);
-        if (!aulaNP) continue;
-
-        let acheiNovo = false;
-        for (const d of turno.dias_semana) {
-            for (let i = 0; i < (aulaNP.horario?.turno?.aulas_por_dia || 5); i++) {
-                const key = `${d}-${i}-${aulaNP.professor_id}`;
-                if (!ocupacaoAtualTurno.has(key) && !ocupacaoFixaProfessores.has(key)) {
-                    sugestoes.push({
-                        horario_id: aulaNP.horario_id,
-                        aula_id: aulaNP.id,
-                        professor_nome: aulaNP.professor.nome_horario,
-                        turma_nome: aulaNP.turma.nome,
-                        disciplina_nome: aulaNP.componente.nome,
-                        dia_antigo: aulaNP.dia_semana,
-                        aula_idx_antigo: aulaNP.aula_index,
-                        dia_novo: d,
-                        aula_idx_novo: i
-                    });
-                    ocupacaoAtualTurno.add(key);
-                    acheiNovo = true;
-                    break;
-                }
-            }
-            if (acheiNovo) break;
-        }
-        if (!acheiNovo) return null;
-    }
-    return sugestoes;
+  return { success: force, aulas: [], error: `Erro no processamento lógico da grade.` };
 }

@@ -10,9 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard } from 'lucide-react';
+import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star } from 'lucide-react';
 import { upsertProfessor } from './actions';
-import type { ProfessorComDados, Turno, ComponenteCurricular } from '@/lib/types';
+import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, validateCPF } from '@/lib/utils';
@@ -35,6 +35,10 @@ const formSchema = z.object({
   aulas_disponiveis: z.coerce.number().min(0, 'As aulas disponíveis não podem ser negativas.'),
   aulas_planejamento: z.coerce.number().min(0, 'As aulas de planejamento não podem ser negativas.'),
   restricoes: z.any().optional(),
+  livre_docencia: z.array(z.object({
+      turno_id: z.string(),
+      dia: z.string()
+  })).max(2, 'No máximo 2 períodos de livre docência.')
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -76,6 +80,7 @@ export function EditProfessorSheet({
       aulas_disponiveis: 24,
       aulas_planejamento: 5,
       restricoes: {},
+      livre_docencia: [],
     },
   });
 
@@ -95,6 +100,7 @@ export function EditProfessorSheet({
         aulas_disponiveis: professor?.aulas_disponiveis ?? 24,
         aulas_planejamento: professor?.aulas_planejamento ?? 5,
         restricoes: professor?.restricoes ?? {},
+        livre_docencia: professor?.livre_docencia ?? [],
       });
     }
   }, [isOpen, professor, escolaId, form]);
@@ -132,6 +138,21 @@ export function EditProfessorSheet({
     }
     
     form.setValue('restricoes', newRestricoes, { shouldDirty: true });
+  };
+
+  const toggleLivreDocencia = (turnoId: string, diaId: string) => {
+      const current = form.getValues('livre_docencia') || [];
+      const isSelected = current.some(item => item.turno_id === turnoId && item.dia === diaId);
+      
+      if (isSelected) {
+          form.setValue('livre_docencia', current.filter(item => !(item.turno_id === turnoId && item.dia === diaId)), { shouldDirty: true });
+      } else {
+          if (current.length >= 2) {
+              toast({ title: 'Limite Atingido', description: 'O máximo são 2 períodos de livre docência.', variant: 'destructive' });
+              return;
+          }
+          form.setValue('livre_docencia', [...current, { turno_id: turnoId, dia: diaId }], { shouldDirty: true });
+      }
   };
 
   const onSubmit = async (data: FormValues) => {
@@ -172,6 +193,8 @@ export function EditProfessorSheet({
     if (isValid) setStep('restricoes');
   };
 
+  const livreDocenciaCount = form.watch('livre_docencia')?.length || 0;
+
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className={cn("flex flex-col h-full pointer-events-auto transition-all duration-300", step === 'info' ? "sm:max-w-2xl" : "sm:max-w-4xl")}>
@@ -186,7 +209,7 @@ export function EditProfessorSheet({
           <SheetDescription>
             {step === 'info' 
                 ? 'Preencha os dados básicos e atribuições do docente.' 
-                : 'Defina os horários de folga e planejamento (o algoritmo respeitará estas marcações).'}
+                : 'Defina a Livre Docência (obrigatório 2) e outras restrições.'}
           </SheetDescription>
         </SheetHeader>
 
@@ -329,78 +352,112 @@ export function EditProfessorSheet({
                   </div>
                 </div>
               ) : (
-                <div className="space-y-6">
-                    <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                            <span className="text-primary font-bold text-xs">?</span>
-                        </div>
-                        <div className="space-y-1 text-xs">
-                            <p className="font-bold text-primary uppercase">Guia de Marcação:</p>
-                            <ul className="text-muted-foreground space-y-1">
-                                <li><span className="font-bold text-red-600">INDISPONÍVEL:</span> Bloqueio total. O sistema nunca colocará aula.</li>
-                                <li><span className="font-bold text-blue-600">PLANEJAMENTO:</span> Preferencialmente livre. O sistema tentará não colocar aula, mas poderá fazê-lo se for a única opção para fechar a grade.</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    {selectedTurnos.length > 0 ? (
-                        <Tabs defaultValue={selectedTurnos[0].id} className="w-full">
-                            <TabsList className="bg-muted/50">
+                <div className="space-y-8">
+                    {/* SEÇÃO LIVRE DOCÊNCIA NO CADASTRO */}
+                    <Card className="border-primary/20 shadow-sm overflow-hidden">
+                        <CardHeader className="bg-primary/5 py-4">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                                <Star className="h-4 w-4 text-primary fill-primary" />
+                                Livre Docência (2 meios períodos)
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {selectedTurnos.map(turno => (
-                                    <TabsTrigger key={turno.id} value={turno.id} className="text-xs uppercase font-bold">{turno.nome}</TabsTrigger>
-                                ))}
-                            </TabsList>
-                            {selectedTurnos.map(turno => (
-                                <TabsContent key={turno.id} value={turno.id} className="pt-4 animate-in fade-in zoom-in-95 duration-300">
-                                    <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
-                                        <table className="w-full text-sm text-center">
-                                            <thead>
-                                                <tr className="bg-muted/50 border-b">
-                                                    <th className="p-3 font-bold border-r w-24 bg-muted/30">Aula</th>
-                                                    {DIAS_SEMANA_MAP.map(dia => (
-                                                        <th key={dia.id} className="p-3 font-bold">{dia.label}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIndex) => (
-                                                    <tr key={aulaIndex} className="border-b last:border-0 h-16">
-                                                        <td className="p-2 font-medium bg-muted/20 border-r text-xs">
-                                                            <div className="font-bold text-primary">{aulaIndex + 1}ª</div>
-                                                            <div className="opacity-60">
-                                                                {turno.horarios?.[aulaIndex]?.inicio || '--:--'}
-                                                            </div>
-                                                        </td>
-                                                        {DIAS_SEMANA_MAP.map(dia => {
-                                                            const restricoes = form.watch('restricoes') || {};
-                                                            const status = restricoes[turno.id]?.[dia.id]?.[aulaIndex];
-                                                            return (
-                                                                <td key={dia.id} className="p-0 border-r last:border-r-0">
-                                                                    <div onClick={() => handleCellClick(turno.id, dia.id, aulaIndex)}
-                                                                        className={cn("h-full w-full flex items-center justify-center cursor-pointer transition-all hover:bg-accent/50",
-                                                                            status === 'indisponivel' ? 'bg-red-50 text-red-600' : 
-                                                                            status === 'planejamento' ? 'bg-blue-50 text-blue-600' : ''
-                                                                        )}>
-                                                                        {status === 'indisponivel' && <Ban className="h-6 w-6" />}
-                                                                        {status === 'planejamento' && <PenSquare className="h-6 w-6" />}
-                                                                        {!status && <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />}
-                                                                    </div>
-                                                                </td>
-                                                            )
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                    <div key={turno.id} className="space-y-3">
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b pb-1">{turno.nome}</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
+                                                const livreDocs = form.watch('livre_docencia') || [];
+                                                const isSelected = livreDocs.some(item => item.turno_id === turno.id && item.dia === dia.id);
+                                                return (
+                                                    <Button 
+                                                        key={dia.id}
+                                                        type="button"
+                                                        variant={isSelected ? "default" : "outline"}
+                                                        className={cn("h-10 text-[10px] font-bold uppercase", isSelected && "bg-primary")}
+                                                        onClick={() => toggleLivreDocencia(turno.id, dia.id)}
+                                                    >
+                                                        {dia.label}
+                                                    </Button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </TabsContent>
-                            ))}
-                        </Tabs>
-                    ) : (
-                        <div className="text-center text-muted-foreground p-12 border-2 border-dashed rounded-xl bg-muted/5">
-                            <p>Selecione ao menos um turno no passo anterior.</p>
-                        </div>
-                    )}
+                                ))}
+                            </div>
+                            <div className={cn("mt-4 p-2 rounded text-[10px] font-bold text-center uppercase tracking-tighter", livreDocenciaCount === 2 ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")}>
+                                {livreDocenciaCount}/2 Períodos Selecionados
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Separator />
+
+                    {/* SEÇÃO OUTRAS RESTRIÇÕES */}
+                    <div className="space-y-4">
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
+                            <CalendarX className="h-4 w-4" /> Outras Indisponibilidades
+                        </h4>
+                        {selectedTurnos.length > 0 ? (
+                            <Tabs defaultValue={selectedTurnos[0].id} className="w-full">
+                                <TabsList className="bg-muted/50">
+                                    {selectedTurnos.map(turno => (
+                                        <TabsTrigger key={turno.id} value={turno.id} className="text-xs uppercase font-bold">{turno.nome}</TabsTrigger>
+                                    ))}
+                                </TabsList>
+                                {selectedTurnos.map(turno => (
+                                    <TabsContent key={turno.id} value={turno.id} className="pt-4 animate-in fade-in zoom-in-95 duration-300">
+                                        <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+                                            <table className="w-full text-sm text-center">
+                                                <thead>
+                                                    <tr className="bg-muted/50 border-b">
+                                                        <th className="p-3 font-bold border-r w-24 bg-muted/30">Aula</th>
+                                                        {DIAS_SEMANA_MAP.map(dia => (
+                                                            <th key={dia.id} className="p-3 font-bold">{dia.label}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIndex) => (
+                                                        <tr key={aulaIndex} className="border-b last:border-0 h-16">
+                                                            <td className="p-2 font-medium bg-muted/20 border-r text-xs">
+                                                                <div className="font-bold text-primary">{aulaIndex + 1}ª</div>
+                                                                <div className="opacity-60">
+                                                                    {turno.horarios?.[aulaIndex]?.inicio || '--:--'}
+                                                                </div>
+                                                            </td>
+                                                            {DIAS_SEMANA_MAP.map(dia => {
+                                                                const restricoes = form.watch('restricoes') || {};
+                                                                const status = restricoes[turno.id]?.[dia.id]?.[aulaIndex];
+                                                                return (
+                                                                    <td key={dia.id} className="p-0 border-r last:border-r-0">
+                                                                        <div onClick={() => handleCellClick(turno.id, dia.id, aulaIndex)}
+                                                                            className={cn("h-full w-full flex items-center justify-center cursor-pointer transition-all hover:bg-accent/50",
+                                                                                status === 'indisponivel' ? 'bg-red-50 text-red-600' : 
+                                                                                status === 'planejamento' ? 'bg-blue-50 text-blue-600' : ''
+                                                                            )}>
+                                                                            {status === 'indisponivel' && <Ban className="h-6 w-6" />}
+                                                                            {status === 'planejamento' && <PenSquare className="h-6 w-6" />}
+                                                                            {!status && <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />}
+                                                                        </div>
+                                                                    </td>
+                                                                )
+                                                            })}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </TabsContent>
+                                ))}
+                            </Tabs>
+                        ) : (
+                            <div className="text-center text-muted-foreground p-12 border-2 border-dashed rounded-xl bg-muted/5">
+                                <p>Associe o professor a um turno primeiro.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
               )}
             </div>
@@ -410,13 +467,13 @@ export function EditProfessorSheet({
                 <>
                     <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
                     <Button type="button" onClick={nextStep} className="min-w-[160px] font-bold">
-                        Configurar Restrições <ArrowRight className="ml-2 h-4 w-4" />
+                        Restrições e Livre Docência <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                 </>
               ) : (
                 <>
                     <Button type="button" variant="outline" onClick={() => setStep('info')}><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Button>
-                    <Button type="submit" form="professor-form" disabled={loading} className="min-w-[160px] font-bold shadow-lg">
+                    <Button type="submit" form="professor-form" disabled={loading || livreDocenciaCount !== 2} className="min-w-[160px] font-bold shadow-lg">
                         {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Finalizar e Salvar
                     </Button>
                 </>

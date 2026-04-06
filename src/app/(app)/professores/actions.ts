@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestricao } from '@/lib/types';
+import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestricao, LivreDocenciaItem } from '@/lib/types';
 import { sendRestrictionRequestEmail } from '@/lib/mail';
 import { randomBytes } from 'crypto';
 import { validateCPF } from '@/lib/utils';
@@ -80,6 +80,7 @@ const upsertProfessorSchema = z.object({
   aulas_planejamento: z.coerce.number().min(0, 'As aulas de planejamento não podem ser negativas.'),
   componente_ids: z.array(z.string()).optional(),
   restricoes: z.any().optional(),
+  livre_docencia: z.array(z.any()).optional(),
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
@@ -150,7 +151,7 @@ export async function updateProfessorComponentes(professorId: string, componente
     const { error: deleteError } = await supabase.from('professores_componentes').delete().eq('professor_id', professorId);
     if (deleteError) return { error: 'Não foi possível limpar as disciplinas antigas.' };
     if (componenteIds.length > 0) {
-        const linksToInsert = componente_ids.map(componente_id => ({ professor_id: professorId, componente_id }));
+        const linksToInsert = componenteIds.map(componente_id => ({ professor_id: professorId, componente_id }));
         const { error: insertError } = await supabase.from('professores_componentes').insert(linksToInsert);
         if (insertError) return { error: 'Não foi possível salvar as novas disciplinas.' };
     }
@@ -175,15 +176,12 @@ export async function updateProfessorRestricoes(professorId: string, restricoes:
 export async function solicitarRestricoesEmail(professorId: string) {
     const supabase = await createClient();
     
-    // 1. Buscar professor e escola
     const { data: prof, error: pError } = await supabase.from('professores').select('*, escola:escolas(*)').eq('id', professorId).single();
     if (pError || !prof) return { error: 'Professor não encontrado.' };
-    if (!prof.email) return { error: 'Professor não possui e-mail cadastrado.' };
+    if (!prof.email) return { error: 'Professor não possui e-mail institucional cadastrado.' };
 
-    // 2. Gerar Token Único
     const token = randomBytes(32).toString('hex');
 
-    // 3. Salvar solicitação
     const { error: sError } = await supabase.from('solicitacoes_restricoes').insert({
         professor_id: professorId,
         token,
@@ -192,7 +190,6 @@ export async function solicitarRestricoesEmail(professorId: string) {
 
     if (sError) return { error: 'Erro ao gerar link de solicitação.' };
 
-    // 4. Enviar e-mail
     const result = await sendRestrictionRequestEmail({
         to: prof.email,
         name: prof.nome_completo,
@@ -221,6 +218,7 @@ export async function getSolicitacaoByToken(token: string) {
                 nome_completo, 
                 nome_horario, 
                 restricoes,
+                livre_docencia,
                 escola:escolas(escolar),
                 turnos_ids
             )
@@ -233,18 +231,13 @@ export async function getSolicitacaoByToken(token: string) {
     if (new Date(sol.expires_at) < new Date()) return { error: 'Este link expirou.' };
 
     const professor = (sol as any).professor;
-    
-    // Buscar detalhes dos turnos
-    const { data: turnos } = await supabase
-        .from('turnos')
-        .select('*')
-        .in('id', professor.turnos_ids);
+    const { data: turnos } = await supabase.from('turnos').select('*').in('id', professor.turnos_ids);
 
     return { 
         data: {
             solicitacao: sol,
             professor,
-            turnos: turnos as Turno[]
+            turnos: (turnos as Turno[]).sort((a,b) => a.nome.localeCompare(b.nome))
         } 
     };
 }
@@ -252,7 +245,7 @@ export async function getSolicitacaoByToken(token: string) {
 /* -------------------------------------------------------------------------- */
 /* PÁGINA PÚBLICA: ENVIAR RESPOSTA                     */
 /* -------------------------------------------------------------------------- */
-export async function responderSolicitacao(token: string, restricoes: any) {
+export async function responderSolicitacao(token: string, restricoes: any, livreDocencia: LivreDocenciaItem[]) {
     const supabase = await createAdminClient();
     
     const { data: sol } = await supabase.from('solicitacoes_restricoes').select('id, status').eq('token', token).single();
@@ -262,6 +255,7 @@ export async function responderSolicitacao(token: string, restricoes: any) {
         .from('solicitacoes_restricoes')
         .update({
             dados_temp: restricoes,
+            livre_docencia_temp: livreDocencia,
             status: 'respondido'
         })
         .eq('token', token);
@@ -273,7 +267,7 @@ export async function responderSolicitacao(token: string, restricoes: any) {
 /* -------------------------------------------------------------------------- */
 /* ADMIN: APLICAR RESPOSTA                             */
 /* -------------------------------------------------------------------------- */
-export async function processarRespostaRestricao(solicitacaoId: string, acao: 'confirmar' | 'rejeitar', dadosFinais?: any) {
+export async function processarRespostaRestricao(solicitacaoId: string, acao: 'confirmar' | 'rejeitar', dadosFinais?: any, livreDocenciaFinal?: LivreDocenciaItem[]) {
     const supabase = await createClient();
     
     const { data: sol } = await supabase.from('solicitacoes_restricoes').select('*').eq('id', solicitacaoId).single();
@@ -281,12 +275,17 @@ export async function processarRespostaRestricao(solicitacaoId: string, acao: 'c
 
     if (acao === 'confirmar') {
         const dadosParaAplicar = dadosFinais || sol.dados_temp;
+        const livreParaAplicar = livreDocenciaFinal || sol.livre_docencia_temp;
+        
         const { error: pError } = await supabase
             .from('professores')
-            .update({ restricoes: dadosParaAplicar })
+            .update({ 
+                restricoes: dadosParaAplicar,
+                livre_docencia: livreParaAplicar
+            })
             .eq('id', sol.professor_id);
         
-        if (pError) return { error: 'Erro ao aplicar restrições ao cadastro do professor.' };
+        if (pError) return { error: 'Erro ao aplicar restrições ao cadastro.' };
     }
 
     const { error: sError } = await supabase

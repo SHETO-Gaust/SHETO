@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
-import type { ProfessorComDados, Turno, ComponenteCurricular } from '@/lib/types';
+import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem } from '@/lib/types';
 import {
   Table,
   TableBody,
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye, Ban, PenSquare, MousePointer2, Info } from 'lucide-react';
+import { PlusCircle, BookCopy, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Eye, Ban, PenSquare, MousePointer2, Info, Star } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -67,6 +67,7 @@ export function ProfessoresClient({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [reviewData, setReviewData] = useState<any>(null);
+  const [reviewLivreDocencia, setReviewLivreDocencia] = useState<LivreDocenciaItem[]>([]);
   const [isSendingMail, setIsSendingMail] = useState<string | null>(null);
   const [isActionPending, startAction] = useTransition();
   const { toast } = useToast();
@@ -88,7 +89,7 @@ export function ProfessoresClient({
           if (result.error) {
               toast({ title: 'Erro no envio', description: result.error, variant: 'destructive' });
           } else {
-              toast({ title: 'E-mail enviado!', description: 'O professor recebeu o link para preenchimento.' });
+              toast({ title: 'E-mail enviado!', description: 'O professor recebeu o link para preencher preferências e livre docência.' });
               fetchAndUpdateProfessores();
           }
       });
@@ -116,18 +117,29 @@ export function ProfessoresClient({
       });
   };
 
+  const toggleReviewLivreDocencia = (turnoId: string, diaId: string) => {
+      const isSelected = reviewLivreDocencia.some(item => item.turno_id === turnoId && item.dia === diaId);
+      if (isSelected) {
+          setReviewLivreDocencia(prev => prev.filter(item => !(item.turno_id === turnoId && item.dia === diaId)));
+      } else {
+          if (reviewLivreDocencia.length >= 2) return;
+          setReviewLivreDocencia(prev => [...prev, { turno_id: turnoId, dia: diaId }]);
+      }
+  };
+
   const handleReviewAction = (solicitacaoId: string, acao: 'confirmar' | 'rejeitar') => {
       startAction(async () => {
-          const result = await processarRespostaRestricao(solicitacaoId, acao, reviewData);
+          const result = await processarRespostaRestricao(solicitacaoId, acao, reviewData, reviewLivreDocencia);
           if (result.error) {
               toast({ title: 'Erro ao processar', description: result.error, variant: 'destructive' });
           } else {
               toast({ 
-                  title: acao === 'confirmar' ? 'Restrições Aplicadas!' : 'Resposta Descartada',
-                  description: acao === 'confirmar' ? 'O cadastro do professor foi atualizado com seus ajustes.' : 'A sugestão do professor foi ignorada.'
+                  title: acao === 'confirmar' ? 'Dados Aplicados!' : 'Resposta Descartada',
+                  description: acao === 'confirmar' ? 'As preferências do professor foram integradas ao sistema.' : 'A sugestão do professor foi ignorada.'
               });
               setIsReviewOpen(false);
               setReviewData(null);
+              setReviewLivreDocencia([]);
               fetchAndUpdateProfessores();
           }
       });
@@ -146,6 +158,7 @@ export function ProfessoresClient({
   const openReview = (professor: ProfessorComDados) => {
       setSelectedProfessor(professor);
       setReviewData(professor.solicitacao_pendente?.dados_temp || {});
+      setReviewLivreDocencia(professor.solicitacao_pendente?.livre_docencia_temp || []);
       setIsReviewOpen(true);
   };
   
@@ -154,6 +167,7 @@ export function ProfessoresClient({
     setIsDialogOpen(false);
     setIsReviewOpen(false);
     setReviewData(null);
+    setReviewLivreDocencia([]);
     setTimeout(() => {
         setSelectedProfessor(null);
     }, 300);
@@ -243,7 +257,7 @@ export function ProfessoresClient({
                                     {isSendingMail === prof.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>{prof.email ? "Enviar Link de Restrições" : "Cadastre o e-mail primeiro"}</p></TooltipContent>
+                            <TooltipContent><p>{prof.email ? "Solicitar Preferências via E-mail" : "Cadastre o e-mail institucional"}</p></TooltipContent>
                         </Tooltip>
 
                         <Tooltip>
@@ -252,7 +266,7 @@ export function ProfessoresClient({
                                     <Pencil className="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>Editar Dados</p></TooltipContent>
+                            <TooltipContent><p>Editar Dados e Livre Docência</p></TooltipContent>
                         </Tooltip>
 
                         <Tooltip>
@@ -283,100 +297,126 @@ export function ProfessoresClient({
 
       {/* REVISÃO DE RESPOSTA DO PROFESSOR */}
       <AlertDialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
-          <AlertDialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <AlertDialogContent className="sm:max-w-5xl max-h-[95vh] flex flex-col p-0 overflow-hidden">
               <AlertDialogHeader className="p-6 pb-2">
                   <AlertDialogTitle className="flex items-center gap-2">
                       <CheckCircle2 className="text-blue-600" /> 
-                      Revisar e Ajustar Disponibilidade
+                      Revisar Preferências do Professor
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                      Confira o que o professor <strong>{selectedProfessor?.nome_completo}</strong> preencheu. <br />
-                      <strong>Dica:</strong> Você pode clicar nos campos para adicionar ou remover indisponibilidades antes de salvar.
+                      Confira a livre docência e indisponibilidades enviadas por <strong>{selectedProfessor?.nome_completo}</strong>.
                   </AlertDialogDescription>
               </AlertDialogHeader>
               
               <ScrollArea className="flex-1 px-6">
-                <div className="space-y-6 pb-6 pt-2">
-                    <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
-                        <Info className="h-5 w-5 text-primary shrink-0" />
-                        <div className="space-y-1">
-                            <p className="text-xs font-bold text-primary uppercase tracking-tight">Legenda de Edição:</p>
-                            <div className="flex gap-4 text-[10px] text-muted-foreground">
-                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-sm"/> Indisponível (Clicável)</div>
-                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded-sm"/> Planejamento (Bloqueado)</div>
-                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-white border rounded-sm"/> Livre (Clicável)</div>
-                            </div>
+                <div className="space-y-8 pb-6 pt-2">
+                    {/* SEÇÃO LIVRE DOCÊNCIA REVISÃO */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-primary font-bold uppercase text-xs tracking-widest border-b pb-2">
+                            <Star className="h-4 w-4 fill-primary" /> Sugestão de Livre Docência
                         </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {selectedProfessor?.turnos.map(turno => (
+                                <div key={turno.id} className="space-y-2">
+                                    <p className="text-[10px] font-black text-muted-foreground uppercase">{turno.nome}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
+                                            const isSelected = reviewLivreDocencia.some(item => item.turno_id === turno.id && item.dia === dia.id);
+                                            return (
+                                                <Button 
+                                                    key={dia.id}
+                                                    variant={isSelected ? "default" : "outline"}
+                                                    size="sm"
+                                                    className={cn("h-8 text-[10px] font-bold", isSelected && "bg-primary")}
+                                                    onClick={() => toggleReviewLivreDocencia(turno.id, dia.id)}
+                                                >
+                                                    {dia.label}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground bg-muted p-2 rounded italic">
+                            A livre docência selecionada será tratada como bloqueio rígido na geração do horário.
+                        </p>
                     </div>
 
-                    {selectedProfessor && reviewData && (
-                        <Tabs defaultValue={selectedProfessor.turnos_ids[0]} className="w-full">
-                            <TabsList className="bg-muted w-full justify-start overflow-x-auto h-auto p-1">
-                                {selectedProfessor.turnos.map(t => (
-                                    <TabsTrigger key={t.id} value={t.id} className="text-xs font-bold uppercase py-2 px-4">
-                                        {t.nome}
-                                    </TabsTrigger>
-                                ))}
-                            </TabsList>
-                            {selectedProfessor.turnos.map(turno => (
-                                <TabsContent key={turno.id} value={turno.id} className="mt-4 animate-in fade-in zoom-in-95 duration-300">
-                                    <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
-                                        <table className="w-full text-sm text-center border-collapse">
-                                            <thead>
-                                                <tr className="bg-muted/30 border-b">
-                                                    <th className="p-3 font-bold border-r w-24">Aula</th>
-                                                    {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => (
-                                                        <th key={dia.id} className="p-3 font-bold">{dia.label}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIdx) => (
-                                                    <tr key={aulaIdx} className="border-b last:border-0 h-16">
-                                                        <td className="p-2 font-bold bg-muted/10 border-r">
-                                                            <div className="text-primary">{aulaIdx + 1}ª</div>
-                                                            <div className="text-[9px] text-muted-foreground uppercase">
-                                                                {turno.horarios?.[aulaIdx]?.inicio || '--:--'}
-                                                            </div>
-                                                        </td>
-                                                        {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
-                                                            const val = reviewData[turno.id]?.[dia.id]?.[aulaIdx];
-                                                            const isIndisponivel = val === 'indisponivel';
-                                                            const isPlanejamento = val === 'planejamento';
-                                                            
-                                                            return (
-                                                                <td 
-                                                                    key={dia.id} 
-                                                                    className={cn(
-                                                                        "p-1 border-r last:border-r-0 transition-colors group",
-                                                                        !isPlanejamento && "cursor-pointer hover:bg-slate-50",
-                                                                        isIndisponivel ? "bg-red-50" : isPlanejamento ? "bg-blue-50" : ""
-                                                                    )}
-                                                                    onClick={() => handleReviewCellClick(turno.id, dia.id, aulaIdx)}
-                                                                >
-                                                                    <div className="flex items-center justify-center h-full relative">
-                                                                        {isIndisponivel && <Ban className="h-5 w-5 text-red-500" />}
-                                                                        {isPlanejamento && <PenSquare className="h-5 w-5 text-blue-500" />}
-                                                                        {!val && <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />}
-                                                                        
-                                                                        {!isPlanejamento && (
-                                                                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/5 rounded">
-                                                                                <MousePointer2 className="h-3 w-3 text-slate-400" />
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </td>
-                                                            )
-                                                        })}
+                    {/* SEÇÃO INDISPONIBILIDADE REVISÃO */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-primary font-bold uppercase text-xs tracking-widest border-b pb-2">
+                            <Ban className="h-4 w-4" /> Grade de Indisponibilidades
+                        </div>
+                        {selectedProfessor && reviewData && (
+                            <Tabs defaultValue={selectedProfessor.turnos_ids[0]} className="w-full">
+                                <TabsList className="bg-muted w-full justify-start overflow-x-auto h-auto p-1">
+                                    {selectedProfessor.turnos.map(t => (
+                                        <TabsTrigger key={t.id} value={t.id} className="text-xs font-bold uppercase py-2 px-4">
+                                            {t.nome}
+                                        </TabsTrigger>
+                                    ))}
+                                </TabsList>
+                                {selectedProfessor.turnos.map(turno => (
+                                    <TabsContent key={turno.id} value={turno.id} className="mt-4 animate-in fade-in zoom-in-95 duration-300">
+                                        <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+                                            <table className="w-full text-sm text-center border-collapse">
+                                                <thead>
+                                                    <tr className="bg-muted/30 border-b">
+                                                        <th className="p-3 font-bold border-r w-24">Aula</th>
+                                                        {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => (
+                                                            <th key={dia.id} className="p-3 font-bold">{dia.label}</th>
+                                                        ))}
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </TabsContent>
-                            ))}
-                        </Tabs>
-                    )}
+                                                </thead>
+                                                <tbody>
+                                                    {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIdx) => (
+                                                        <tr key={aulaIdx} className="border-b last:border-0 h-16">
+                                                            <td className="p-2 font-bold bg-muted/10 border-r">
+                                                                <div className="text-primary">{aulaIdx + 1}ª</div>
+                                                                <div className="text-[9px] text-muted-foreground uppercase">
+                                                                    {turno.horarios?.[aulaIdx]?.inicio || '--:--'}
+                                                                </div>
+                                                            </td>
+                                                            {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
+                                                                const val = reviewData[turno.id]?.[dia.id]?.[aulaIdx];
+                                                                const isIndisponivel = val === 'indisponivel';
+                                                                const isPlanejamento = val === 'planejamento';
+                                                                
+                                                                return (
+                                                                    <td 
+                                                                        key={dia.id} 
+                                                                        className={cn(
+                                                                            "p-1 border-r last:border-r-0 transition-colors group",
+                                                                            !isPlanejamento && "cursor-pointer hover:bg-slate-50",
+                                                                            isIndisponivel ? "bg-red-50" : isPlanejamento ? "bg-blue-50" : ""
+                                                                        )}
+                                                                        onClick={() => handleReviewCellClick(turno.id, dia.id, aulaIdx)}
+                                                                    >
+                                                                        <div className="flex items-center justify-center h-full relative">
+                                                                            {isIndisponivel && <Ban className="h-5 w-5 text-red-500" />}
+                                                                            {isPlanejamento && <PenSquare className="h-5 w-5 text-blue-500" />}
+                                                                            {!val && <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />}
+                                                                            
+                                                                            {!isPlanejamento && (
+                                                                                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/5 rounded">
+                                                                                    <MousePointer2 className="h-3 w-3 text-slate-400" />
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                )
+                                                            })}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </TabsContent>
+                                ))}
+                            </Tabs>
+                        )}
+                    </div>
                 </div>
               </ScrollArea>
 
@@ -388,9 +428,9 @@ export function ProfessoresClient({
                         onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'rejeitar')} 
                         className="text-destructive hover:bg-destructive/10 font-bold"
                     >
-                        <XCircle className="mr-2 h-4 w-4" /> Descartar Resposta
+                        <XCircle className="mr-2 h-4 w-4" /> Descartar
                     </Button>
-                    <AlertDialogCancel className="mt-0">Fechar sem Salvar</AlertDialogCancel>
+                    <AlertDialogCancel className="mt-0">Fechar</AlertDialogCancel>
                   </div>
                   <Button 
                     disabled={isActionPending} 
@@ -398,7 +438,7 @@ export function ProfessoresClient({
                     className="bg-blue-600 hover:bg-blue-700 font-bold px-8 shadow-lg"
                   >
                       {isActionPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                      Confirmar e Aplicar
+                      Confirmar e Oficializar
                   </Button>
               </AlertDialogFooter>
           </AlertDialogContent>

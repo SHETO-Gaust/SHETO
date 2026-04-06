@@ -1,15 +1,16 @@
-
 'use client';
 
-import { useState, useTransition } from 'react';
-import type { Turno } from '@/lib/types';
+import { useState, useTransition, useMemo } from 'react';
+import type { Turno, LivreDocenciaItem } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Ban, PenSquare, Loader2, CheckCircle2, Save, Send, Info } from 'lucide-react';
+import { Ban, PenSquare, Loader2, CheckCircle2, Send, Info, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { responderSolicitacao } from '@/app/(app)/professores/actions';
 import { useToast } from '@/hooks/use-toast';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 type Props = {
   token: string;
@@ -25,6 +26,7 @@ const DIAS_SEMANA_MAP = [
 
 export function RestricoesProfessorPublicClient({ token, professor, turnos }: Props) {
   const [restricoes, setRestricoes] = useState<any>(professor.restricoes || {});
+  const [livreDocencia, setLivreDocencia] = useState<LivreDocenciaItem[]>(professor.livre_docencia || []);
   const [isPending, startTransition] = useTransition();
   const [submitted, setSubmitted] = useState(false);
   const { toast } = useToast();
@@ -37,7 +39,6 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
 
     const currentStatus = newRestricoes[turnoId][dia][aulaIndex];
 
-    // Se for planejamento (marcado pela coordenação), o professor não pode alterar via este link
     if (currentStatus === 'planejamento') {
         toast({ 
             title: 'Campo Bloqueado', 
@@ -56,9 +57,28 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
     setRestricoes(newRestricoes);
   };
 
+  const toggleLivreDocencia = (turnoId: string, diaId: string) => {
+      const isSelected = livreDocencia.some(item => item.turno_id === turnoId && item.dia === diaId);
+      
+      if (isSelected) {
+          setLivreDocencia(prev => prev.filter(item => !(item.turno_id === turnoId && item.dia === diaId)));
+      } else {
+          if (livreDocencia.length >= 2) {
+              toast({ title: 'Limite Atingido', description: 'Você pode selecionar no máximo 2 meios períodos de livre docência.', variant: 'destructive' });
+              return;
+          }
+          setLivreDocencia(prev => [...prev, { turno_id: turnoId, dia: diaId }]);
+      }
+  };
+
   const handleSubmit = () => {
+      if (livreDocencia.length < 2) {
+          toast({ title: 'Livre Docência Incompleta', description: 'Por favor, selecione 2 meios períodos para sua livre docência antes de enviar.', variant: 'destructive' });
+          return;
+      }
+
       startTransition(async () => {
-          const result = await responderSolicitacao(token, restricoes);
+          const result = await responderSolicitacao(token, restricoes, livreDocencia);
           if (result.error) {
               toast({ title: 'Erro ao enviar', description: result.error, variant: 'destructive' });
           } else {
@@ -77,7 +97,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                   </div>
                   <div className="space-y-2">
                       <h2 className="text-2xl font-bold text-green-900">Tudo pronto!</h2>
-                      <p className="text-green-700">Suas informações de disponibilidade foram enviadas para a coordenação.</p>
+                      <p className="text-green-700">Suas preferências de horário e livre docência foram enviadas para a coordenação.</p>
                   </div>
                   <p className="text-xs text-green-600/60 pt-4 uppercase font-bold">Você já pode fechar esta aba.</p>
               </CardContent>
@@ -88,21 +108,71 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl flex items-start gap-4 shadow-sm">
-          <div className="bg-blue-600 text-white h-10 w-10 rounded-full flex items-center justify-center font-bold shrink-0">?</div>
-          <div className="space-y-1">
-              <p className="font-bold text-blue-900 text-lg">Como informar sua disponibilidade?</p>
-              <ul className="text-blue-800 text-sm space-y-1.5 opacity-90">
-                  <li>• Clique nos horários que você estará <span className="font-bold text-red-600">INDISPONÍVEL</span>.</li>
-                  <li>• Os horários em branco são considerados <span className="font-bold">LIVRES</span> para alocação de aulas.</li>
-                  <li>• Horários de <span className="font-bold text-blue-600">PLANEJAMENTO</span> são definidos pela coordenação e bloqueados para edição.</li>
+          <Info className="h-6 w-6 text-blue-600 shrink-0 mt-1" />
+          <div className="space-y-2">
+              <p className="font-bold text-blue-900 text-lg">Preferências e Regras</p>
+              <ul className="text-blue-800 text-sm space-y-2 opacity-90">
+                  <li>• <strong>Livre Docência:</strong> Você deve escolher obrigatoriamente <strong>2 meios períodos</strong> livres na semana.</li>
+                  <li>• <strong>Indisponibilidade:</strong> Clique na grade para marcar horários que você possui outros vínculos ou restrições totais.</li>
+                  <li>• <strong>Nota:</strong> Estas informações são <strong>sugestões</strong>. A coordenação priorizará seu atendimento, mas a grade final depende das necessidades da escola.</li>
               </ul>
           </div>
       </div>
 
+      <Card className="shadow-lg border-primary/10 overflow-hidden">
+          <CardHeader className="bg-primary/5 border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                  <Star className="h-5 w-5 text-primary fill-primary" />
+                  1. Selecione sua Livre Docência (Obrigatório: 2)
+              </CardTitle>
+              <CardDescription>Escolha dois turnos em que você prefere não ter nenhuma aula alocada.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {turnos.map(turno => (
+                      <div key={turno.id} className="space-y-3">
+                          <h4 className="font-bold text-xs uppercase text-muted-foreground tracking-widest px-1">{turno.nome}</h4>
+                          <div className="grid grid-cols-2 gap-2">
+                              {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => {
+                                  const isSelected = livreDocencia.some(item => item.turno_id === turno.id && item.dia === dia.id);
+                                  return (
+                                      <div 
+                                        key={dia.id}
+                                        onClick={() => toggleLivreDocencia(turno.id, dia.id)}
+                                        className={cn(
+                                            "flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all",
+                                            isSelected ? "bg-primary border-primary text-white shadow-md scale-[1.02]" : "bg-background border-muted hover:border-primary/30"
+                                        )}
+                                      >
+                                          <div className={cn("h-4 w-4 rounded-sm border flex items-center justify-center", isSelected ? "bg-white border-white" : "border-primary/30")}>
+                                              {isSelected && <CheckCircle2 className="h-3 w-3 text-primary" />}
+                                          </div>
+                                          <span className="text-xs font-bold uppercase">{dia.label}</span>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+                      </div>
+                  ))}
+              </div>
+              <div className="mt-6 flex items-center justify-between bg-muted/30 p-4 rounded-xl border border-dashed">
+                  <span className="text-sm font-medium">Turnos selecionados:</span>
+                  <div className="flex gap-2">
+                      {Array.from({ length: 2 }).map((_, i) => (
+                          <div key={i} className={cn("h-3 w-8 rounded-full transition-colors", i < livreDocencia.length ? "bg-primary" : "bg-muted-foreground/20")} />
+                      ))}
+                  </div>
+              </div>
+          </CardContent>
+      </Card>
+
       <Card className="shadow-2xl border-none overflow-hidden">
         <CardHeader className="bg-slate-900 text-white pb-8">
-            <CardTitle>Minha Grade de Disponibilidade</CardTitle>
-            <CardDescription className="text-slate-400">Marque apenas os horários que você possui restrição de atendimento na escola.</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+                <Ban className="h-5 w-5" />
+                2. Outras Indisponibilidades
+            </CardTitle>
+            <CardDescription className="text-slate-400">Marque apenas horários específicos de restrição (ex: outros empregos).</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
             <Tabs defaultValue={turnos[0]?.id} className="w-full">
@@ -159,7 +229,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                                                                 <>
                                                                     <PenSquare className="h-5 w-5 mb-1" />
                                                                     <span className="text-[8px] font-bold uppercase">Planejamento</span>
-                                                                    <span className="text-[7px] opacity-70">(Coordenação)</span>
+                                                                    <span className="text-[7px] opacity-70">(Escola)</span>
                                                                 </>
                                                             ) : (
                                                                 <span className="text-[10px] font-bold uppercase opacity-40">Livre</span>
@@ -179,9 +249,9 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
             </Tabs>
         </CardContent>
         <CardFooter className="p-8 bg-slate-50 border-t flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="space-y-1 text-center md:text-left">
-                <p className="font-bold text-slate-900">Finalizou o preenchimento?</p>
-                <p className="text-sm text-slate-500">Ao enviar, a coordenação analisará suas restrições para gerar o horário.</p>
+            <div className="space-y-1 text-center md:text-left max-w-md">
+                <p className="font-bold text-slate-900">Revisou suas escolhas?</p>
+                <p className="text-xs text-slate-500">Lembre-se que a escola priorizará sua livre docência, mas o horário final depende da organização de todas as turmas.</p>
             </div>
             <Button 
                 size="lg" 
@@ -190,7 +260,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                 className="h-14 px-10 text-lg font-black bg-primary shadow-xl hover:scale-105 active:scale-95 transition-all"
             >
                 {isPending ? <Loader2 className="animate-spin mr-3 h-6 w-6" /> : <Send className="mr-3 h-6 w-6" />}
-                ENVIAR PARA COORDENAÇÃO
+                ENVIAR PREFERÊNCIAS
             </Button>
         </CardFooter>
       </Card>

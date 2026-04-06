@@ -1,4 +1,3 @@
-
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
@@ -111,30 +110,33 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
         .content { background-color: #f8fafc; padding: 25px; border-radius: 8px; }
         .button { display: inline-block; padding: 14px 28px; background-color: #2563eb; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
         .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 25px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
-        .warning { font-size: 12px; color: #ef4444; font-weight: bold; }
+        .warning { font-size: 13px; color: #475569; margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #e2e8f0; border-radius: 4px; }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="header">
-          <h2 style="color: #1e3a8a; margin: 0;">Solicitação de Disponibilidade</h2>
+          <h2 style="color: #1e3a8a; margin: 0;">Preferências de Horário</h2>
           <p style="color: #64748b;">Sistema de Horário Escolar (SHE)</p>
         </div>
         
         <div class="content">
           <p>Prezado(a) Professor(a) <strong>${data.name}</strong>,</p>
-          <p>A coordenação pedagógica da unidade <strong>${data.schoolName}</strong> solicita o preenchimento de suas restrições e disponibilidades de horário para a organização da nova grade escolar.</p>
+          <p>A coordenação pedagógica da unidade <strong>${data.schoolName}</strong> solicita que você informe suas preferências de disponibilidade e <strong>Livre Docência (2 meios períodos livres)</strong>.</p>
           
-          <p>Por favor, clique no botão abaixo para acessar sua grade individual. Você poderá marcar os horários de folga e planejamento diretamente na tela.</p>
+          <p>Clique no botão abaixo para acessar sua grade individual:</p>
 
           <div style="text-align: center;">
-            <a href="${requestUrl}" class="button">Preencher Minhas Restrições</a>
+            <a href="${requestUrl}" class="button">Informar Minhas Preferências</a>
           </div>
 
-          <p class="warning">Atenção: Este link é pessoal e expira em 48 horas. Pode ser preenchido apenas uma vez.</p>
+          <div class="warning">
+            <strong>Nota Importante:</strong> As informações preenchidas são tratadas como <strong>preferências</strong>. 
+            A coordenação fará o possível para atendê-las, mas a definição final da grade depende das necessidades logísticas e pedagógicas da unidade escolar.
+          </div>
           
-          <p style="font-size: 13px; color: #475569; margin-top: 20px;">
-            Não é necessário senha ou login para este acesso temporário.
+          <p style="font-size: 12px; color: #94a3b8; margin-top: 20px; text-align: center;">
+            Este link é pessoal, expira em 48 horas e pode ser preenchido apenas uma vez.
           </p>
         </div>
 
@@ -150,7 +152,7 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
     await transporter.sendMail({
       from: `"SHE - Sistema de Horário Escolar" <${process.env.GMAIL_EMAIL}>`,
       to: data.to,
-      subject: `Solicitação de Restrições - ${data.schoolName}`,
+      subject: `Preferências de Horário - ${data.schoolName}`,
       html: html,
     });
     return { success: true };
