@@ -124,7 +124,13 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         });
         const list = Array.from(discMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
         setDisciplinasParaConfig(list);
-        setConfigGerminacao(list.map(d => ({ componente_id: d.id, geminar: false, tamanho_bloco: 2 })));
+        
+        // CORREÇÃO: Vir preenchido como "Germinar" para aulas com 3 ou mais
+        setConfigGerminacao(list.map(d => ({ 
+            componente_id: d.id, 
+            geminar: d.maxAulas >= 3, 
+            tamanho_bloco: 2 
+        })));
     }
 
     setDialogStep('name');
@@ -361,7 +367,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
           <CardFooter className="bg-muted/30 py-4 px-6 border-t">
              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <Settings2 className="h-4 w-4" />
-                <p>O algoritmo realiza 100 tentativas e busca otimizar conflitos com outros turnos ativos.</p>
+                <p>O algoritmo realiza 1000 tentativas e busca otimizar conflitos com outros turnos ativos.</p>
              </div>
           </CardFooter>
         </Card>

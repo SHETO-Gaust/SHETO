@@ -50,7 +50,7 @@ export function gerarHorarioAlgoritmico(
     sugestao?: SugestaoRealocacao[];
 } {
   
-  const MAX_ATTEMPTS = 100; 
+  const MAX_ATTEMPTS = 1000; 
   
   const nomeTurnoLower = turno.nome.toLowerCase();
   const turnoOposto = todosTurnos.find(t => {
@@ -310,6 +310,8 @@ export function gerarHorarioAlgoritmico(
   if (!force) {
       const resFalha = executarTentativa(true, true, false);
       const p = resFalha.pendentes[0];
+      if (!p) return { success: false, aulas: resFalha.aulas, error: "Falha inesperada no processamento. Tente novamente." };
+      
       let diag = `IMPOSSÍVEL GERAR GRADE COM AS REGRAS ATUAIS:\n`;
       diag += `O professor ${p.professor_nome} não tem espaço para "${p.componente_nome}" na Turma ${p.turma_nome}.\n\n`;
       diag += `MOTIVO: As janelas de Livre Docência ou Indisponibilidades deste professor estão bloqueando o fechamento do horário.\n\n`;
