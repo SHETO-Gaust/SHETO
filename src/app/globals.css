@@ -91,24 +91,40 @@
     margin: 1cm;
   }
   
-  body {
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
     background: white !important;
     color: black !important;
     font-size: 9pt;
   }
 
-  header, footer, nav, aside, button, .print\:hidden, [data-sidebar="sidebar"], .sidebar-trigger, .sticky {
-    display: none !important;
-  }
-
-  main, .flex-1, .container, .sidebar-inset, .sidebar-provider {
+  /* Reset layout constraints that prevent page breaks */
+  [data-sidebar-wrapper], 
+  .sidebar-provider, 
+  .sidebar-inset,
+  main {
     display: block !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: none !important;
     overflow: visible !important;
     position: static !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+  }
+
+  /* Hide system UI */
+  header, 
+  footer, 
+  nav, 
+  aside, 
+  button, 
+  [data-sidebar="sidebar"], 
+  .sidebar-trigger, 
+  .sticky,
+  .print\:hidden {
+    display: none !important;
   }
 
   .card {
@@ -117,7 +133,6 @@
     background: white !important;
     padding: 0 !important;
     margin: 0 !important;
-    display: block !important;
   }
 
   table {
@@ -125,16 +140,20 @@
     width: 100% !important;
     table-layout: fixed !important;
     margin-bottom: 1rem !important;
-    page-break-inside: avoid;
+    page-break-inside: auto;
   }
 
   th, td {
-    border: 1px solid black !important;
+    border: 1px solid #000 !important;
     padding: 4px !important;
     color: black !important;
     background: white !important;
     word-wrap: break-word !important;
-    overflow: visible !important;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
   }
 
   h1, h2, h3, h4 {
@@ -144,22 +163,22 @@
   }
 
   .break-after-page {
+    break-after: page !important;
     page-break-after: always !important;
+    display: block !important;
+    width: 100% !important;
   }
 
   .break-inside-avoid {
     page-break-inside: avoid !important;
   }
 
-  /* Reset flex/grid during print to avoid overlaps */
-  .grid, .flex {
-    display: block !important;
-  }
-
-  .space-y-6 > * + *, .space-y-8 > * + *, .space-y-12 > * + * {
-    margin-top: 1.5rem !important;
-  }
-
+  /* Ensure colors and text are readable */
+  .bg-primary\/10 { background-color: #f0f0f0 !important; border: 1px solid #000 !important; }
+  .bg-orange-100 { background-color: #fff0e0 !important; border: 1px solid #000 !important; }
+  .text-primary { color: #000 !important; }
+  .text-orange-700 { color: #000 !important; }
+  
   * {
     box-shadow: none !important;
     border-radius: 0 !important;

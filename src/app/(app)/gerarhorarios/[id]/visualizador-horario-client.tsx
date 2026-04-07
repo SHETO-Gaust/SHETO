@@ -330,7 +330,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             rows.push(
                                 <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 h-10 border-b print:border-black">
                                     <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r print:border-black print:bg-white flex items-center justify-center gap-1">
-                                        <Coffee className="h-3 w-3 text-orange-500 print:hidden" />
+                                        <Coffee className="h-3 w-3 text-orange-500" />
                                         Intervalo
                                     </td>
                                     <td colSpan={diasAtivosLocal.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest print:text-black print:text-[8px]">
@@ -682,14 +682,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 />
             </div>
           ) : viewMode === 'all' ? (
-            <div className="space-y-16 pt-4 print:pt-0 print:space-y-4">
+            <div className="space-y-16 pt-4 print:pt-0 print:space-y-0">
                 {turmas.map(turma => (
-                    <div key={turma.id} className="space-y-8 pb-12 border-b last:border-0 print:break-after-page print:border-none print:pb-0 print:space-y-4">
+                    <div key={turma.id} className="space-y-8 pb-12 border-b last:border-0 break-after-page print:border-none print:pb-0 print:pt-4 print:space-y-4">
                         <div className="flex items-center gap-3 print:gap-0">
                             <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg print:hidden">
                                 {turma.nome.charAt(0)}
                             </div>
-                            <h2 className="text-2xl font-black tracking-tight print:text-xl print:font-black">TURMA {turma.nome}</h2>
+                            <h2 className="text-2xl font-black tracking-tight print:text-xl print:font-black uppercase">TURMA {turma.nome}</h2>
                         </div>
                         <GradeHoraria 
                             targetId={turma.id} 
@@ -712,9 +712,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             teacherViewMode === 'individual' ? (
                 <TeacherIndividualView professorId={selectedProfessorId} />
             ) : (
-                <div className="space-y-16 pt-4 print:pt-0 print:space-y-4">
+                <div className="space-y-16 pt-4 print:pt-0 print:space-y-0">
                     {professores.map(prof => (
-                        <div key={prof.id} className="pb-16 border-b last:border-0 print:pb-0 print:border-none print:break-after-page">
+                        <div key={prof.id} className="pb-16 border-b last:border-0 break-after-page print:pb-0 print:border-none print:pt-4">
                             <TeacherIndividualView professorId={prof.id} />
                         </div>
                     ))}
