@@ -1,3 +1,4 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -37,13 +38,22 @@ export async function getTurmas(escolaId: string): Promise<{ data?: TurmaComDado
 /*                              GET DEPENDENCIES                              */
 /* -------------------------------------------------------------------------- */
 export async function getEnsalamentoDependencies(escolaId: string): Promise<{
-    series: (Serie & { turno: Turno | null, componentes: { componente_id: string, aulas_presenciais: number, aulas_nao_presenciais: number }[] })[],
+    series: (Serie & { turno: Turno | null, componentes: { componente_id: string, aulas_presenciais: number, aulas_nao_presenciais: number, componente: { nome: string, sigla: string } }[] })[],
     professores: ProfessorComDados[],
     componentes: ComponenteCurricular[],
 }> {
     const supabase = await createClient();
     const [seriesResult, professoresResult, componentesResult] = await Promise.all([
-        supabase.from('series').select('*, turno:turnos(id, nome), componentes:series_componentes(componente_id, aulas_presenciais, aulas_nao_presenciais)').eq('escola_id', escolaId),
+        supabase.from('series').select(`
+            *, 
+            turno:turnos(id, nome), 
+            componentes:series_componentes(
+                componente_id, 
+                aulas_presenciais, 
+                aulas_nao_presenciais,
+                componente:componentes_curriculares(nome, sigla)
+            )
+        `).eq('escola_id', escolaId),
         getProfessores(escolaId),
         supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId)
     ]);

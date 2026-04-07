@@ -46,28 +46,33 @@ export default async function TurmasPage() {
   const assignedClassesMap = new Map<string, number>();
   const professorAlocacoesMap = new Map<string, { turma_nome: string, serie_nome: string; aulas: number; componente_nome: string }[]>();
 
-  if (turmas && dependencies.series) {
+  if (turmas) {
     for (const turma of turmas) {
-      const serie = dependencies.series.find(s => s.id === turma.serie_id);
+      // Usamos os dados da série já vinculados à turma na consulta getTurmas
+      const serie = turma.serie;
       if (!serie) continue;
 
       for (const ensalamento of turma.professores) {
+        // Encontra a disciplina correspondente na série da turma
+        // @ts-ignore
         const componenteDaSerie = serie.componentes.find(c => c.componente_id === ensalamento.componente_id);
+        
         if (componenteDaSerie) {
             const aulas = (componenteDaSerie.aulas_presenciais || 0) + (componenteDaSerie.aulas_nao_presenciais || 0);
             const profId = ensalamento.professor_id;
             
-            // Atualiza total de aulas
+            // Atualiza total de aulas acumuladas pelo professor
             const currentTotal = assignedClassesMap.get(profId) || 0;
             assignedClassesMap.set(profId, currentTotal + aulas);
 
-            // Atualiza mapa de alocações - Capturando o nome real da disciplina
+            // Adiciona aos detalhes de alocação do professor
             const currentAlocacoes = professorAlocacoesMap.get(profId) || [];
             currentAlocacoes.push({
                 serie_nome: serie.nome,
                 turma_nome: turma.nome,
                 aulas: aulas,
-                componente_nome: (componenteDaSerie as any).componente?.nome || (componenteDaSerie as any).componente?.sigla || 'Disciplina'
+                // @ts-ignore - Captura o nome real do componente curricular
+                componente_nome: componenteDaSerie.componente?.nome || componenteDaSerie.componente?.sigla || 'Componente'
             });
             professorAlocacoesMap.set(profId, currentAlocacoes);
         }
@@ -75,6 +80,7 @@ export default async function TurmasPage() {
     }
   }
 
+  // Enriquece a lista de professores com os dados de carga calculados
   const professoresComCarga = dependencies.professores.map(prof => ({
     ...prof,
     aulas_atribuidas: assignedClassesMap.get(prof.id) || 0,
