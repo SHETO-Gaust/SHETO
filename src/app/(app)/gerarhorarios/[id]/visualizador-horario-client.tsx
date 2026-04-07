@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -6,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X, Star, PenSquare } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho, swapAulasManualmente } from '../actions';
@@ -215,14 +216,13 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   const GradeHoraria = ({ targetId, isProfessorView, label, turnoInfo, dataset, tipo }: any) => {
     if (!turnoInfo) return null;
 
-    const sourceData = dataset || horario.aulas;
+    const sourceData = dataset || (tipo ? horario.aulas.filter(a => a.tipo === tipo) : horario.aulas);
 
     const getAulaNoSlot = (dia: string, index: number) => {
         return sourceData.find((a: any) => 
             (isProfessorView ? true : a.turma_id === targetId) && 
             a.dia_semana === dia && 
-            a.aula_index === index &&
-            (tipo ? a.tipo === tipo : true)
+            a.aula_index === index
         );
     };
 
@@ -242,14 +242,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     };
 
     const hasAulas = sourceData.some((a: any) => (isProfessorView ? true : a.turma_id === targetId));
-    if (!hasAulas && !isProfessorView) return null;
+    if (!hasAulas && !isProfessorView && tipo === 'nao_presencial') return null;
     
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
 
     return (
         <div className="space-y-3 print:space-y-0.5 break-inside-avoid w-full">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black print:text-[7px]">
-                <div className={cn("w-2 h-2 rounded-full print:hidden", "bg-primary")} />
+                <div className={cn("w-2 h-2 rounded-full print:hidden", tipo === 'nao_presencial' ? "bg-orange-400" : "bg-primary")} />
                 {label} ({turnoInfo.nome})
             </h3>
             <div className="rounded-xl border bg-card overflow-hidden print:border-black print:rounded-none shadow-sm">
@@ -266,64 +266,86 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     </tr>
                     </thead>
                     <tbody>
-                    {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => (
-                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/10 transition-colors h-16 print:h-auto print:border-black">
-                        <td className="p-2 print:p-1 font-medium bg-muted/20 border-r print:border-black print:bg-white">
-                            <div className="font-bold text-primary print:text-black print:text-[8px]">{aulaIndex + 1}ª Aula</div>
-                            <div className="text-[9px] text-muted-foreground font-normal print:text-[7px]">
-                            {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} - {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
-                            </div>
-                        </td>
-                        {diasAtivosLocal.map(dia => {
-                            const aula = getAulaNoSlot(dia.id, aulaIndex);
-                            const isLD = isLivreDocencia(dia.id, aulaIndex);
-                            const isPlan = isPlanejamento(dia.id, aulaIndex);
-                            
-                            const isSelected = selectedSlot?.dia === dia.id && selectedSlot?.index === aulaIndex && !isProfessorView;
+                    {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => {
+                        const horarioConfig = turnoInfo.horarios?.[aulaIndex];
+                        const rows = [];
 
-                            return (
-                            <td 
-                                key={dia.id} 
-                                className={cn(
-                                    "p-1 text-center border-r last:border-r-0 print:border-black transition-all group", 
-                                    isPlan && !aula && "bg-blue-50/50 print:bg-transparent",
-                                    isLD && !aula && "bg-amber-50/50 print:bg-transparent",
-                                    !isProfessorView && !isActionPending && horario.status !== 'publicado' && "cursor-pointer hover:bg-primary/5",
-                                    isSelected && "bg-primary/20 ring-2 ring-primary ring-inset",
-                                )}
-                                onClick={() => !isProfessorView && handleCellClick(dia.id, aulaIndex, aula)}
-                            >
-                                {aula ? (
-                                <div className="relative flex flex-col items-center justify-center gap-0.5">
-                                    <div className={cn(
-                                        "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white print:text-[8px] transition-all",
-                                        aula.tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black",
-                                        isSelected && "scale-105 shadow-md border-primary"
-                                    )}>
-                                    {aula.componente.sigla || aula.componente.nome}
+                        rows.push(
+                            <tr key={`aula-${aulaIndex}`} className="border-b last:border-0 hover:bg-muted/10 transition-colors h-16 print:h-auto print:border-black">
+                                <td className="p-2 print:p-1 font-medium bg-muted/20 border-r print:border-black print:bg-white">
+                                    <div className="font-bold text-primary print:text-black print:text-[8px]">{aulaIndex + 1}ª Aula</div>
+                                    <div className="text-[9px] text-muted-foreground font-normal print:text-[7px]">
+                                    {horarioConfig?.inicio || '--:--'} - {horarioConfig?.fim || '--:--'}
                                     </div>
-                                    <div className="text-[8px] text-muted-foreground font-bold truncate w-full uppercase print:text-black print:text-[7px]">
-                                        {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
-                                    </div>
-                                </div>
-                                ) : isLD ? (
-                                    <div className="flex flex-col items-center justify-center gap-0.5 text-amber-600 print:text-black">
-                                        <Star className="h-3 w-3 fill-amber-500 print:hidden" />
-                                        <span className="text-[8px] font-black uppercase leading-tight">Livre Docência</span>
-                                    </div>
-                                ) : isPlan ? (
-                                    <div className="flex flex-col items-center justify-center gap-0.5 text-blue-600 print:text-black">
-                                        <PenSquare className="h-3 w-3 text-blue-500 print:hidden" />
-                                        <span className="text-[8px] font-black uppercase leading-tight">Planejamento</span>
-                                    </div>
-                                ) : (
-                                <span className="text-muted-foreground/10">-</span>
-                                )}
-                            </td>
-                            )
-                        })}
-                        </tr>
-                    ))}
+                                </td>
+                                {diasAtivosLocal.map(dia => {
+                                    const aula = getAulaNoSlot(dia.id, aulaIndex);
+                                    const isLD = isLivreDocencia(dia.id, aulaIndex);
+                                    const isPlan = isPlanejamento(dia.id, aulaIndex);
+                                    
+                                    const isSelected = selectedSlot?.dia === dia.id && selectedSlot?.index === aulaIndex && !isProfessorView;
+
+                                    return (
+                                    <td 
+                                        key={dia.id} 
+                                        className={cn(
+                                            "p-1 text-center border-r last:border-r-0 print:border-black transition-all group", 
+                                            isPlan && !aula && "bg-blue-50/50 print:bg-transparent",
+                                            isLD && !aula && "bg-amber-50/50 print:bg-transparent",
+                                            !isProfessorView && !isActionPending && horario.status !== 'publicado' && "cursor-pointer hover:bg-primary/5",
+                                            isSelected && "bg-primary/20 ring-2 ring-primary ring-inset",
+                                        )}
+                                        onClick={() => !isProfessorView && handleCellClick(dia.id, aulaIndex, aula)}
+                                    >
+                                        {aula ? (
+                                        <div className="relative flex flex-col items-center justify-center gap-0.5">
+                                            <div className={cn(
+                                                "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white print:text-[8px] transition-all",
+                                                aula.tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black",
+                                                isSelected && "scale-105 shadow-md border-primary"
+                                            )}>
+                                            {aula.componente.sigla || aula.componente.nome}
+                                            </div>
+                                            <div className="text-[8px] text-muted-foreground font-bold truncate w-full uppercase print:text-black print:text-[7px]">
+                                                {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
+                                            </div>
+                                        </div>
+                                        ) : isLD ? (
+                                            <div className="flex flex-col items-center justify-center gap-0.5 text-amber-600 print:text-black">
+                                                <Star className="h-3 w-3 fill-amber-500 print:hidden" />
+                                                <span className="text-[8px] font-black uppercase leading-tight">Livre Docência</span>
+                                            </div>
+                                        ) : isPlan ? (
+                                            <div className="flex flex-col items-center justify-center gap-0.5 text-blue-600 print:text-black">
+                                                <PenSquare className="h-3 w-3 text-blue-500 print:hidden" />
+                                                <span className="text-[8px] font-black uppercase leading-tight">Planejamento</span>
+                                            </div>
+                                        ) : (
+                                        <span className="text-muted-foreground/10">-</span>
+                                        )}
+                                    </td>
+                                    )
+                                })}
+                            </tr>
+                        );
+
+                        // Renderizar linha de Intervalo se houver
+                        if (horarioConfig?.tem_intervalo_depois && aulaIndex < turnoInfo.aulas_por_dia - 1) {
+                            rows.push(
+                                <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 h-10 border-b print:border-black">
+                                    <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r print:border-black flex items-center justify-center gap-1">
+                                        <Coffee className="h-3 w-3 text-orange-500 print:hidden" />
+                                        Intervalo
+                                    </td>
+                                    <td colSpan={diasAtivosLocal.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest print:text-black">
+                                        {horarioConfig.fim} às {turnoInfo.horarios?.[aulaIndex + 1]?.inicio || '--:--'}
+                                    </td>
+                                </tr>
+                            );
+                        }
+
+                        return rows;
+                    })}
                     </tbody>
                 </table>
                 </div>
@@ -344,18 +366,16 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     const turnosEnvolvidos = useMemo(() => {
         const turnosMap = new Map<string, Turno>();
         
-        // Sempre inclui o turno atual e o oposto (pelo menos para referência de LD/Planejamento)
         turnosMap.set(horario.turno.id, horario.turno);
         if (horario.turno_oposto) turnosMap.set(horario.turno_oposto.id, horario.turno_oposto);
 
-        // Verifica aulas publicadas em outros turnos
         horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId).forEach(a => {
             const turnoAula = (a as any).horario?.turno;
             if (turnoAula) turnosMap.set(turnoAula.id, turnoAula);
         });
 
         return Array.from(turnosMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
-    }, [professorId, prof]);
+    }, [professorId]);
 
     return (
         <div className="space-y-8 pt-4 break-after-page">
@@ -468,7 +488,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
           </div>
           
           <div className="flex flex-wrap items-center gap-4 print:hidden">
-            <Button variant="outline" onClick={handlePrint}>
+            <Button variant="outline" onClick={() => window.print()}>
                 <Printer className="mr-2 h-4 w-4" />
                 Imprimir Grade
             </Button>
@@ -509,7 +529,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 <TabsList>
                     <TabsTrigger value="single">Turmas</TabsTrigger>
                     <TabsTrigger value="teachers">Docentes</TabsTrigger>
-                    <TabsTrigger value="by-day">Por Dia</TabsTrigger>
                 </TabsList>
             </Tabs>
 
@@ -521,19 +540,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     <SelectContent>
                         {turmas.map(t => (
                             <SelectItem key={t.id} value={t.id}>Turma {t.nome}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            )}
-
-            {viewMode === 'by-day' && (
-                <Select value={selectedDayId} onValueChange={setSelectedDayId}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Selecione o dia" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {diasAtivos.map(d => (
-                            <SelectItem key={d.id} value={d.id}>{d.label}{d.id !== 'sabado' && d.id !== 'domingo' ? '-feira' : ''}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
@@ -595,57 +601,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     ))}
                 </div>
             )
-          ) : viewMode === 'by-day' ? (
-            <GradePorDia dayId={selectedDayId} turnoInfo={horario.turno} />
           ) : null}
         </CardContent>
       </Card>
-
-      <Dialog open={isPrintDialogOpen} onOpenChange={setIsPrintDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                      <Layout className="h-5 w-5 text-primary" />
-                      Configurar Impressão
-                  </DialogTitle>
-                  <DialogDescription>
-                      Como você deseja organizar as turmas no papel?
-                  </DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-4">
-                  <Button 
-                    variant={itemsPerPage === 1 ? "default" : "outline"} 
-                    className="h-24 flex flex-col gap-2"
-                    onClick={() => setItemsPerPage(1)}
-                  >
-                      <span className="text-lg font-bold">1 Turma</span>
-                      <span className="text-[10px] uppercase opacity-70">Por página</span>
-                  </Button>
-                  <Button 
-                    variant={itemsPerPage === 2 ? "default" : "outline"} 
-                    className="h-24 flex flex-col gap-2"
-                    onClick={() => setItemsPerPage(2)}
-                  >
-                      <span className="text-lg font-bold">2 Turmas</span>
-                      <span className="text-[10px] uppercase opacity-70">Por página</span>
-                  </Button>
-              </div>
-              <DialogFooter>
-                  <Button variant="ghost" onClick={() => setIsPrintDialogOpen(false)}>Cancelar</Button>
-                  <Button onClick={() => executePrint(itemsPerPage)}>
-                      <Printer className="mr-2 h-4 w-4" /> Imprimir
-                  </Button>
-              </DialogFooter>
-          </DialogContent>
-      </Dialog>
     </div>
   );
 }
-
-const GradePorDia = ({ dayId, turnoInfo }: { dayId: string, turnoInfo: Turno }) => {
-    // ... logic for GradePorDia remains similar but focused on presencial classes
-    return null; // Simplified for brevity in this snippet as the focus was on Teacher view
-};
-
-const handlePrint = () => { window.print(); }
-const executePrint = (perPage: number) => { window.print(); }

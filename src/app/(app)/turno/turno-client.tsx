@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -26,6 +27,7 @@ import {
   PlusCircle,
   MoreHorizontal,
   Trash2,
+  Coffee,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { updateTurnoStatus } from './actions';
@@ -40,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DeleteTurnoDialog } from './delete-turno-dialog';
+import { cn } from '@/lib/utils';
 
 type TurnoClientProps = {
   initialTurnos: Turno[];
@@ -211,57 +214,55 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
       </div>
 
       <div className="mt-12">
-        <h2 className="text-xl font-bold mb-4">Horários dos Turnos Ativos</h2>
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            Configuração da Grade Horária
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {turnosAtivos.length > 0 ? (
             turnosAtivos.map(turno => (
-              <Card key={`horario-${turno.id}`}>
-                <CardHeader>
-                  <CardTitle>{turno.nome}</CardTitle>
-                  <CardDescription>
-                    {turno.aulas_por_dia} aulas por dia, nos dias:{' '}
-                    {turno.dias_semana.join(', ')}.
+              <Card key={`horario-${turno.id}`} className="overflow-hidden border-2 shadow-md">
+                <CardHeader className="bg-primary/5 border-b">
+                  <CardTitle className="text-lg">{turno.nome}</CardTitle>
+                  <CardDescription className="text-[10px] uppercase font-bold tracking-tighter">
+                    {turno.aulas_por_dia} aulas diárias • {turno.dias_semana.join(', ')}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-0">
                   {turno.horarios && turno.horarios.length > 0 ? (
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-[100px]">Aula</TableHead>
-                            <TableHead>Horário</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {turno.horarios
-                            .slice(0, turno.aulas_por_dia)
-                            .map((horario, index) => (
-                              <TableRow key={horario.id}>
-                                <TableCell className="font-medium">
-                                  {index + 1}ª
-                                </TableCell>
-                                <TableCell>
-                                  {horario.inicio || '--:--'} -{' '}
-                                  {horario.fim || '--:--'}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                        </TableBody>
-                      </Table>
+                    <div className="divide-y">
+                        {turno.horarios.slice(0, turno.aulas_por_dia).map((horario, index) => (
+                            <div key={horario.id}>
+                                <div className="flex items-center justify-between p-3 px-4 hover:bg-muted/30 transition-colors">
+                                    <span className="font-bold text-xs text-primary">{index + 1}ª Aula</span>
+                                    <span className="text-xs font-semibold">
+                                        {horario.inicio || '--:--'} - {horario.fim || '--:--'}
+                                    </span>
+                                </div>
+                                {horario.tem_intervalo_depois && index < turno.aulas_por_dia - 1 && (
+                                    <div className="bg-orange-50/80 p-2 flex items-center justify-center gap-2 border-y border-orange-100">
+                                        <Coffee className="h-3 w-3 text-orange-500" />
+                                        <span className="text-[9px] font-black uppercase text-orange-700 tracking-widest">
+                                            Intervalo: {horario.fim} - {turno.horarios[index+1]?.inicio}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground text-sm py-4 text-center">
-                      Horários de aula ainda não configurados para este turno.
-                    </p>
+                    <div className="flex flex-col items-center justify-center p-8 text-center gap-2 opacity-40">
+                        <Clock className="h-8 w-8" />
+                        <p className="text-xs font-bold uppercase">Sem horários definidos</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
             ))
           ) : (
-            <p className="text-muted-foreground text-center col-span-1 lg:col-span-2 py-8">
-              Não há turnos ativos para exibir.
-            </p>
+            <div className="col-span-full p-12 text-center border-2 border-dashed rounded-2xl bg-muted/5">
+                <p className="text-muted-foreground font-medium">Ative os turnos para configurar e visualizar a grade horária.</p>
+            </div>
           )}
         </div>
       </div>

@@ -1,12 +1,13 @@
+
 'use client';
 
 import { useState, useMemo, useEffect, useTransition } from 'react';
 import type { HorarioCompleto, Turno } from '@/lib/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { Clock, User, Users, Search, Loader2 } from 'lucide-react';
+import { Clock, User, Users, Search, Loader2, Coffee } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { getGradeProfessorPublica } from './actions';
@@ -28,7 +29,6 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
   const [selectedHorarioId, setSelectedHorarioId] = useState<string>(horarios[0]?.id || '');
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   
-  // Estados para busca por professor
   const [profSearch, setProfSearch] = useState('');
   const [profData, setProfData] = useState<any>(null);
   const [isSearchingProf, startSearchingProf] = useTransition();
@@ -115,42 +115,63 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
                     </tr>
                     </thead>
                     <tbody>
-                    {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => (
-                        <tr key={aulaIndex} className="border-b last:border-0 hover:bg-muted/5 transition-colors h-24">
-                        <td className="p-4 font-medium bg-muted/10 border-r">
-                            <div className="font-bold text-primary">{aulaIndex + 1}ª Aula</div>
-                            <div className="text-[11px] text-muted-foreground font-normal flex items-center gap-1 mt-1">
-                                <Clock className="h-3 w-3" />
-                                {turnoInfo.horarios?.[aulaIndex]?.inicio || '--:--'} - {turnoInfo.horarios?.[aulaIndex]?.fim || '--:--'}
-                            </div>
-                        </td>
-                        {dias.map(dia => {
-                            const aula = getAulaNoSlot(dia.id, aulaIndex);
+                    {Array.from({ length: turnoInfo.aulas_por_dia }).map((_, aulaIndex) => {
+                        const horarioConfig = turnoInfo.horarios?.[aulaIndex];
+                        const rows = [];
 
-                            return (
-                            <td key={dia.id} className="p-2 text-center border-r last:border-r-0">
-                                {aula ? (
-                                <div className="flex flex-col items-center justify-center h-full space-y-1.5">
-                                    <div className={cn(
-                                        "font-bold text-[11px] leading-tight uppercase px-3 py-2 rounded-lg w-full shadow-sm border",
-                                        tipo === 'presencial' 
-                                            ? "bg-primary/5 text-primary border-primary/20" 
-                                            : "bg-orange-50 text-orange-700 border-orange-200"
-                                    )}>
-                                    {aula.componente.nome}
+                        rows.push(
+                            <tr key={`aula-${aulaIndex}`} className="border-b last:border-0 hover:bg-muted/5 transition-colors h-24">
+                                <td className="p-4 font-medium bg-muted/10 border-r">
+                                    <div className="font-bold text-primary">{aulaIndex + 1}ª Aula</div>
+                                    <div className="text-[11px] text-muted-foreground font-normal flex items-center gap-1 mt-1">
+                                        <Clock className="h-3 w-3" />
+                                        {horarioConfig?.inicio || '--:--'} - {horarioConfig?.fim || '--:--'}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-tighter truncate w-full">
-                                        {isProfessorView ? `TURMA ${aula.turma.nome}` : (aula.professor?.nome_horario || '---')}
-                                    </div>
-                                </div>
-                                ) : (
-                                <span className="text-muted-foreground/10">-</span>
-                                )}
-                            </td>
-                            )
-                        })}
-                        </tr>
-                    ))}
+                                </td>
+                                {dias.map(dia => {
+                                    const aula = getAulaNoSlot(dia.id, aulaIndex);
+
+                                    return (
+                                    <td key={dia.id} className="p-2 text-center border-r last:border-r-0">
+                                        {aula ? (
+                                        <div className="flex flex-col items-center justify-center h-full space-y-1.5">
+                                            <div className={cn(
+                                                "font-bold text-[11px] leading-tight uppercase px-3 py-2 rounded-lg w-full shadow-sm border",
+                                                tipo === 'presencial' 
+                                                    ? "bg-primary/5 text-primary border-primary/20" 
+                                                    : "bg-orange-50 text-orange-700 border-orange-200"
+                                            )}>
+                                            {aula.componente.nome}
+                                            </div>
+                                            <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-tighter truncate w-full">
+                                                {isProfessorView ? `TURMA ${aula.turma.nome}` : (aula.professor?.nome_horario || '---')}
+                                            </div>
+                                        </div>
+                                        ) : (
+                                        <span className="text-muted-foreground/10">-</span>
+                                        )}
+                                    </td>
+                                    )
+                                })}
+                            </tr>
+                        );
+
+                        if (horarioConfig?.tem_intervalo_depois && aulaIndex < turnoInfo.aulas_por_dia - 1) {
+                            rows.push(
+                                <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 h-10 border-b">
+                                    <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r flex items-center justify-center gap-1">
+                                        <Coffee className="h-3 w-3 text-orange-500" />
+                                        Intervalo
+                                    </td>
+                                    <td colSpan={dias.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest">
+                                        {horarioConfig.fim} às {turnoInfo.horarios?.[aulaIndex + 1]?.inicio || '--:--'}
+                                    </td>
+                                </tr>
+                            );
+                        }
+
+                        return rows;
+                    })}
                     </tbody>
                 </table>
                 </div>
@@ -219,7 +240,7 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
                                     aulas={currentHorario.aulas}
                                     targetId={selectedTurmaId} 
                                     tipo="nao_presencial" 
-                                    label="Grade do Contraturno (Atividades Não Presenciais)" 
+                                    label="Grade do Contraturno" 
                                     turnoInfo={currentHorario.turno_oposto} 
                                     isProfessorView={false}
                                 />

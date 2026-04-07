@@ -25,6 +25,7 @@ export type HorarioAula = {
   id: string;
   inicio: string; // "HH:mm"
   fim: string; // "HH:mm"
+  tem_intervalo_depois?: boolean;
 };
 
 export type Turno = {
