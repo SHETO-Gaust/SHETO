@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
-import type { HorarioCompleto, Turno } from '@/lib/types';
+import type { HorarioCompleto, Turno, LivreDocenciaPeriodo } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X, Star } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho, swapAulasManualmente } from '../actions';
@@ -41,6 +41,26 @@ const DIAS_SEMANA_MAP = [
   { id: 'quarta', label: 'Quarta' }, { id: 'quinta', label: 'Quinta' },
   { id: 'sexta', label: 'Sexta' }, { id: 'sabado', label: 'Sábado' },
 ];
+
+/**
+ * Heurística para determinar o período de uma aula baseada no turno e no horário.
+ */
+function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
+    const nome = turno.nome.toLowerCase();
+    if (nome.includes('matutino')) return 'matutino';
+    if (nome.includes('vespertino')) return 'vespertino';
+    if (nome.includes('noturno')) return 'noturno';
+    
+    const h = turno.horarios?.[aulaIdx];
+    if (h?.inicio) {
+        const hora = parseInt(h.inicio.split(':')[0]);
+        if (hora < 13) return 'matutino';
+        if (hora < 18) return 'vespertino';
+        return 'noturno';
+    }
+    
+    return aulaIdx < 5 ? 'matutino' : 'vespertino';
+}
 
 export function VisualizadorHorarioClient({ horario }: Props) {
   const [viewMode, setViewMode] = useState<'single' | 'all' | 'teachers' | 'by-day'>('single');
@@ -271,6 +291,15 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         );
     };
 
+    const isLivreDocencia = (dia: string, index: number) => {
+        if (!isProfessorView) return false;
+        const prof = professores.find(p => p.id === targetId);
+        if (!prof || prof.sem_preferencia_livre_docencia) return false;
+        
+        const periodo = getPeriodoDaAula(turnoInfo, index);
+        return prof.livre_docencia?.some((ld: any) => ld.dia === dia && ld.periodo === periodo);
+    };
+
     const hasAulas = sourceData.some((a: any) => (isProfessorView ? true : a.turma_id === targetId) && a.tipo === tipo);
     if (!hasAulas && tipo === 'nao_presencial' && !isProfessorView) return null;
     
@@ -313,6 +342,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         {diasAtivosLocal.map(dia => {
                             const aula = getAulaNoSlot(dia.id, aulaIndex);
                             const hole = isInconsistent(dia.id, aulaIndex);
+                            const isLD = isLivreDocencia(dia.id, aulaIndex);
                             
                             const isSelected = selectedSlot?.dia === dia.id && selectedSlot?.index === aulaIndex && !isProfessorView;
                             const isPotencialTarget = selectedSlot && !isSelected && tipo === 'presencial' && !isProfessorView;
@@ -323,6 +353,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                 className={cn(
                                     "p-1 text-center border-r last:border-r-0 print:border-black transition-all group", 
                                     hole && "bg-destructive/5 print:bg-transparent",
+                                    isLD && !aula && "bg-amber-50/50 print:bg-transparent",
                                     !isProfessorView && !isActionPending && horario.status !== 'publicado' && tipo === 'presencial' && "cursor-pointer hover:bg-primary/5",
                                     isSelected && "bg-primary/20 ring-2 ring-primary ring-inset",
                                     isPotencialTarget && "bg-blue-50/50"
@@ -350,6 +381,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                         </div>
                                     )}
                                 </div>
+                                ) : isLD ? (
+                                    <div className="flex flex-col items-center justify-center gap-0.5 text-amber-600 print:text-black">
+                                        <Star className="h-3 w-3 fill-amber-500 print:hidden" />
+                                        <span className="text-[8px] font-black uppercase leading-tight">Livre Docência</span>
+                                    </div>
                                 ) : hole ? (
                                     <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse print:animate-none print:text-gray-300">
                                         <span className="text-[8px] font-bold uppercase print:text-[7px]">Vago</span>
@@ -381,27 +417,38 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
     const turnosEnvolvidos = useMemo(() => {
         const turnosMap = new Map<string, Turno>();
-        const hasSomethingInCurrent = horario.aulas.some(a => a.professor_id === professorId) || 
+        
+        // Verifica se tem aula presencial ou restrição no turno atual
+        const hasSomethingInCurrent = horario.aulas.some(a => a.professor_id === professorId && a.horario_id === horario.id && a.tipo === 'presencial') || 
                                      (prof?.restricoes && prof.restricoes[horario.turno.id]);
         
         if (hasSomethingInCurrent) turnosMap.set(horario.turno.id, horario.turno);
 
+        // Verifica aulas publicadas em outros turnos
         horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId).forEach(a => {
             const turnoAula = (a as any).horario?.turno;
             if (turnoAula) turnosMap.set(turnoAula.id, turnoAula);
         });
 
+        // Adiciona turnos onde tem planejamento
         if (prof?.restricoes) {
             Object.keys(prof.restricoes).forEach(tId => {
                 const isPlanningInTurno = Object.values(prof.restricoes[tId] || {}).some((d: any) => 
                     Object.values(d).includes('planejamento')
                 );
                 if (isPlanningInTurno && !turnosMap.has(tId)) {
+                    // Tenta achar o turno no objeto global se possível
                     const publishedTurno = horario.outras_aulas_publicadas?.find(a => (a as any).horario?.turno_id === tId)?.horario?.turno;
                     if (publishedTurno) turnosMap.set(tId, publishedTurno);
                 }
             });
         }
+
+        // Caso especial: se o professor tem aulas NP, elas devem aparecer no turno oposto
+        if (horario.aulas.some(a => a.professor_id === professorId && a.tipo === 'nao_presencial')) {
+            if (horario.turno_oposto) turnosMap.set(horario.turno_oposto.id, horario.turno_oposto);
+        }
+
         return Array.from(turnosMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
     }, [professorId, prof]);
 
@@ -419,18 +466,46 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 </div>
             </div>
 
-            {turnosEnvolvidos.map(turno => (
-                <div key={turno.id} className="space-y-6">
-                    <GradeHoraria 
-                        targetId={professorId} 
-                        isProfessorView={true}
-                        tipo="presencial" 
-                        label={`Grade: ${turno.nome}`} 
-                        turnoInfo={turno} 
-                        dataset={allTeacherAulas.filter(a => (a.tipo === 'presencial' && (a.horario_id === horario.id ? horario.turno_id === turno.id : (a as any).horario.turno_id === turno.id)))}
-                    />
-                </div>
-            ))}
+            {turnosEnvolvidos.map(turno => {
+                const aulasDesteTurno = allTeacherAulas.filter(a => {
+                    const aulaHorarioId = a.horario_id;
+                    const isMainHorario = aulaHorarioId === horario.id;
+                    
+                    if (isMainHorario) {
+                        // Se for aula NP do horário principal, ela aparece no turno oposto
+                        if (a.tipo === 'nao_presencial') return turno.id === horario.turno_oposto?.id;
+                        // Se for aula presencial do horário principal, aparece no turno normal
+                        return turno.id === horario.turno_id;
+                    } else {
+                        // Aulas de outros horários publicados
+                        return (a as any).horario.turno_id === turno.id;
+                    }
+                });
+
+                return (
+                    <div key={turno.id} className="space-y-6">
+                        <GradeHoraria 
+                            targetId={professorId} 
+                            isProfessorView={true}
+                            tipo="presencial" 
+                            label={`Grade: ${turno.nome}`} 
+                            turnoInfo={turno} 
+                            dataset={aulasDesteTurno.filter(a => a.tipo === 'presencial')}
+                        />
+                        {/* Se for o turno oposto, mostramos as aulas NP do professor ali */}
+                        {turno.id === horario.turno_oposto?.id && (
+                            <GradeHoraria 
+                                targetId={professorId} 
+                                isProfessorView={true}
+                                tipo="nao_presencial" 
+                                label={`Atividades NP (Contraturno)`} 
+                                turnoInfo={turno} 
+                                dataset={aulasDesteTurno.filter(a => a.tipo === 'nao_presencial')}
+                            />
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
   }
@@ -563,9 +638,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             <CardTitle className="flex items-center gap-3">
                 <span>{horario.nome}</span>
                 {horario.status === 'publicado' ? (
-                    <Badge className="bg-green-500 hover:bg-green-600 text-white gap-1 print:hidden whitespace-nowrap">
-                        <CheckCircle2 className="h-3 w-3" /> Publicado
-                    </Badge>
+                    <CheckCircle2 className="h-5 w-5 text-green-500 print:hidden" />
                 ) : (
                     <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50 print:hidden whitespace-nowrap">
                         Rascunho
