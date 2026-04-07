@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestricao, LivreDocenciaItem } from '@/lib/types';
+import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestricao, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { sendRestrictionRequestEmail } from '@/lib/mail';
 import { randomBytes } from 'crypto';
 import { validateCPF } from '@/lib/utils';
@@ -164,9 +164,16 @@ export async function updateProfessorComponentes(professorId: string, componente
 /* -------------------------------------------------------------------------- */
 /* UPDATE RESTRIÇÕES DO PROFESSOR                     */
 /* -------------------------------------------------------------------------- */
-export async function updateProfessorRestricoes(professorId: string, restricoes: any) {
+export async function updateProfessorRestricoes(professorId: string, restricoes: any, livreDocencia?: any[]) {
     const supabase = await createClient();
-    const { error: error } = await supabase.from('professores').update({ restricoes }).eq('id', professorId);
+    const updateData: any = { restricoes };
+    
+    if (livreDocencia) {
+        updateData.livre_docencia = livreDocencia;
+        updateData.sem_preferencia_livre_docencia = false;
+    }
+
+    const { error: error } = await supabase.from('professores').update(updateData).eq('id', professorId);
     if (error) return { error: 'Não foi possível salvar as restrições de horário.' };
     revalidatePath('/professores');
     return { success: true };
