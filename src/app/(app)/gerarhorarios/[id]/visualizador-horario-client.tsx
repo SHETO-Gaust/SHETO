@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee, Layers, CalendarDays } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho, swapAulasManualmente } from '../actions';
@@ -64,8 +64,6 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   const [viewMode, setViewMode] = useState<'single' | 'all' | 'teachers' | 'by-day'>('single');
   const [teacherViewMode, setTeacherViewMode] = useState<'individual' | 'all'>('individual');
   const [isActionPending, startAction] = useTransition();
-  const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
-  const [itemsPerPage, setItemsPerPage] = useState<1 | 2>(1);
   const { toast } = useToast();
 
   const [selectedSlot, setSelectedSlot] = useState<{ 
@@ -329,12 +327,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             </tr>
                         );
 
-                        // Renderizar linha de Intervalo se houver
                         if (horarioConfig?.tem_intervalo_depois && aulaIndex < turnoInfo.aulas_por_dia - 1) {
                             rows.push(
                                 <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 h-10 border-b print:border-black">
                                     <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r print:border-black flex items-center justify-center gap-1">
-                                        <Coffee className="h-3 w-3 text-orange-500 print:hidden" />
+                                        <Coffee className="h-3 w-3 text-orange-500" />
                                         Intervalo
                                     </td>
                                     <td colSpan={diasAtivosLocal.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest print:text-black">
@@ -439,9 +436,99 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     );
   }
 
+  const RenderByDay = () => {
+    return (
+        <div className="space-y-6 pt-4">
+            <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border print:hidden">
+                <span className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4" /> Selecione o Dia:
+                </span>
+                <Tabs value={selectedDayId} onValueChange={setSelectedDayId} className="w-auto">
+                    <TabsList className="bg-background border h-10">
+                        {diasAtivos.map(dia => (
+                            <TabsTrigger key={dia.id} value={dia.id} className="text-xs px-4">{dia.label}</TabsTrigger>
+                        ))}
+                    </TabsList>
+                </Tabs>
+            </div>
+
+            <div className="rounded-xl border bg-card overflow-hidden shadow-sm print:border-black print:rounded-none">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                        <thead>
+                            <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                                <th className="p-4 text-left font-bold border-r w-32 print:w-20 print:p-2 print:border-black print:text-[8px]">Horário</th>
+                                {turmas.map(t => (
+                                    <th key={t.id} className="p-4 text-center font-bold min-w-[150px] border-r last:border-r-0 print:border-black print:p-2 print:text-[8px] print:min-w-0">
+                                        TURMA {t.nome}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {Array.from({ length: horario.turno.aulas_por_dia }).map((_, aulaIndex) => {
+                                const hConfig = horario.turno.horarios?.[aulaIndex];
+                                const rows = [];
+
+                                rows.push(
+                                    <tr key={aulaIndex} className="border-b last:border-0 h-24 hover:bg-muted/5 print:h-auto print:border-black">
+                                        <td className="p-4 font-bold bg-muted/10 border-r print:bg-white print:border-black print:p-2">
+                                            <div className="text-primary print:text-black print:text-[8px]">{aulaIndex + 1}ª Aula</div>
+                                            <div className="text-[10px] text-muted-foreground font-normal print:text-[7px]">
+                                                {hConfig?.inicio || '--:--'} - {hConfig?.fim || '--:--'}
+                                            </div>
+                                        </td>
+                                        {turmas.map(t => {
+                                            const aula = horario.aulas.find(a => 
+                                                a.turma_id === t.id && 
+                                                a.dia_semana === selectedDayId && 
+                                                a.aula_index === aulaIndex &&
+                                                a.tipo === 'presencial'
+                                            );
+                                            return (
+                                                <td key={t.id} className="p-2 text-center border-r last:border-r-0 print:border-black print:p-1">
+                                                    {aula ? (
+                                                        <div className="flex flex-col items-center justify-center gap-1">
+                                                            <div className="font-bold text-[10px] leading-tight uppercase px-2 py-1 rounded bg-primary/5 border border-primary/10 text-primary w-full shadow-sm print:text-[8px] print:bg-white print:border-black print:text-black">
+                                                                {aula.componente.sigla || aula.componente.nome}
+                                                            </div>
+                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase truncate w-full print:text-[7px] print:text-black">
+                                                                {aula.professor?.nome_horario || 'SEM PROF.'}
+                                                            </div>
+                                                        </div>
+                                                    ) : <span className="text-muted-foreground/10">-</span>}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+
+                                if (hConfig?.tem_intervalo_depois && aulaIndex < horario.turno.aulas_por_dia - 1) {
+                                    rows.push(
+                                        <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 h-10 border-b print:border-black">
+                                            <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r print:border-black print:bg-white">
+                                                Intervalo
+                                            </td>
+                                            <td colSpan={turmas.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest print:text-black">
+                                                {hConfig.fim} às {horario.turno.horarios?.[aulaIndex + 1]?.inicio || '--:--'}
+                                            </td>
+                                        </tr>
+                                    );
+                                }
+
+                                return rows;
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {horario.status !== 'publicado' && viewMode !== 'teachers' && (
+      {horario.status !== 'publicado' && viewMode !== 'teachers' && viewMode !== 'by-day' && (
           <div className="sticky top-16 z-20 print:hidden">
             <Alert className={cn(
                 "transition-all border-2", 
@@ -526,9 +613,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             )}
 
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="w-auto">
-                <TabsList>
-                    <TabsTrigger value="single">Turmas</TabsTrigger>
-                    <TabsTrigger value="teachers">Docentes</TabsTrigger>
+                <TabsList className="h-10">
+                    <TabsTrigger value="single" className="gap-2"><Layout className="h-3.5 w-3.5" /> Turmas</TabsTrigger>
+                    <TabsTrigger value="all" className="gap-2"><Layers className="h-3.5 w-3.5" /> Todas</TabsTrigger>
+                    <TabsTrigger value="teachers" className="gap-2"><User className="h-3.5 w-3.5" /> Docentes</TabsTrigger>
+                    <TabsTrigger value="by-day" className="gap-2"><CalendarDays className="h-3.5 w-3.5" /> Por Dia</TabsTrigger>
                 </TabsList>
             </Tabs>
 
@@ -589,6 +678,33 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     tipo="nao_presencial"
                 />
             </div>
+          ) : viewMode === 'all' ? (
+            <div className="grid grid-cols-1 gap-16 pt-4 print:gap-12">
+                {turmas.map(turma => (
+                    <div key={turma.id} className="space-y-8 pb-12 border-b last:border-0 print:break-after-page print:border-none print:pb-0">
+                        <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg print:hidden">
+                                {turma.nome.charAt(0)}
+                            </div>
+                            <h2 className="text-2xl font-black tracking-tight print:text-base">TURMA {turma.nome}</h2>
+                        </div>
+                        <GradeHoraria 
+                            targetId={turma.id} 
+                            isProfessorView={false}
+                            label="Grade Regular" 
+                            turnoInfo={horario.turno} 
+                            tipo="presencial"
+                        />
+                        <GradeHoraria 
+                            targetId={turma.id} 
+                            isProfessorView={false}
+                            label="Grade do Contraturno" 
+                            turnoInfo={horario.turno_oposto || null} 
+                            tipo="nao_presencial"
+                        />
+                    </div>
+                ))}
+            </div>
           ) : viewMode === 'teachers' ? (
             teacherViewMode === 'individual' ? (
                 <TeacherIndividualView professorId={selectedProfessorId} />
@@ -601,6 +717,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     ))}
                 </div>
             )
+          ) : viewMode === 'by-day' ? (
+            <RenderByDay />
           ) : null}
         </CardContent>
       </Card>
