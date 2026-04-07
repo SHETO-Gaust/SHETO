@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -245,8 +244,8 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
 
     return (
-        <div className="space-y-3 print:space-y-0.5 break-inside-avoid w-full">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black print:text-[7px]">
+        <div className="space-y-3 print:space-y-1 break-inside-avoid w-full">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black print:text-[8px] print:font-black">
                 <div className={cn("w-2 h-2 rounded-full print:hidden", tipo === 'nao_presencial' ? "bg-orange-400" : "bg-primary")} />
                 {label} ({turnoInfo.nome})
             </h3>
@@ -255,7 +254,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 <table className="w-full text-sm print:table-fixed border-collapse">
                     <thead>
                     <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
-                        <th className="p-2 print:p-1 text-left font-medium border-r w-24 print:w-16 print:border-black print:text-[8px]">Horário</th>
+                        <th className="p-2 print:p-1 text-left font-medium border-r w-24 print:w-20 print:border-black print:text-[8px]">Horário</th>
                         {diasAtivosLocal.map(dia => (
                         <th key={dia.id} className="p-2 print:p-1 text-center font-medium min-w-[100px] print:min-w-0 print:border-black print:text-[8px]">
                             {dia.label}
@@ -296,15 +295,15 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                         onClick={() => !isProfessorView && handleCellClick(dia.id, aulaIndex, aula)}
                                     >
                                         {aula ? (
-                                        <div className="relative flex flex-col items-center justify-center gap-0.5">
+                                        <div className="flex flex-col items-center justify-center gap-0.5 print:static">
                                             <div className={cn(
-                                                "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border print:bg-white print:text-[8px] transition-all",
-                                                aula.tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black print:border-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:border-black",
+                                                "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm print:shadow-none print:border-none print:bg-transparent print:text-[8px] transition-all",
+                                                aula.tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20 print:text-black" : "bg-orange-100 text-orange-700 border border-orange-200 print:text-black print:font-black",
                                                 isSelected && "scale-105 shadow-md border-primary"
                                             )}>
                                             {aula.componente.sigla || aula.componente.nome}
                                             </div>
-                                            <div className="text-[8px] text-muted-foreground font-bold truncate w-full uppercase print:text-black print:text-[7px]">
+                                            <div className="text-[8px] text-muted-foreground font-bold truncate w-full uppercase print:text-black print:text-[7px] print:opacity-70">
                                                 {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
                                             </div>
                                         </div>
@@ -330,11 +329,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         if (horarioConfig?.tem_intervalo_depois && aulaIndex < turnoInfo.aulas_por_dia - 1) {
                             rows.push(
                                 <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 h-10 border-b print:border-black">
-                                    <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r print:border-black flex items-center justify-center gap-1">
-                                        <Coffee className="h-3 w-3 text-orange-500" />
+                                    <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r print:border-black print:bg-white flex items-center justify-center gap-1">
+                                        <Coffee className="h-3 w-3 text-orange-500 print:hidden" />
                                         Intervalo
                                     </td>
-                                    <td colSpan={diasAtivosLocal.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest print:text-black">
+                                    <td colSpan={diasAtivosLocal.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest print:text-black print:text-[8px]">
                                         {horarioConfig.fim} às {turnoInfo.horarios?.[aulaIndex + 1]?.inicio || '--:--'}
                                     </td>
                                 </tr>
@@ -375,14 +374,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     }, [professorId]);
 
     return (
-        <div className="space-y-8 pt-4 break-after-page">
+        <div className="space-y-8 pt-4 break-after-page print:pt-0 print:space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 print:border-black print:pb-2 print:mb-2">
                 <div className="flex items-center gap-3">
                     <div className="h-12 w-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center print:hidden">
                         <User className="h-6 w-6" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-bold tracking-tight print:text-black print:text-base">
+                        <h2 className="text-xl font-bold tracking-tight print:text-black print:text-lg">
                             {prof.nome_horario}
                         </h2>
                         <p className="text-sm text-muted-foreground print:text-black print:text-xs">Grade Docente Consolidada</p>
@@ -409,7 +408,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-12">
+            <div className="grid grid-cols-1 gap-12 print:gap-6">
                 {turnosEnvolvidos.map(turno => {
                     const aulasDesteTurno = allTeacherAulas.filter(a => {
                         const isMainHorario = a.horario_id === horario.id;
@@ -438,7 +437,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
 
   const RenderByDay = () => {
     return (
-        <div className="space-y-6 pt-4">
+        <div className="space-y-6 pt-4 print:pt-0 print:space-y-2">
             <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border print:hidden">
                 <span className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2">
                     <CalendarDays className="h-4 w-4" /> Selecione o Dia:
@@ -452,9 +451,13 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 </Tabs>
             </div>
 
+            <h2 className="hidden print:block text-base font-black uppercase text-center border-b border-black pb-2 mb-4">
+                Visão Operacional: {DIAS_SEMANA_MAP.find(d => d.id === selectedDayId)?.label} - {horario.turno.nome}
+            </h2>
+
             <div className="rounded-xl border bg-card overflow-hidden shadow-sm print:border-black print:rounded-none">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm border-collapse">
+                    <table className="w-full text-sm border-collapse print:table-fixed">
                         <thead>
                             <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
                                 <th className="p-4 text-left font-bold border-r w-32 print:w-20 print:p-2 print:border-black print:text-[8px]">Horário</th>
@@ -488,11 +491,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                             return (
                                                 <td key={t.id} className="p-2 text-center border-r last:border-r-0 print:border-black print:p-1">
                                                     {aula ? (
-                                                        <div className="flex flex-col items-center justify-center gap-1">
-                                                            <div className="font-bold text-[10px] leading-tight uppercase px-2 py-1 rounded bg-primary/5 border border-primary/10 text-primary w-full shadow-sm print:text-[8px] print:bg-white print:border-black print:text-black">
+                                                        <div className="flex flex-col items-center justify-center gap-1 print:static">
+                                                            <div className="font-bold text-[10px] leading-tight uppercase px-2 py-1 rounded bg-primary/5 border border-primary/10 text-primary w-full shadow-sm print:text-[8px] print:bg-transparent print:border-none print:text-black print:font-black">
                                                                 {aula.componente.sigla || aula.componente.nome}
                                                             </div>
-                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase truncate w-full print:text-[7px] print:text-black">
+                                                            <div className="text-[9px] text-muted-foreground font-bold uppercase truncate w-full print:text-[7px] print:text-black print:opacity-70">
                                                                 {aula.professor?.nome_horario || 'SEM PROF.'}
                                                             </div>
                                                         </div>
@@ -509,7 +512,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                             <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r print:border-black print:bg-white">
                                                 Intervalo
                                             </td>
-                                            <td colSpan={turmas.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest print:text-black">
+                                            <td colSpan={turmas.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest print:text-black print:text-[8px]">
                                                 {hConfig.fim} às {horario.turno.horarios?.[aulaIndex + 1]?.inicio || '--:--'}
                                             </td>
                                         </tr>
@@ -527,7 +530,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:space-y-0">
       {horario.status !== 'publicado' && viewMode !== 'teachers' && viewMode !== 'by-day' && (
           <div className="sticky top-16 z-20 print:hidden">
             <Alert className={cn(
@@ -571,7 +574,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                     </Badge>
                 )}
             </CardTitle>
-            <CardDescription className="print:text-black">Visualize o horário gerado para as turmas do turno {horario.turno.nome}.</CardDescription>
+            <CardDescription className="print:hidden">Visualize o horário gerado para as turmas do turno {horario.turno.nome}.</CardDescription>
           </div>
           
           <div className="flex flex-wrap items-center gap-4 print:hidden">
@@ -662,7 +665,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         
         <CardContent className="print:p-0">
           {viewMode === 'single' ? (
-            <div className="space-y-12 pt-4">
+            <div className="space-y-12 pt-4 print:pt-0 print:space-y-8">
                 <GradeHoraria 
                     targetId={selectedTurmaId} 
                     isProfessorView={false}
@@ -679,14 +682,14 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                 />
             </div>
           ) : viewMode === 'all' ? (
-            <div className="grid grid-cols-1 gap-16 pt-4 print:gap-12">
+            <div className="space-y-16 pt-4 print:pt-0 print:space-y-4">
                 {turmas.map(turma => (
-                    <div key={turma.id} className="space-y-8 pb-12 border-b last:border-0 print:break-after-page print:border-none print:pb-0">
-                        <div className="flex items-center gap-3">
+                    <div key={turma.id} className="space-y-8 pb-12 border-b last:border-0 print:break-after-page print:border-none print:pb-0 print:space-y-4">
+                        <div className="flex items-center gap-3 print:gap-0">
                             <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg print:hidden">
                                 {turma.nome.charAt(0)}
                             </div>
-                            <h2 className="text-2xl font-black tracking-tight print:text-base">TURMA {turma.nome}</h2>
+                            <h2 className="text-2xl font-black tracking-tight print:text-xl print:font-black">TURMA {turma.nome}</h2>
                         </div>
                         <GradeHoraria 
                             targetId={turma.id} 
@@ -709,7 +712,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             teacherViewMode === 'individual' ? (
                 <TeacherIndividualView professorId={selectedProfessorId} />
             ) : (
-                <div className="grid grid-cols-1 gap-16 pt-4 print:gap-4">
+                <div className="space-y-16 pt-4 print:pt-0 print:space-y-4">
                     {professores.map(prof => (
                         <div key={prof.id} className="pb-16 border-b last:border-0 print:pb-0 print:border-none print:break-after-page">
                             <TeacherIndividualView professorId={prof.id} />
