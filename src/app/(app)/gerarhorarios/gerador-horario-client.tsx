@@ -29,7 +29,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog"
+} from "@/dialog"
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -51,6 +51,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isReverting, setIsReverting] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
+  const [partialAulas, setPartialAulas] = useState<any[] | null>(null);
   
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
   const [dialogStep, setDialogStep] = useState<'name' | 'germination'>('name');
@@ -74,6 +75,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     setSelectedTurnoId(turnoId);
     setIsLoadingHorarios(true);
     setGenError(null);
+    setPartialAulas(null);
     const { data, error } = await getHorariosSalvos(turnoId);
     if (error) {
       toast({ title: 'Erro ao buscar horários', description: error, variant: 'destructive' });
@@ -90,6 +92,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     }
     
     setGenError(null);
+    setPartialAulas(null);
     const nextVersion = horarios.length + 1;
     setNomeHorarioInput(`Horário V${nextVersion}`);
     
@@ -145,6 +148,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     setIsProcessing(true);
     setCurrentAttempt(0);
     setGenError(null);
+    setPartialAulas(null);
 
     let attempts = 0;
     let foundSolution = false;
@@ -169,10 +173,14 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 break;
             }
 
+            // Se for o último lote e não encontrou, pega o erro e as aulas parciais
+            if (attempts + BATCH_SIZE >= MAX_ATTEMPTS) {
+                setGenError(result.error || "Limite atingido.");
+                setPartialAulas(result.aulas || []);
+            }
+
             attempts += BATCH_SIZE;
             setCurrentAttempt(attempts);
-            
-            // Pequena pausa para o navegador respirar e atualizar o UI
             await new Promise(r => setTimeout(r, 10));
         }
 
@@ -185,8 +193,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 handleTurnoChange(selectedTurnoId);
             }
         } else {
-            setGenError("Não foi possível encontrar uma grade sem conflitos após 10.000 tentativas. Tente reduzir as restrições dos professores.");
-            toast({ title: 'Limite Atingido', description: 'Considere remover restrições ou geminação.', variant: 'destructive' });
+            toast({ title: 'Problema Detectado', description: 'Não foi possível fechar a grade 100%. Verifique os conflitos.', variant: 'destructive' });
         }
     } catch (err) {
         console.error(err);
@@ -194,6 +201,22 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     } finally {
         setIsProcessing(false);
     }
+  };
+
+  const handleForcarSalvamento = async () => {
+      if (!partialAulas || !nomeHorarioInput) return;
+      
+      startTransition(async () => {
+          const result = await salvarGradeFinal(escolaId, selectedTurnoId, `${nomeHorarioInput} (Com Pendências)`, partialAulas);
+          if (result.error) {
+              toast({ title: 'Erro ao salvar', description: result.error, variant: 'destructive' });
+          } else {
+              setGenError(null);
+              setPartialAulas(null);
+              toast({ title: 'Grade Salva!', description: 'A grade foi salva mesmo com aulas pendentes. Ajuste manualmente os horários vagos.' });
+              handleTurnoChange(selectedTurnoId);
+          }
+      });
   };
 
   const toggleGerminacao = (id: string, checked: boolean) => {
@@ -216,19 +239,6 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         setHorarios(prev => prev.filter(h => h.id !== id));
     }
   };
-
-  const handleReverterParaRascunho = async (id: string) => {
-    setIsReverting(id);
-    const result = await reverterParaRascunho(id);
-    setIsReverting(null);
-
-    if (result.error) {
-        toast({ title: 'Erro ao reverter', description: result.error, variant: 'destructive' });
-    } else {
-        toast({ title: 'Status alterado!', description: 'O horário voltou para o estado de rascunho.' });
-        handleTurnoChange(selectedTurnoId);
-    }
-  }
 
   const selectedTurno = turnosAtivos.find(t => t.id === selectedTurnoId);
 
@@ -271,14 +281,39 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             {genError && (
                 <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 animate-in fade-in slide-in-from-top-4 duration-500">
                     <AlertCircle className="h-5 w-5" />
-                    <AlertTitle className="text-xl font-bold">Inconsistência Detectada</AlertTitle>
+                    <AlertTitle className="text-xl font-bold">Impossível fechar a grade sem conflitos</AlertTitle>
                     <AlertDescription className="mt-4 space-y-6">
                         <div className="text-sm bg-background/90 p-5 rounded-xl border-2 border-destructive/20 shadow-inner whitespace-pre-line leading-relaxed font-mono">
                             {genError}
                         </div>
-                        <div className="flex gap-4">
-                            <Link href="/professores" className="flex-1"><Button variant="outline" className="w-full">Ajustar Professores</Button></Link>
-                            <Link href="/serie" className="flex-1"><Button variant="outline" className="w-full">Revisar Cargas</Button></Link>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="p-4 border rounded-xl bg-orange-50 border-orange-200 space-y-3">
+                                <p className="text-sm font-bold text-orange-900 flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4" /> Opção: Salvar com Pendências
+                                </p>
+                                <p className="text-xs text-orange-800">
+                                    Você pode salvar a grade incompleta e depois realizar ajustes manuais para as aulas que o sistema não conseguiu encaixar. Elas aparecerão como "Vagas" na cor vermelha.
+                                </p>
+                                <Button onClick={handleForcarSalvamento} variant="default" className="w-full bg-orange-600 hover:bg-orange-700">
+                                    Salvar Grade Incompleta
+                                </Button>
+                            </div>
+
+                            <div className="p-4 border rounded-xl bg-white space-y-3">
+                                <p className="text-sm font-bold flex items-center gap-2">
+                                    <Settings2 className="h-4 w-4" /> Como Resolver?
+                                </p>
+                                <ul className="text-[11px] space-y-1 text-muted-foreground list-disc pl-4">
+                                    <li>Verifique se os professores já possuem aulas em outros turnos publicados.</li>
+                                    <li>Reduza a quantidade de restrições manuais (Ban) nos professores conflitantes.</li>
+                                    <li>Tente desativar a "Geminação" para as matérias do professor problemático.</li>
+                                </ul>
+                                <div className="flex gap-2">
+                                    <Link href="/professores" className="flex-1"><Button variant="outline" size="sm" className="w-full text-[10px]">Ajustar Professores</Button></Link>
+                                    <Link href="/serie" className="flex-1"><Button variant="outline" size="sm" className="w-full text-[10px]">Revisar Cargas</Button></Link>
+                                </div>
+                            </div>
                         </div>
                     </AlertDescription>
                 </Alert>
@@ -330,32 +365,39 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {horarios.map(h => {
                             const isPublicado = h.status === 'publicado';
+                            const isIncompleto = h.nome.includes('(Com Pendências)');
                             return (
-                                <Card key={h.id} className="bg-muted/40 overflow-hidden border shadow-sm group hover:border-primary/30 transition-all flex flex-col">
+                                <Card key={h.id} className={cn(
+                                    "bg-muted/40 overflow-hidden border shadow-sm group hover:border-primary/30 transition-all flex flex-col",
+                                    isIncompleto && "border-orange-200 bg-orange-50/20"
+                                )}>
                                     <CardHeader className="pb-3">
                                         <div className="flex items-center justify-between">
-                                            <CardTitle className="text-base font-bold truncate pr-2" title={h.nome}>{h.nome}</CardTitle>
-                                            <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-md shadow-sm ${isPublicado ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'}`}>
-                                                {isPublicado ? 'Publicado' : 'Rascunho'}
+                                            <CardTitle className="text-sm font-bold truncate pr-2" title={h.nome}>{h.nome}</CardTitle>
+                                            <span className={cn(
+                                                "text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-md shadow-sm",
+                                                isPublicado ? 'bg-green-500 text-white' : isIncompleto ? 'bg-orange-500 text-white' : 'bg-slate-500 text-white'
+                                            )}>
+                                                {isPublicado ? 'Publicado' : isIncompleto ? 'Incompleto' : 'Rascunho'}
                                             </span>
                                         </div>
-                                        <CardDescription className="text-[11px] flex items-center gap-1.5 mt-1">
+                                        <CardDescription className="text-[10px] flex items-center gap-1.5 mt-1">
                                             <Clock className="h-3 w-3" />
                                             {format(new Date(h.created_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}
                                         </CardDescription>
                                     </CardHeader>
                                     <CardFooter className="flex gap-2 pt-0 mt-auto">
                                         <Link href={`/gerarhorarios/${h.id}`} className="flex-1">
-                                            <Button variant="outline" className="w-full h-9 text-xs font-bold" size="sm">
-                                                <FileText className="mr-2 h-3.5 w-3.5" />
+                                            <Button variant="outline" className="w-full h-8 text-[10px] font-bold" size="sm">
+                                                <FileText className="mr-2 h-3 w-3" />
                                                 Ver Grade
                                             </Button>
                                         </Link>
                                         
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
-                                                <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-destructive/60 hover:text-destructive hover:bg-destructive/10" disabled={isDeleting === h.id}>
-                                                    {isDeleting === h.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive/60 hover:text-destructive hover:bg-destructive/10" disabled={isDeleting === h.id}>
+                                                    {isDeleting === h.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                                                 </Button>
                                             </AlertDialogTrigger>
                                             <AlertDialogContent onPointerDownOutside={(e) => e.preventDefault()}>

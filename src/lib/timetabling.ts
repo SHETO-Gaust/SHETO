@@ -84,12 +84,11 @@ export function gerarHorarioAlgoritmico(
   force: boolean = false,
   ocupacoesExistentes: any[] = [],
   maxAttempts: number = 1000,
-  globalProgress: number = 0 // 0 a 1 indicando quão longe estamos do limite de 10k
+  globalProgress: number = 0
 ): { 
     success: boolean; 
     aulas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[]; 
     error?: string;
-    sugestao?: SugestaoRealocacao[];
     attemptsMade: number;
 } {
   
@@ -304,11 +303,19 @@ export function gerarHorarioAlgoritmico(
     if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
   }
 
+  // Falha final: tenta gerar o máximo possível para mostrar onde estão os problemas
   const resFalha = executarTentativa(true, true);
+  let errorMsg = "Conflito Impossível Detectado: ";
+  
+  if (resFalha.pendentes.length > 0) {
+      const p = resFalha.pendentes[0];
+      errorMsg += `O professor ${p.professor_nome} não possui janelas livres suficientes no turno Integral para a disciplina ${p.componente_nome} na Turma ${p.turma_nome}.\n\nIsso geralmente ocorre porque ele já está ocupado em grades publicadas de outros turnos (Matutino/Vespertino) ou possui restrições manuais impeditivas.`;
+  }
+
   return { 
       success: false, 
       aulas: resFalha.aulas, 
       attemptsMade: maxAttempts,
-      error: resFalha.pendentes.length > 0 ? `Não foi possível alocar ${resFalha.pendentes[0].professor_nome} (${resFalha.pendentes[0].componente_nome}) na Turma ${resFalha.pendentes[0].turma_nome}.` : "Erro desconhecido."
+      error: errorMsg
   };
 }
