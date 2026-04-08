@@ -33,16 +33,17 @@ export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horar
     return { data: data as Horario[] };
 }
 
-export async function iniciarGeracaoHorario(
+/**
+ * Executa um lote de tentativas de geração de horário.
+ */
+export async function gerarLoteHorario(
     escolaId: string, 
     turnoId: string, 
-    nomeHorario: string, 
-    configGerminacao: ConfiguracaoGerminacao[] = [],
-    force: boolean = false
+    configGerminacao: ConfiguracaoGerminacao[],
+    loteSize: number = 500,
+    progress: number = 0
 ) {
     const supabase = await createClient();
-
-    if (!nomeHorario || nomeHorario.trim() === '') return { error: 'O nome do horário é obrigatório.' };
 
     const [
         { data: allTurmas },
@@ -60,19 +61,10 @@ export async function iniciarGeracaoHorario(
     if (turmasDoTurno.length === 0) return { error: 'Não há turmas cadastradas para este turno.' };
     if (!turno) return { error: 'Turno não encontrado.' };
 
-    // Identificar CPFs dos professores da escola para detectar conflitos em OUTRAS escolas ou turnos
     const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
-    
-    // Buscar todos os IDs de professores em TODO o sistema que possuam esses CPFs
-    const { data: globalProfessors } = await supabase
-        .from('professores')
-        .select('id')
-        .in('cpf', cpfs);
-    
+    const { data: globalProfessors } = await supabase.from('professores').select('id').in('cpf', cpfs);
     const professorIdsGlobais = globalProfessors?.map(p => p.id) || [];
 
-    // Buscar ocupações de horários publicados para detecção de conflitos e realocação
-    // Incluímos horários de início/fim e o turno para o algoritmo calcular overlaps complexos
     const { data: ocupacoesAtivas } = await supabase
         .from('horario_aulas')
         .select(`
@@ -81,10 +73,7 @@ export async function iniciarGeracaoHorario(
             turma:turmas(nome),
             componente:componentes_curriculares(nome),
             horario:horarios!inner(
-                id, 
-                status, 
-                turno_id, 
-                escola_id, 
+                id, status, turno_id, escola_id, 
                 escola:escolas(escolar),
                 turno:turnos(*)
             )
@@ -92,7 +81,6 @@ export async function iniciarGeracaoHorario(
         .in('professor_id', professorIdsGlobais)
         .eq('horarios.status', 'publicado');
 
-    // Filtramos para remover a própria grade que estamos tentando gerar (se for uma re-geração)
     const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
 
     const result = gerarHorarioAlgoritmico(
@@ -101,50 +89,23 @@ export async function iniciarGeracaoHorario(
         allProfessores as any[],
         allTurnos || [],
         configGerminacao,
-        force,
-        ocupacoesFiltradas || []
+        false,
+        ocupacoesFiltradas || [],
+        loteSize,
+        progress
     );
 
-    if (result.sugestao && result.sugestao.length > 0) {
-        return { sugestao: result.sugestao, aulasTemporarias: result.aulas };
-    }
-
-    if (!result.success && !force) return { error: result.error || 'Erro lógico.' };
-
-    return salvarNovaGrade(escolaId, turnoId, nomeHorario, result.aulas, force);
+    return result;
 }
 
-export async function confirmarGeracaoComRealocacao(
-    escolaId: string,
-    turnoId: string,
-    nomeHorario: string,
-    aulas: any[],
-    sugestoes: SugestaoRealocacao[]
-) {
-    const supabase = await createClient();
-
-    // 1. Atualizar aulas dos horários publicados (realocação)
-    for (const sug of sugestoes) {
-        const { error: updateError } = await supabase
-            .from('horario_aulas')
-            .update({ dia_semana: sug.dia_novo, aula_index: sug.aula_idx_novo })
-            .eq('id', sug.aula_id);
-        
-        if (updateError) return { error: `Falha ao realocar aula: ${updateError.message}` };
-    }
-
-    // 2. Salvar a nova grade gerada
-    return salvarNovaGrade(escolaId, turnoId, nomeHorario, aulas, false);
-}
-
-async function salvarNovaGrade(escolaId: string, turnoId: string, nome: string, aulas: any[], force: boolean) {
+export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: string, aulas: any[]) {
     const supabase = await createClient();
     const { data: novoHorario, error: hError } = await supabase
         .from('horarios')
         .insert({
             escola_id: escolaId,
             turno_id: turnoId,
-            nome: force ? `${nome} (Incompleto)` : nome,
+            nome: nome,
             status: 'em_rascunho',
         })
         .select().single();
@@ -161,8 +122,6 @@ async function salvarNovaGrade(escolaId: string, turnoId: string, nome: string, 
     }
 
     revalidatePath('/gerarhorarios');
-    revalidatePath('/dashboard');
-    revalidatePath('/visualizarhorario');
     return { data: novoHorario };
 }
 
@@ -171,12 +130,10 @@ export async function swapAulasManualmente(aula1Id: string, dia1: string, idx1: 
 
     try {
         if (aula2Id) {
-            // Swap: Aula 1 vai para Slot 2, Aula 2 vai para Slot 1
             await supabase.from('horario_aulas').update({ dia_semana: 'temp', aula_index: -99 }).eq('id', aula1Id);
             await supabase.from('horario_aulas').update({ dia_semana: dia1, aula_index: idx1 }).eq('id', aula2Id);
             await supabase.from('horario_aulas').update({ dia_semana: dia2, aula_index: idx2 }).eq('id', aula1Id);
         } else {
-            // Apenas move para o slot vazio
             await supabase.from('horario_aulas').update({ dia_semana: dia2, aula_index: idx2 }).eq('id', aula1Id);
         }
 
@@ -198,8 +155,6 @@ export async function consolidarHorario(id: string) {
     if (uError) return { error: 'Erro ao publicar.' };
 
     revalidatePath('/gerarhorarios');
-    revalidatePath('/dashboard');
-    revalidatePath('/visualizarhorario');
     return { success: true };
 }
 
@@ -208,8 +163,6 @@ export async function reverterParaRascunho(id: string) {
     const { error } = await supabase.from('horarios').update({ status: 'em_rascunho' }).eq('id', id);
     if (error) return { error: 'Não foi possível reverter para rascunho.' };
     revalidatePath('/gerarhorarios');
-    revalidatePath('/dashboard');
-    revalidatePath('/visualizarhorario');
     return { success: true };
 }
 
@@ -218,8 +171,6 @@ export async function deleteHorario(id: string) {
     const { error } = await supabase.from('horarios').delete().eq('id', id);
     if (error) return { error: 'Não foi possível deletar.' };
     revalidatePath('/gerarhorarios');
-    revalidatePath('/dashboard');
-    revalidatePath('/visualizarhorario');
     return { success: true };
 }
 

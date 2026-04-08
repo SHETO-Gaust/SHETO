@@ -1,4 +1,4 @@
-import type { Turno, TurmaComDados, ProfessorComDados, HorarioAulaGerada, ConfiguracaoGerminacao, LivreDocenciaItem, LivreDocenciaPeriodo } from './types';
+import { type Turno, type TurmaComDados, type ProfessorComDados, type HorarioAulaGerada, type ConfiguracaoGerminacao, type LivreDocenciaItem, type LivreDocenciaPeriodo } from './types';
 
 export type SugestaoRealocacao = {
   horario_id: string;
@@ -82,27 +82,17 @@ export function gerarHorarioAlgoritmico(
   todosTurnos: Turno[],
   configGerminacao: ConfiguracaoGerminacao[] = [],
   force: boolean = false,
-  ocupacoesExistentes: any[] = [] 
+  ocupacoesExistentes: any[] = [],
+  maxAttempts: number = 1000,
+  globalProgress: number = 0 // 0 a 1 indicando quão longe estamos do limite de 10k
 ): { 
     success: boolean; 
     aulas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[]; 
     error?: string;
     sugestao?: SugestaoRealocacao[];
+    attemptsMade: number;
 } {
   
-  const MAX_ATTEMPTS = 1000; 
-  
-  const nomeTurnoLower = turno.nome.toLowerCase();
-  const turnoOposto = todosTurnos.find(t => {
-    if (nomeTurnoLower.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
-    if (nomeTurnoLower.includes('vespertino')) return t.nome.toLowerCase().includes('matutino');
-    return false;
-  }) || todosTurnos.find(t => t.id !== turno.id);
-
-  const numAulasOposto = turnoOposto?.aulas_por_dia || 5;
-
-  // Mapeamento de ocupações por CPF para garantir unicidade global do docente
-  const cargaTotalPorProfessor = new Map<string, number>();
   const professorCpfMap = new Map<string, string>();
   professores.forEach(p => {
       professorCpfMap.set(p.id, p.cpf);
@@ -122,7 +112,7 @@ export function gerarHorarioAlgoritmico(
 
   const executarTentativa = (permitirUsoPlanejamento: boolean, ignorarLivreDocencia: boolean = false) => {
     const aulasGeradas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[] = [];
-    const ocupacaoProfessoresLocal = new Set<string>(); // "dia-index-cpf"
+    const ocupacaoProfessoresLocal = new Set<string>();
     const ocupacaoTurmas = new Set<string>();
 
     const turmaDiaProfessorDisciplina = new Map<string, string>();
@@ -130,6 +120,13 @@ export function gerarHorarioAlgoritmico(
 
     let blocosPresenciais: any[] = [];
     let blocosNaoPresenciais: any[] = [];
+
+    const turnoOposto = todosTurnos.find(t => {
+        const n = turno.nome.toLowerCase();
+        if (n.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
+        if (n.includes('vespertino')) return t.nome.toLowerCase().includes('matutino');
+        return false;
+    }) || todosTurnos.find(t => t.id !== turno.id);
 
     turmas.forEach(t => {
       t.serie.componentes.forEach(c => {
@@ -143,7 +140,7 @@ export function gerarHorarioAlgoritmico(
 
         criarBlocos(c.aulas_presenciais || 0, c.componente_id).forEach(size => {
             blocosPresenciais.push({ 
-                turma_id: t.id, turma_nome: t.nome, componente_id: c.componente_id, componente_nome: c.componente.nome,
+                turma_id: t.id, turma_nome: t.nome, componente_id: c.componente_id, componente_nome: (c as any).componente?.nome || 'Disciplina',
                 professor_id: profId, professor_cpf: profCpf, professor_nome: profNome,
                 size, serie_restricoes: t.serie.restricoes, maxAulasPorDia 
             });
@@ -151,7 +148,7 @@ export function gerarHorarioAlgoritmico(
         
         criarBlocos(c.aulas_nao_presenciais || 0, c.componente_id).forEach(size => {
             blocosNaoPresenciais.push({ 
-                turma_id: t.id, turma_nome: t.nome, componente_id: c.componente_id, componente_nome: c.componente.nome,
+                turma_id: t.id, turma_nome: t.nome, componente_id: c.componente_id, componente_nome: (c as any).componente?.nome || 'Disciplina',
                 professor_id: profId, professor_cpf: profCpf, professor_nome: profNome,
                 size, maxAulasPorDia 
             });
@@ -165,7 +162,6 @@ export function gerarHorarioAlgoritmico(
 
     const dias = [...turno.dias_semana].sort(() => Math.random() - 0.5);
 
-    // --- ALOCAÇÃO PRESENCIAL ---
     for (const b of blocosPresenciais) {
         let alocado = false;
         const slots = [];
@@ -191,7 +187,7 @@ export function gerarHorarioAlgoritmico(
         slots.sort((a, b) => a.weight - b.weight);
 
         for (const slot of slots) {
-            if (slot.weight >= 1000) continue; 
+            if (slot.weight >= 1000 && !ignorarLivreDocencia) continue; 
             const { d, i } = slot;
             let livre = true;
 
@@ -205,14 +201,12 @@ export function gerarHorarioAlgoritmico(
                 if (b.serie_restricoes?.[d]?.[idx] === 'proibido') { livre = false; break; }
                 
                 if (b.professor_cpf) {
-                    // CONFLITO GLOBAL: Verifica se o CPF está ocupado em qualquer horário publicado
                     const conflitoGlobal = ocupacoesExistentes.find(o => 
                         o.professor?.cpf === b.professor_cpf && 
                         o.dia_semana === d && 
                         slotsConflitam(turno, idx, o.horario.turno, o.aula_index)
                     );
                     if (conflitoGlobal) { livre = false; break; }
-
                     if (ocupacaoProfessoresLocal.has(`${d}-${idx}-${b.professor_cpf}`)) { livre = false; break; }
 
                     const prof = professores.find(pr => pr.id === b.professor_id);
@@ -237,8 +231,8 @@ export function gerarHorarioAlgoritmico(
         if (alocado) b.placed = true;
     }
 
-    // --- ALOCAÇÃO NÃO PRESENCIAL (NP) ---
     if (turnoOposto) {
+        const numAulasOposto = turnoOposto.aulas_por_dia || 5;
         for (const b of blocosNaoPresenciais) {
             let alocado = false;
             const slotsNP = [];
@@ -261,21 +255,19 @@ export function gerarHorarioAlgoritmico(
             slotsNP.sort((a,b) => a.weight - b.weight);
 
             for (const slot of slotsNP) {
-                if (slot.weight >= 1000) continue;
+                if (slot.weight >= 1000 && !ignorarLivreDocencia) continue;
                 const { d, i } = slot;
                 let livre = true;
 
                 if (b.professor_cpf) {
                     for (let k = 0; k < b.size; k++) {
                         const idx = i + k;
-                        // CONFLITO GLOBAL NP: Verifica se o professor já tem aula presencial ou NP em outro lugar nesse horário
                         const conflitoGlobal = ocupacoesExistentes.find(o => 
                             o.professor?.cpf === b.professor_cpf && 
                             o.dia_semana === d && 
                             slotsConflitam(turnoOposto, idx, o.horario.turno, o.aula_index)
                         );
                         if (conflitoGlobal) { livre = false; break; }
-
                         if (ocupacaoProfessoresLocal.has(`${d}-${idx}-${b.professor_cpf}`)) { livre = false; break; }
                         
                         const prof = professores.find(pr => pr.id === b.professor_id);
@@ -301,33 +293,22 @@ export function gerarHorarioAlgoritmico(
     return { success: pendentes.length === 0, aulas: aulasGeradas, pendentes };
   };
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = executarTentativa(false, false);
-    if (res.success) return { success: true, aulas: res.aulas };
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const currentProgress = globalProgress + (attempt / 10000);
+    
+    // Define estratégia do lote baseado no progresso global
+    let permitirUsoPlanejamento = currentProgress > 0.3;
+    let ignorarLivreDocencia = currentProgress > 0.7;
+
+    const res = executarTentativa(permitirUsoPlanejamento, ignorarLivreDocencia);
+    if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
   }
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = executarTentativa(true, false);
-    if (res.success) return { success: true, aulas: res.aulas };
-  }
-
-  if (!force) {
-      const resFalha = executarTentativa(true, false);
-      const p = resFalha.pendentes[0];
-      if (!p) return { success: false, aulas: resFalha.aulas, error: "Falha inesperada no processamento. Tente novamente." };
-      
-      let diag = `CONFLITO ENTRE TURNOS DETECTADO:\n`;
-      diag += `O professor ${p.professor_nome} não pode dar aula de "${p.componente_nome}" na Turma ${p.turma_nome}.\n\n`;
-      diag += `MOTIVO: O professor já possui aula alocada em OUTRO TURNO (ex: Integral ou Matutino de outra escola) ou está em horário de folga/restrição.\n\n`;
-      diag += `SUGESTÃO: Verifique se este professor não está sobrecarregado ou com horários batendo em diferentes turnos publicados.`;
-      
-      return { success: false, aulas: resFalha.aulas, error: diag };
-  }
-
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = executarTentativa(true, true);
-    if (res.success) return { success: true, aulas: res.aulas };
-  }
-
-  return { success: false, aulas: [], error: `Erro crítico no processamento lógico. Revise os horários dos professores.` };
+  const resFalha = executarTentativa(true, true);
+  return { 
+      success: false, 
+      aulas: resFalha.aulas, 
+      attemptsMade: maxAttempts,
+      error: resFalha.pendentes.length > 0 ? `Não foi possível alocar ${resFalha.pendentes[0].professor_nome} (${resFalha.pendentes[0].componente_nome}) na Turma ${resFalha.pendentes[0].turma_nome}.` : "Erro desconhecido."
+  };
 }
