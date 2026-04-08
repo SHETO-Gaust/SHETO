@@ -49,13 +49,16 @@ export async function gerarLoteHorario(
         { data: allTurmas },
         { data: allProfessores },
         { data: allTurnos },
-        { data: turno }
+        turnoResult
     ] = await Promise.all([
         getTurmas(escolaId),
         getProfessores(escolaId),
         getTurnos(escolaId),
-        supabase.from('turnos').select('*').eq('id', turnoId).single()
+        supabase.from('turnos').select('*').eq('id', turnoId).maybeSingle()
     ]);
+
+    if (!turnoResult.data) return { error: 'Turno não encontrado no banco de dados.' };
+    const turnoData = turnoResult.data;
 
     // Filtragem robusta lidando com a possibilidade de 'serie' vir como array ou objeto do Supabase
     const turmasDoTurno = allTurmas?.filter(t => {
@@ -66,11 +69,9 @@ export async function gerarLoteHorario(
     if (turmasDoTurno.length === 0) {
         const totalTurmas = allTurmas?.length || 0;
         return { 
-            error: `Não há turmas vinculadas ao turno selecionado. (Encontradas ${totalTurmas} turmas nesta escola, mas nenhuma pertence ao turno "${turno?.data?.nome || 'Integral'}"). Verifique no Passo 6 se as turmas foram criadas usando o modelo de série correto para este turno.` 
+            error: `Não há turmas vinculadas ao turno selecionado. (Encontradas ${totalTurmas} turmas nesta escola, mas nenhuma pertence ao turno "${turnoData.nome}"). Verifique no Passo 6 se as turmas foram criadas usando o modelo de série correto para este turno.` 
         };
     }
-
-    if (!turno.data) return { error: 'Turno não encontrado.' };
 
     const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
     const { data: globalProfessors } = await supabase.from('professores').select('id').in('cpf', cpfs);
@@ -95,7 +96,7 @@ export async function gerarLoteHorario(
     const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
 
     const result = gerarHorarioAlgoritmico(
-        turno.data as any,
+        turnoData as any,
         turmasDoTurno as any[],
         allProfessores as any[],
         allTurnos || [],
