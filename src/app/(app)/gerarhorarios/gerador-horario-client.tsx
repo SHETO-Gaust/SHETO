@@ -5,7 +5,7 @@ import type { Turno, Horario, ConfiguracaoGerminacao } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, AlertTriangle, CheckCircle2, RefreshCw, Undo2, PlayCircle } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, AlertTriangle, CheckCircle2, RefreshCw, Undo2, PlayCircle, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, deleteHorario, reverterParaRascunho, gerarLoteHorario, salvarGradeFinal } from './actions';
 import { format } from 'date-fns';
