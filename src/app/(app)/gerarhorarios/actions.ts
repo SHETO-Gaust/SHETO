@@ -57,9 +57,20 @@ export async function gerarLoteHorario(
         supabase.from('turnos').select('*').eq('id', turnoId).single()
     ]);
 
-    const turmasDoTurno = allTurmas?.filter(t => t.serie.turno_id === turnoId) || [];
-    if (turmasDoTurno.length === 0) return { error: 'Não há turmas cadastradas para este turno.' };
-    if (!turno) return { error: 'Turno não encontrado.' };
+    // Filtragem robusta lidando com a possibilidade de 'serie' vir como array ou objeto do Supabase
+    const turmasDoTurno = allTurmas?.filter(t => {
+        const s = Array.isArray(t.serie) ? t.serie[0] : t.serie;
+        return s?.turno_id === turnoId;
+    }) || [];
+
+    if (turmasDoTurno.length === 0) {
+        const totalTurmas = allTurmas?.length || 0;
+        return { 
+            error: `Não há turmas vinculadas ao turno selecionado. (Encontradas ${totalTurmas} turmas nesta escola, mas nenhuma pertence ao turno "${turno?.data?.nome || 'Integral'}"). Verifique no Passo 6 se as turmas foram criadas usando o modelo de série correto para este turno.` 
+        };
+    }
+
+    if (!turno.data) return { error: 'Turno não encontrado.' };
 
     const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
     const { data: globalProfessors } = await supabase.from('professores').select('id').in('cpf', cpfs);
@@ -84,7 +95,7 @@ export async function gerarLoteHorario(
     const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
 
     const result = gerarHorarioAlgoritmico(
-        turno as any,
+        turno.data as any,
         turmasDoTurno as any[],
         allProfessores as any[],
         allTurnos || [],

@@ -309,7 +309,7 @@ export function gerarHorarioAlgoritmico(
   
   if (resFalha.pendentes.length > 0) {
       const p = resFalha.pendentes[0];
-      errorMsg += `O professor ${p.professor_nome} não possui janelas livres suficientes no turno Integral para a disciplina ${p.componente_nome} na Turma ${p.turma_nome}.\n\nIsso geralmente ocorre porque ele já está ocupado em grades publicadas de outros turnos (Matutino/Vespertino) ou possui restrições manuais impeditivas.`;
+      errorMsg += `O professor ${p.professor_nome} não possui janelas livres suficientes no turno ${turno.nome} para a disciplina ${p.componente_nome} na Turma ${p.turma_nome}.\n\nIsso geralmente ocorre porque ele já está ocupado em grades publicadas de outros turnos (Matutino/Vespertino) ou possui restrições manuais impeditivas.`;
   }
 
   return { 
