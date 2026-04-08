@@ -60,7 +60,7 @@ export async function iniciarGeracaoHorario(
     if (turmasDoTurno.length === 0) return { error: 'Não há turmas cadastradas para este turno.' };
     if (!turno) return { error: 'Turno não encontrado.' };
 
-    // Identificar CPFs dos professores da escola para detectar conflitos em OUTRAS escolas
+    // Identificar CPFs dos professores da escola para detectar conflitos em OUTRAS escolas ou turnos
     const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
     
     // Buscar todos os IDs de professores em TODO o sistema que possuam esses CPFs
@@ -72,7 +72,7 @@ export async function iniciarGeracaoHorario(
     const professorIdsGlobais = globalProfessors?.map(p => p.id) || [];
 
     // Buscar ocupações de horários publicados para detecção de conflitos e realocação
-    // Agora incluindo ocupações de OUTRAS escolas via CPF
+    // Incluímos horários de início/fim e o turno para o algoritmo calcular overlaps complexos
     const { data: ocupacoesAtivas } = await supabase
         .from('horario_aulas')
         .select(`
@@ -80,14 +80,19 @@ export async function iniciarGeracaoHorario(
             professor:professores(nome_horario, restricoes, cpf),
             turma:turmas(nome),
             componente:componentes_curriculares(nome),
-            horario:horarios!inner(id, status, turno_id, escola_id, escola:escolas(escolar))
+            horario:horarios!inner(
+                id, 
+                status, 
+                turno_id, 
+                escola_id, 
+                escola:escolas(escolar),
+                turno:turnos(*)
+            )
         `)
         .in('professor_id', professorIdsGlobais)
-        .eq('horarios.status', 'publicado')
-        .neq('horario_id', 'none'); // Garante que pegamos apenas publicadas reais
+        .eq('horarios.status', 'publicado');
 
-    // Filtramos para remover a própria grade que estamos tentando gerar agora (se fosse o caso de re-geração)
-    // Mas o algoritmo já cuida de ignorar o turno_id atual se passado corretamente.
+    // Filtramos para remover a própria grade que estamos tentando gerar (se for uma re-geração)
     const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
 
     const result = gerarHorarioAlgoritmico(
