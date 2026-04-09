@@ -48,6 +48,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [isLoadingHorarios, setIsLoadingHorarios] = useState(false);
   
+  const [isPending, startTransition] = useTransition();
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isReverting, setIsReverting] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
@@ -173,7 +174,6 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 break;
             }
 
-            // Se for o último lote e não encontrou, pega o erro e as aulas parciais
             if (attempts + BATCH_SIZE >= MAX_ATTEMPTS) {
                 setGenError(result.error || "Limite atingido.");
                 setPartialAulas(result.aulas || []);
@@ -295,7 +295,8 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                 <p className="text-xs text-orange-800">
                                     Você pode salvar a grade incompleta e depois realizar ajustes manuais para as aulas que o sistema não conseguiu encaixar. Elas aparecerão como "Vagas" na cor vermelha.
                                 </p>
-                                <Button onClick={handleForcarSalvamento} variant="default" className="w-full bg-orange-600 hover:bg-orange-700">
+                                <Button onClick={handleForcarSalvamento} variant="default" className="w-full bg-orange-600 hover:bg-orange-700" disabled={isPending}>
+                                    {isPending ? <Loader2 className="animate-spin h-4 w-4 mr-2"/> : null}
                                     Salvar Grade Incompleta
                                 </Button>
                             </div>
