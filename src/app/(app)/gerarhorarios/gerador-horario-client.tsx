@@ -62,7 +62,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentAttempt, setCurrentAttempt] = useState(0);
-  const MAX_ATTEMPTS = 10000;
+  const MAX_ATTEMPTS = 100000;
   const BATCH_SIZE = 500;
 
   const { toast } = useToast();

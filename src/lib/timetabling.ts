@@ -42,12 +42,10 @@ function slotsConflitam(
     const hA = turnoA.horarios?.[indexA];
     const hB = turnoB.horarios?.[indexB];
 
-    // 1. Prioridade: Horário Real (HH:mm)
     if (hA?.inicio && hA?.fim && hB?.inicio && hB?.fim) {
         return hA.inicio < hB.fim && hA.fim > hB.inicio;
     }
 
-    // 2. Fallback: Heurística por nome de turno e índice
     const nomeA = turnoA.nome.toLowerCase();
     const nomeB = turnoB.nome.toLowerCase();
 
@@ -83,7 +81,7 @@ export function gerarHorarioAlgoritmico(
   configGerminacao: ConfiguracaoGerminacao[] = [],
   force: boolean = false,
   ocupacoesExistentes: any[] = [],
-  maxAttempts: number = 1000,
+  maxAttempts: number = 100000,
   globalProgress: number = 0
 ): { 
     success: boolean; 
@@ -93,11 +91,17 @@ export function gerarHorarioAlgoritmico(
 } {
   
   const professorCpfMap = new Map<string, string>();
+  const professorTightnessMap = new Map<string, number>();
+
   professores.forEach(p => {
       professorCpfMap.set(p.id, p.cpf);
+      // Calcula quão "ocupado" o professor está em outros turnos
+      const conflicts = ocupacoesExistentes.filter(o => o.professor?.cpf === p.cpf).length;
+      professorTightnessMap.set(p.id, conflicts);
   });
 
-  const criarBlocos = (total: number, compId: string) => {
+  const criarBlocos = (total: number, compId: string, forcarIndividuais: boolean = false) => {
+    if (forcarIndividuais) return Array(total).fill(1);
     const config = configGerminacao.find(cfg => cfg.componente_id === compId);
     if (!config || !config.geminar || config.tamanho_bloco <= 1) return Array(total).fill(1); 
     const blocos: number[] = [];
@@ -109,7 +113,7 @@ export function gerarHorarioAlgoritmico(
     return blocos;
   };
 
-  const executarTentativa = (permitirUsoPlanejamento: boolean, ignorarLivreDocencia: boolean = false) => {
+  const executarTentativa = (permitirUsoPlanejamento: boolean, ignorarLivreDocencia: boolean, forcarIndividuais: boolean) => {
     const aulasGeradas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[] = [];
     const ocupacaoProfessoresLocal = new Set<string>();
     const ocupacaoTurmas = new Set<string>();
@@ -117,15 +121,7 @@ export function gerarHorarioAlgoritmico(
     const turmaDiaProfessorDisciplina = new Map<string, string>();
     const turmaDiaComponenteCount = new Map<string, number>();
 
-    let blocosPresenciais: any[] = [];
-    let blocosNaoPresenciais: any[] = [];
-
-    const turnoOposto = todosTurnos.find(t => {
-        const n = turno.nome.toLowerCase();
-        if (n.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
-        if (n.includes('vespertino')) return t.nome.toLowerCase().includes('matutino');
-        return false;
-    }) || todosTurnos.find(t => t.id !== turno.id);
+    let todosOsBlocos: any[] = [];
 
     turmas.forEach(t => {
       t.serie.componentes.forEach(c => {
@@ -133,51 +129,75 @@ export function gerarHorarioAlgoritmico(
         const profId = profInfo?.professor_id || null;
         const profCpf = profId ? professorCpfMap.get(profId) : null;
         const profNome = profInfo?.professor?.nome_horario || 'Sem Professor';
+        const tightness = profId ? (professorTightnessMap.get(profId) || 0) : 0;
         
         const config = configGerminacao.find(cfg => cfg.componente_id === c.componente_id);
-        const maxAulasPorDia = config?.geminar ? config.tamanho_bloco : 1;
+        const maxAulasPorDay = (config?.geminar && !forcarIndividuais) ? config.tamanho_bloco : 1;
 
-        criarBlocos(c.aulas_presenciais || 0, c.componente_id).forEach(size => {
-            blocosPresenciais.push({ 
+        // Presenciais
+        criarBlocos(c.aulas_presenciais || 0, c.componente_id, forcarIndividuais).forEach(size => {
+            todosOsBlocos.push({ 
+                tipo: 'presencial',
                 turma_id: t.id, turma_nome: t.nome, componente_id: c.componente_id, componente_nome: (c as any).componente?.nome || 'Disciplina',
                 professor_id: profId, professor_cpf: profCpf, professor_nome: profNome,
-                size, serie_restricoes: t.serie.restricoes, maxAulasPorDia 
+                size, serie_restricoes: t.serie.restricoes, maxAulasPorDay, tightness
             });
         });
         
-        criarBlocos(c.aulas_nao_presenciais || 0, c.componente_id).forEach(size => {
-            blocosNaoPresenciais.push({ 
+        // Não Presenciais
+        criarBlocos(c.aulas_nao_presenciais || 0, c.componente_id, forcarIndividuais).forEach(size => {
+            todosOsBlocos.push({ 
+                tipo: 'nao_presencial',
                 turma_id: t.id, turma_nome: t.nome, componente_id: c.componente_id, componente_nome: (c as any).componente?.nome || 'Disciplina',
                 professor_id: profId, professor_cpf: profCpf, professor_nome: profNome,
-                size, maxAulasPorDia 
+                size, maxAulasPorDay, tightness
             });
         });
       });
     });
 
-    const sortFn = (a: any, b: any) => (b.size - a.size) || (Math.random() - 0.5);
-    blocosPresenciais.sort(sortFn);
-    blocosNaoPresenciais.sort(sortFn);
+    // ORDENAÇÃO ESTRATÉGICA: 
+    // 1. Professores com mais conflitos globais (tightness) primeiro.
+    // 2. Blocos maiores primeiro.
+    todosOsBlocos.sort((a, b) => {
+        if (b.tightness !== a.tightness) return b.tightness - a.tightness;
+        return b.size - a.size;
+    });
 
     const dias = [...turno.dias_semana].sort(() => Math.random() - 0.5);
+    const turnoOposto = todosTurnos.find(t => {
+        const n = turno.nome.toLowerCase();
+        if (n.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
+        if (n.includes('vespertino')) return t.nome.toLowerCase().includes('matutino');
+        return false;
+    }) || todosTurnos.find(t => t.id !== turno.id);
 
-    for (const b of blocosPresenciais) {
+    for (const b of todosOsBlocos) {
         let alocado = false;
+        const currentTurno = b.tipo === 'presencial' ? turno : turnoOposto;
+        if (!currentTurno) { b.placed = true; continue; } // Ignora NP se não houver turno oposto
+
         const slots = [];
         for(const d of dias) {
-            for(let i=0; i <= turno.aulas_por_dia - b.size; i++) {
-                let weight = Math.random();
+            for(let i=0; i <= currentTurno.aulas_por_dia - b.size; i++) {
+                let weight = Math.random() * 10;
+                
+                // Incentiva preencher o início do dia
+                weight += (i * 2);
+
                 if (b.professor_id) {
                     const prof = professores.find(pr => pr.id === b.professor_id);
+                    // Penaliza uso de Livre Docência
                     if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false && prof?.livre_docencia) {
                         for (let k = 0; k < b.size; k++) {
-                            if (prof.livre_docencia.some(ld => ld.dia === d && ld.periodo === getPeriodoDaAula(turno, i + k))) {
-                                weight += 5000; break;
+                            if (prof.livre_docencia.some(ld => ld.dia === d && ld.periodo === getPeriodoDaAula(currentTurno, i + k))) {
+                                weight += 10000; break;
                             }
                         }
                     }
+                    // Penaliza levemente uso de Planejamento
                     for (let k = 0; k < b.size; k++) {
-                        if (prof?.restricoes?.[turno.id]?.[d]?.[i + k] === 'planejamento') weight += 10;
+                        if (prof?.restricoes?.[currentTurno.id]?.[d]?.[i + k] === 'planejamento') weight += 50;
                     }
                 }
                 slots.push({ d, i, weight });
@@ -186,30 +206,46 @@ export function gerarHorarioAlgoritmico(
         slots.sort((a, b) => a.weight - b.weight);
 
         for (const slot of slots) {
-            if (slot.weight >= 1000 && !ignorarLivreDocencia) continue; 
+            if (slot.weight >= 5000 && !ignorarLivreDocencia) continue; 
             const { d, i } = slot;
             let livre = true;
 
-            if (b.professor_id && turmaDiaProfessorDisciplina.get(`${d}-${b.turma_id}-${b.professor_id}`) && turmaDiaProfessorDisciplina.get(`${d}-${b.turma_id}-${b.professor_id}`) !== b.componente_id) livre = false;
-            if ((turmaDiaComponenteCount.get(`${d}-${b.turma_id}-${b.componente_id}`) || 0) + b.size > b.maxAulasPorDia) livre = false;
+            // Regra: Mesma turma, mesmo dia, mesmo professor -> Só se for a mesma disciplina (até 50% de progresso)
+            if (globalProgress < 0.5) {
+                if (b.professor_id && turmaDiaProfessorDisciplina.get(`${d}-${b.turma_id}-${b.professor_id}`) && turmaDiaProfessorDisciplina.get(`${d}-${b.turma_id}-${b.professor_id}`) !== b.componente_id) {
+                    livre = false;
+                }
+            }
+
+            // Regra: Máximo de aulas daquela disciplina por dia
+            if ((turmaDiaComponenteCount.get(`${d}-${b.turma_id}-${b.componente_id}`) || 0) + b.size > b.maxAulasPorDay) livre = false;
+            
             if (!livre) continue;
 
             for (let k = 0; k < b.size; k++) {
                 const idx = i + k;
-                if (ocupacaoTurmas.has(`${d}-${idx}-${b.turma_id}`)) { livre = false; break; }
-                if (b.serie_restricoes?.[d]?.[idx] === 'proibido') { livre = false; break; }
+                
+                // Conflito de Turma (alguém já está dando aula aqui para esta turma?)
+                if (b.tipo === 'presencial' && ocupacaoTurmas.has(`${d}-${idx}-${b.turma_id}`)) { livre = false; break; }
+                
+                // Restrição da Série (Passo 5)
+                if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') { livre = false; break; }
                 
                 if (b.professor_cpf) {
+                    // Conflito Global (CPF em outro turno publicado)
                     const conflitoGlobal = ocupacoesExistentes.find(o => 
                         o.professor?.cpf === b.professor_cpf && 
                         o.dia_semana === d && 
-                        slotsConflitam(turno, idx, o.horario.turno, o.aula_index)
+                        slotsConflitam(currentTurno, idx, o.horario.turno, o.aula_index)
                     );
                     if (conflitoGlobal) { livre = false; break; }
+
+                    // Conflito Local (Professor já alocado neste mesmo turno em outra turma)
                     if (ocupacaoProfessoresLocal.has(`${d}-${idx}-${b.professor_cpf}`)) { livre = false; break; }
 
+                    // Restrições Manuais do Professor (Ban/Planejamento)
                     const prof = professores.find(pr => pr.id === b.professor_id);
-                    const restricao = prof?.restricoes?.[turno.id]?.[d]?.[idx];
+                    const restricao = prof?.restricoes?.[currentTurno.id]?.[d]?.[idx];
                     if (restricao === 'indisponivel') { livre = false; break; }
                     if (restricao === 'planejamento' && !permitirUsoPlanejamento) { livre = false; break; }
                 }
@@ -218,8 +254,8 @@ export function gerarHorarioAlgoritmico(
             if (livre) {
                 for (let k = 0; k < b.size; k++) {
                     const idx = i + k;
-                    aulasGeradas.push({ turma_id: b.turma_id, componente_id: b.componente_id, professor_id: b.professor_id, dia_semana: d, aula_index: idx, tipo: 'presencial' });
-                    ocupacaoTurmas.add(`${d}-${idx}-${b.turma_id}`);
+                    aulasGeradas.push({ turma_id: b.turma_id, componente_id: b.componente_id, professor_id: b.professor_id, dia_semana: d, aula_index: idx, tipo: b.tipo });
+                    if (b.tipo === 'presencial') ocupacaoTurmas.add(`${d}-${idx}-${b.turma_id}`);
                     if (b.professor_cpf) ocupacaoProfessoresLocal.add(`${d}-${idx}-${b.professor_cpf}`);
                 }
                 turmaDiaProfessorDisciplina.set(`${d}-${b.turma_id}-${b.professor_id}`, b.componente_id);
@@ -230,86 +266,29 @@ export function gerarHorarioAlgoritmico(
         if (alocado) b.placed = true;
     }
 
-    if (turnoOposto) {
-        const numAulasOposto = turnoOposto.aulas_por_dia || 5;
-        for (const b of blocosNaoPresenciais) {
-            let alocado = false;
-            const slotsNP = [];
-            for(const d of dias) {
-                for(let i=0; i <= numAulasOposto - b.size; i++) {
-                    let weight = Math.random();
-                    if (b.professor_id) {
-                        const prof = professores.find(pr => pr.id === b.professor_id);
-                        if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false && prof?.livre_docencia) {
-                            for (let k = 0; k < b.size; k++) {
-                                if (prof.livre_docencia.some(ld => ld.dia === d && ld.periodo === getPeriodoDaAula(turnoOposto, i + k))) {
-                                    weight += 5000; break;
-                                }
-                            }
-                        }
-                    }
-                    slotsNP.push({ d, i, weight });
-                }
-            }
-            slotsNP.sort((a,b) => a.weight - b.weight);
-
-            for (const slot of slotsNP) {
-                if (slot.weight >= 1000 && !ignorarLivreDocencia) continue;
-                const { d, i } = slot;
-                let livre = true;
-
-                if (b.professor_cpf) {
-                    for (let k = 0; k < b.size; k++) {
-                        const idx = i + k;
-                        const conflitoGlobal = ocupacoesExistentes.find(o => 
-                            o.professor?.cpf === b.professor_cpf && 
-                            o.dia_semana === d && 
-                            slotsConflitam(turnoOposto, idx, o.horario.turno, o.aula_index)
-                        );
-                        if (conflitoGlobal) { livre = false; break; }
-                        if (ocupacaoProfessoresLocal.has(`${d}-${idx}-${b.professor_cpf}`)) { livre = false; break; }
-                        
-                        const prof = professores.find(pr => pr.id === b.professor_id);
-                        const restricaoOposta = prof?.restricoes?.[turnoOposto.id]?.[d]?.[idx];
-                        if (restricaoOposta === 'indisponivel') { livre = false; break; }
-                        if (restricaoOposta === 'planejamento' && !permitirUsoPlanejamento) { livre = false; break; }
-                    }
-                }
-
-                if (livre) {
-                    for (let k = 0; k < b.size; k++) {
-                        aulasGeradas.push({ turma_id: b.turma_id, componente_id: b.componente_id, professor_id: b.professor_id, dia_semana: d, aula_index: i + k, tipo: 'nao_presencial' });
-                        if (b.professor_cpf) ocupacaoProfessoresLocal.add(`${d}-${(i+k)}-${b.professor_cpf}`);
-                    }
-                    alocado = true; break;
-                }
-            }
-            if (alocado) b.placed = true;
-        }
-    }
-
-    const pendentes = [...blocosPresenciais, ...blocosNaoPresenciais].filter(b => !b.placed);
+    const pendentes = todosOsBlocos.filter(b => !b.placed);
     return { success: pendentes.length === 0, aulas: aulasGeradas, pendentes };
   };
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const currentProgress = globalProgress + (attempt / 10000);
+    const currentProgress = globalProgress + (attempt / 100000);
     
-    // Define estratégia do lote baseado no progresso global
-    let permitirUsoPlanejamento = currentProgress > 0.3;
-    let ignorarLivreDocencia = currentProgress > 0.7;
+    // ESTRATÉGIA EVOLUTIVA:
+    let permitirUsoPlanejamento = currentProgress > 0.2; // 20% -> Usa slots de planejamento
+    let ignorarLivreDocencia = currentProgress > 0.5;    // 50% -> Ignora preferências de Livre Docência
+    let forcarIndividuais = currentProgress > 0.8;       // 80% -> Quebra blocos germinados para salvar a grade
 
-    const res = executarTentativa(permitirUsoPlanejamento, ignorarLivreDocencia);
+    const res = executarTentativa(permitirUsoPlanejamento, ignorarLivreDocencia, forcarIndividuais);
     if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
   }
 
-  // Falha final: tenta gerar o máximo possível para mostrar onde estão os problemas
-  const resFalha = executarTentativa(true, true);
-  let errorMsg = "Conflito Impossível Detectado: ";
+  // Falha final
+  const resFalha = executarTentativa(true, true, true);
+  let errorMsg = "Conflito Crítico: ";
   
   if (resFalha.pendentes.length > 0) {
       const p = resFalha.pendentes[0];
-      errorMsg += `O professor ${p.professor_nome} não possui janelas livres suficientes no turno ${turno.nome} para a disciplina ${p.componente_nome} na Turma ${p.turma_nome}.\n\nIsso geralmente ocorre porque ele já está ocupado em grades publicadas de outros turnos (Matutino/Vespertino) ou possui restrições manuais impeditivas.`;
+      errorMsg += `O professor ${p.professor_nome} está com a agenda lotada ou bloqueada no turno ${turno.nome} para a disciplina ${p.componente_nome} na Turma ${p.turma_nome}. Verifique se ele já não atingiu o limite de aulas semanais somando todos os turnos.`;
   }
 
   return { 
