@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -113,6 +114,68 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     if (professores.length > 0 && !selectedProfessorId) setSelectedProfessorId(professores[0].id);
     if (diasAtivos.length > 0 && !selectedDayId) setSelectedDayId(diasAtivos[0].id);
   }, [turmas, professores, diasAtivos]);
+
+  const getPendencias = (turmaId: string) => {
+    const config = horario.turmas_config?.find(c => c.id === turmaId);
+    if (!config) return [];
+
+    const aulasDestaTurma = horario.aulas.filter(a => a.turma_id === turmaId);
+    const pendencias: { componente: string, missing: number, tipo: string, professor: string }[] = [];
+
+    config.serie.componentes.forEach((sc: any) => {
+        const profInfo = config.professores?.find((p: any) => p.componente_id === sc.componente.id);
+        const professorNome = profInfo?.professor?.nome_horario || 'SEM PROFESSOR';
+
+        const alocadasPresencial = aulasDestaTurma.filter(a => a.componente_id === sc.componente.id && a.tipo === 'presencial').length;
+        const faltamPresencial = sc.aulas_presenciais - alocadasPresencial;
+        if (faltamPresencial > 0) {
+            pendencias.push({ 
+                componente: sc.componente.sigla || sc.componente.nome, 
+                missing: faltamPresencial, 
+                tipo: 'Presencial',
+                professor: professorNome
+            });
+        }
+
+        const alocadasNP = aulasDestaTurma.filter(a => a.componente_id === sc.componente.id && a.tipo === 'nao_presencial').length;
+        const faltamNP = sc.aulas_nao_presenciais - alocadasNP;
+        if (faltamNP > 0) {
+            pendencias.push({ 
+                componente: sc.componente.sigla || sc.componente.nome, 
+                missing: faltamNP, 
+                tipo: 'NP',
+                professor: professorNome
+            });
+        }
+    });
+
+    return pendencias;
+  };
+
+  const RenderPendencias = ({ turmaId }: { turmaId: string }) => {
+    const pendencias = getPendencias(turmaId);
+    if (pendencias.length === 0) return null;
+
+    return (
+        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6 print:hidden">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
+            <AlertDescription className="text-xs mt-2">
+                <div className="flex flex-wrap gap-3">
+                    {pendencias.map((p, i) => (
+                        <div key={i} className="bg-destructive/10 text-destructive px-3 py-2 rounded font-medium border border-destructive/20 flex flex-col items-center text-center min-w-[120px] shadow-sm">
+                            <span className="font-bold text-[11px] leading-tight">{p.componente}</span>
+                            <span className="text-[10px] opacity-90">{p.missing} aula(s) {p.tipo}</span>
+                            <div className="mt-1.5 pt-1 border-t border-destructive/10 w-full text-[9px] uppercase font-bold text-destructive/70">
+                                {p.professor}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </AlertDescription>
+        </Alert>
+    );
+  };
 
   const handleCellClick = (diaDestino: string, indexDestino: number, targetAula?: any) => {
     if (horario.status === 'publicado' || isActionPending) return;
@@ -243,6 +306,12 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
 
+    const isInconsistent = (dia: string, index: number) => {
+        if (tipo !== 'presencial' || isProfessorView) return false;
+        const aula = getAulaNoSlot(dia, index);
+        return !aula;
+    };
+
     return (
         <div className="space-y-3 print:space-y-1 break-inside-avoid w-full">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black print:text-[8px] print:font-black">
@@ -279,6 +348,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                     const aula = getAulaNoSlot(dia.id, aulaIndex);
                                     const isLD = isLivreDocencia(dia.id, aulaIndex);
                                     const isPlan = isPlanejamento(dia.id, aulaIndex);
+                                    const isVago = isInconsistent(dia.id, aulaIndex);
                                     
                                     const isSelected = selectedSlot?.dia === dia.id && selectedSlot?.index === aulaIndex && !isProfessorView;
 
@@ -291,6 +361,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                             isLD && !aula && "bg-amber-50/50 print:bg-transparent",
                                             !isProfessorView && !isActionPending && horario.status !== 'publicado' && "cursor-pointer hover:bg-primary/5",
                                             isSelected && "bg-primary/20 ring-2 ring-primary ring-inset",
+                                            isVago && !isSelected && "bg-destructive/5"
                                         )}
                                         onClick={() => !isProfessorView && handleCellClick(dia.id, aulaIndex, aula)}
                                     >
@@ -316,6 +387,11 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                             <div className="flex flex-col items-center justify-center gap-0.5 text-blue-600 print:text-black">
                                                 <PenSquare className="h-3 w-3 text-blue-500 print:hidden" />
                                                 <span className="text-[8px] font-black uppercase leading-tight">Planejamento</span>
+                                            </div>
+                                        ) : isVago ? (
+                                            <div className="flex flex-col items-center justify-center gap-1 text-destructive/60 animate-pulse">
+                                                <AlertCircle className="h-4 w-4" />
+                                                <span className="text-[9px] font-bold uppercase">Vago</span>
                                             </div>
                                         ) : (
                                         <span className="text-muted-foreground/10">-</span>
@@ -666,6 +742,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
         <CardContent className="print:p-0">
           {viewMode === 'single' ? (
             <div className="space-y-12 pt-4 print:pt-0 print:space-y-8">
+                <RenderPendencias turmaId={selectedTurmaId} />
                 <GradeHoraria 
                     targetId={selectedTurmaId} 
                     isProfessorView={false}
@@ -691,6 +768,9 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                             </div>
                             <h2 className="text-2xl font-black tracking-tight print:text-xl print:font-black uppercase">TURMA {turma.nome}</h2>
                         </div>
+                        
+                        <RenderPendencias turmaId={turma.id} />
+
                         <GradeHoraria 
                             targetId={turma.id} 
                             isProfessorView={false}
