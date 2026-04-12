@@ -113,7 +113,9 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     if (series) {
         const discMap = new Map<string, { id: string, nome: string, sigla: string, maxAulas: number }>();
         series.forEach((s: any) => {
-            s.series_componentes.forEach((sc: any) => {
+            const componentes = Array.isArray(s.series_componentes) ? s.series_componentes : [s.series_componentes];
+            componentes.forEach((sc: any) => {
+                if (!sc) return;
                 const total = (sc.aulas_presenciais || 0) + (sc.aulas_nao_presenciais || 0);
                 if (total >= 2) {
                     const existing = discMap.get(sc.componente.id);
@@ -166,6 +168,12 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 progress
             );
 
+            if (result.error && !result.aulas) {
+                setGenError(result.error);
+                setIsProcessing(false);
+                return;
+            }
+
             if (result.success) {
                 finalAulas = result.aulas;
                 foundSolution = true;
@@ -175,12 +183,13 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             }
 
             if (attempts + BATCH_SIZE >= MAX_ATTEMPTS) {
-                setGenError(result.error || "Limite atingido.");
+                setGenError(result.error || "Limite de tentativas atingido.");
                 setPartialAulas(result.aulas || []);
             }
 
             attempts += BATCH_SIZE;
             setCurrentAttempt(attempts);
+            // Pequeno delay para permitir atualização da UI
             await new Promise(r => setTimeout(r, 10));
         }
 
@@ -193,7 +202,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 handleTurnoChange(selectedTurnoId);
             }
         } else {
-            toast({ title: 'Problema Detectado', description: 'Não foi possível fechar a grade 100%. Verifique os conflitos.', variant: 'destructive' });
+            toast({ title: 'Problema Detectado', description: 'Não foi possível fechar a grade 100%. Verifique os conflitos indicados.', variant: 'destructive' });
         }
     } catch (err) {
         console.error(err);
@@ -345,7 +354,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
           <CardFooter className="bg-muted/30 py-4 px-6 border-t">
              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <Settings2 className="h-4 w-4" />
-                <p>O algoritmo realiza até 10.000 tentativas em tempo real buscando a grade perfeita.</p>
+                <p>O algoritmo realiza até 100.000 tentativas buscando a grade perfeita sem choques de horário.</p>
              </div>
           </CardFooter>
         </Card>
@@ -562,11 +571,11 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                           Status do Motor Lógico:
                       </div>
                       <p className="text-xs text-slate-600 leading-relaxed italic">
-                          {currentAttempt < 3000 
+                          {currentAttempt < 20000 
                             ? "Analisando disponibilidade ideal dos professores..." 
-                            : currentAttempt < 7000 
+                            : currentAttempt < 60000 
                             ? "Otimizando janelas e horários de planejamento..." 
-                            : "Relaxando restrições secundárias para fechar a grade..."}
+                            : "Relaxando restrições secundárias para garantir carga horária total..."}
                       </p>
                   </div>
               </div>
