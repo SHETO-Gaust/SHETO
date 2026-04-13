@@ -60,22 +60,22 @@ export async function gerarLoteHorario(
     if (!turnoResult.data) return { error: 'Turno não encontrado no banco de dados.' };
     const turnoData = turnoResult.data;
 
-    // Filtragem robusta lidando com a possibilidade de 'serie' vir como array ou objeto do Supabase
     const turmasDoTurno = allTurmas?.filter(t => {
         const s = Array.isArray(t.serie) ? t.serie[0] : t.serie;
         return s?.turno_id === turnoId;
     }) || [];
 
     if (turmasDoTurno.length === 0) {
-        const totalTurmas = allTurmas?.length || 0;
-        return { 
-            error: `Não há turmas vinculadas ao turno selecionado. (Encontradas ${totalTurmas} turmas nesta escola, mas nenhuma pertence ao turno "${turnoData.nome}"). Verifique no Passo 6 se as turmas foram criadas usando o modelo de série correto para este turno.` 
-        };
+        return { error: `Nenhuma turma vinculada ao turno "${turnoData.nome}". Verifique o Passo 6.` };
     }
 
+    // Busca exaustiva por CPF para capturar TODAS as ocupações do professor na rede
     const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
+    const allTeacherIds = allProfessores?.map(p => p.id) || [];
+    
+    // Além dos IDs locais, buscamos outros registros que compartilham o mesmo CPF
     const { data: globalProfessors } = await supabase.from('professores').select('id').in('cpf', cpfs);
-    const professorIdsGlobais = globalProfessors?.map(p => p.id) || [];
+    const professorIdsGlobais = Array.from(new Set([...allTeacherIds, ...(globalProfessors?.map(p => p.id) || [])]));
 
     const { data: ocupacoesAtivas } = await supabase
         .from('horario_aulas')
@@ -93,6 +93,7 @@ export async function gerarLoteHorario(
         .in('professor_id', professorIdsGlobais)
         .eq('horarios.status', 'publicado');
 
+    // Remove ocupações do próprio turno que estamos gerando
     const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
 
     const result = gerarHorarioAlgoritmico(
