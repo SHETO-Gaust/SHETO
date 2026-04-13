@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -132,7 +131,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             pendencias.push({ 
                 componente: sc.componente.sigla || sc.componente.nome, 
                 missing: faltamPresencial, 
-                tipo: 'Presencial',
+                tipo: 'Regular',
                 professor: professorNome
             });
         }
@@ -143,7 +142,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
             pendencias.push({ 
                 componente: sc.componente.sigla || sc.componente.nome, 
                 missing: faltamNP, 
-                tipo: 'NP',
+                tipo: 'Contraturno',
                 professor: professorNome
             });
         }
@@ -159,7 +158,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     return (
         <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 mb-6 print:hidden">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Aulas não alocadas nesta turma:</AlertTitle>
+            <AlertTitle className="text-xs font-bold uppercase tracking-tight">Faltam {pendencias.reduce((acc, p) => acc + p.missing, 0)} aula(s) nesta turma:</AlertTitle>
             <AlertDescription className="text-xs mt-2">
                 <div className="flex flex-wrap gap-3">
                     {pendencias.map((p, i) => (

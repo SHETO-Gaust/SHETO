@@ -52,12 +52,10 @@ function slotsConflitam(
     const hA = turnoA.horarios?.[indexA];
     const hB = turnoB.horarios?.[indexB];
 
-    // Se temos horários definidos, a comparação é matemática e exata
     if (hA?.inicio && hA?.fim && hB?.inicio && hB?.fim) {
         return hA.inicio < hB.fim && hA.fim > hB.inicio;
     }
 
-    // Fallback para nomes de turno caso horários não estejam configurados
     const nomeA = turnoA.nome.toLowerCase();
     const nomeB = turnoB.nome.toLowerCase();
 
@@ -69,7 +67,6 @@ function slotsConflitam(
     if (isAInt && !isBInt) return checkIntegralOverlap(indexA, nomeB, indexB);
     if (!isAInt && isBInt) return checkIntegralOverlap(indexB, nomeA, indexA);
 
-    // Se um é matutino e outro vespertino, não conflitam por definição de slot (0-4 vs 0-4)
     if ((nomeA.includes('matutino') && nomeB.includes('vespertino')) || 
         (nomeA.includes('vespertino') && nomeB.includes('matutino'))) return false;
 
@@ -107,23 +104,33 @@ export function gerarHorarioAlgoritmico(
 } {
   
   const teacherKeyMap = new Map<string, string>();
-  const professorTightnessMap = new Map<string, number>();
+  const professorWorkloadMap = new Map<string, number>();
 
   professores.forEach(p => {
       const key = getTeacherKey(p);
       teacherKeyMap.set(p.id, key);
       
-      // Calcula o "aperto" baseado em quantas aulas ele já tem publicadas (globalmente por CPF)
-      const conflicts = ocupacoesExistentes.filter(o => {
+      // Cálculo de dificuldade: Ocupações já publicadas + Aulas a alocar nesta geração
+      const publishedCount = ocupacoesExistentes.filter(o => {
           const occKey = getTeacherKey({ id: o.professor_id, cpf: o.professor?.cpf });
           return occKey === key;
       }).length;
-      professorTightnessMap.set(p.id, conflicts);
+
+      let currentAllocationCount = 0;
+      turmas.forEach(t => {
+          t.professores.forEach(tp => {
+              if (tp.professor_id === p.id) {
+                  const comp = t.serie.componentes.find(c => c.componente_id === tp.componente_id);
+                  if (comp) currentAllocationCount += (comp.aulas_presenciais || 0) + (comp.aulas_nao_presenciais || 0);
+              }
+          });
+      });
+
+      professorWorkloadMap.set(key, publishedCount + currentAllocationCount);
   });
 
   const getTurnosDisponiveisParaNP = (baseTurno: Turno) => {
       const n = baseTurno.nome.toLowerCase();
-      // Prioriza o oposto lógico, mas inclui todos os outros como fallback
       const outros = todosTurnos.filter(t => t.id !== baseTurno.id);
       outros.sort((a, b) => {
           const aNome = a.nome.toLowerCase();
@@ -137,7 +144,6 @@ export function gerarHorarioAlgoritmico(
 
   const getRealTurnoForOccupation = (o: any) => {
       if (o.tipo === 'presencial') return o.horario.turno;
-      // Para NP, o turno real é o "outro" turno daquela escola.
       const base = o.horario.turno;
       const n = base.nome.toLowerCase();
       const oposto = todosTurnos.find(t => t.escola_id === o.horario.escola_id && (
@@ -162,7 +168,7 @@ export function gerarHorarioAlgoritmico(
 
   const executarTentativa = (permitirUsoPlanejamento: boolean, ignorarLivreDocencia: boolean, forcarIndividuais: boolean) => {
     const aulasGeradas: Omit<HorarioAulaGerada, 'id' | 'horario_id'>[] = [];
-    const ocupacaoProfessoresRealTime = new Map<string, Set<string>>(); // Key -> Set de "TurnoID-Dia-Index"
+    const ocupacaoProfessoresRealTime = new Map<string, Set<string>>(); 
     const ocupacaoTurmas = new Set<string>();
 
     const turnosParaNP = getTurnosDisponiveisParaNP(turno);
@@ -174,7 +180,7 @@ export function gerarHorarioAlgoritmico(
         const profId = profInfo?.professor_id || null;
         const profKey = profId ? teacherKeyMap.get(profId) : null;
         const profNome = profInfo?.professor?.nome_horario || 'Sem Professor';
-        const tightness = profId ? (professorTightnessMap.get(profId) || 0) : 0;
+        const workload = profKey ? (professorWorkloadMap.get(profKey) || 0) : 0;
         
         // Presenciais
         criarBlocos(c.aulas_presenciais || 0, c.componente_id, forcarIndividuais).forEach(size => {
@@ -182,7 +188,7 @@ export function gerarHorarioAlgoritmico(
                 tipo: 'presencial',
                 turma_id: t.id, turma_nome: t.nome, componente_id: c.componente_id, componente_nome: (c as any).componente?.nome || 'Disciplina',
                 professor_id: profId, professor_key: profKey, professor_nome: profNome,
-                size, serie_restricoes: t.serie.restricoes, tightness, priority: 1
+                size, serie_restricoes: t.serie.restricoes, workload, priority: 1
             });
         });
         
@@ -192,24 +198,25 @@ export function gerarHorarioAlgoritmico(
                 tipo: 'nao_presencial',
                 turma_id: t.id, turma_nome: t.nome, componente_id: c.componente_id, componente_nome: (c as any).componente?.nome || 'Disciplina',
                 professor_id: profId, professor_key: profKey, professor_nome: profNome,
-                size, tightness, priority: 2 
+                size, workload, priority: 2 
             });
         });
       });
     });
 
-    // Ordenação Crítica: Professores mais apertados primeiro, depois por tamanho de bloco
+    // ORDENAÇÃO CRÍTICA: Prioriza quem está mais ocupado globalmente (workload), depois por tipo de aula
     todosOsBlocos.sort((a, b) => {
+        if (b.workload !== a.workload) return b.workload - a.workload;
         if (a.priority !== b.priority) return a.priority - b.priority;
-        if (b.tightness !== a.tightness) return b.tightness - a.tightness;
         return b.size - a.size;
     });
 
     for (const b of todosOsBlocos) {
         let alocado = false;
-        const turnosParaTestar = b.tipo === 'presencial' ? [turno] : turnosParaNP;
+        let turnosParaTestar = b.tipo === 'presencial' ? [turno] : turnosParaNP;
         
-        if (turnosParaTestar.length === 0 && b.tipo === 'nao_presencial') turnosParaTestar.push(turno);
+        // Se não houver outros turnos, permite NP no próprio turno em slots vazios (fallback de segurança)
+        if (turnosParaTestar.length === 0 && b.tipo === 'nao_presencial') turnosParaTestar = [turno];
 
         for (const targetTurno of turnosParaTestar) {
             if (alocado) break;
@@ -231,8 +238,9 @@ export function gerarHorarioAlgoritmico(
                             }
                         }
                         for (let k = 0; k < b.size; k++) {
-                            if (prof?.restricoes?.[targetTurno.id]?.[d]?.[i + k] === 'planejamento') {
-                                weight += permitirUsoPlanejamento ? 50 : 5000;
+                            const res = prof?.restricoes?.[targetTurno.id]?.[d]?.[i + k];
+                            if (res === 'planejamento') {
+                                weight += permitirUsoPlanejamento ? 10 : 5000;
                             }
                         }
                     }
@@ -250,13 +258,24 @@ export function gerarHorarioAlgoritmico(
                 for (let k = 0; k < b.size; k++) {
                     const idx = i + k;
                     
+                    // 1. Conflito de Turma (Turma não pode ter 2 aulas no mesmo horário, mesmo que uma seja NP)
+                    // Verificamos se em QUALQUER turno já alocamos algo para esta turma neste dia/horário exato
+                    const conflitoTurma = aulasGeradas.find(a => {
+                        if (a.turma_id !== b.turma_id || a.dia_semana !== d) return false;
+                        // Pegamos o turno onde a aula anterior foi alocada
+                        const aTurno = a.tipo === 'presencial' ? turno : turnosParaNP.find(tnp => tnpsPossuemAula(tnp, a, d));
+                        if (!aTurno) return false;
+                        return slotsConflitam(targetTurno, idx, aTurno, a.aula_index);
+                    });
+                    
+                    if (conflitoTurma) { livre = false; break; }
+
                     if (b.tipo === 'presencial') {
-                        if (ocupacaoTurmas.has(`${d}-${idx}-${b.turma_id}`)) { livre = false; break; }
                         if (b.serie_restricoes?.[d]?.[idx] === 'proibido') { livre = false; break; }
                     }
                     
                     if (b.professor_key) {
-                        // 1. Conflito Global (Já publicado)
+                        // 2. Conflito Global (Já publicado em outras escolas/turnos)
                         const conflitoGlobal = ocupacoesExistentes.find(o => {
                             const occKey = getTeacherKey({ id: o.professor_id, cpf: o.professor?.cpf });
                             if (occKey !== b.professor_key || o.dia_semana !== d) return false;
@@ -265,7 +284,7 @@ export function gerarHorarioAlgoritmico(
                         });
                         if (conflitoGlobal) { livre = false; break; }
 
-                        // 2. Conflito Local (Mesma geração)
+                        // 3. Conflito Local (Mesma geração)
                         const ocupacoesDesteProfessor = ocupacaoProfessoresRealTime.get(b.professor_key);
                         if (ocupacoesDesteProfessor) {
                             for (const val of ocupacoesDesteProfessor) {
@@ -299,8 +318,6 @@ export function gerarHorarioAlgoritmico(
                             tipo: b.tipo 
                         });
                         
-                        if (b.tipo === 'presencial') ocupacaoTurmas.add(`${d}-${idx}-${b.turma_id}`);
-                        
                         if (b.professor_key) {
                             if (!ocupacaoProfessoresRealTime.has(b.professor_key)) {
                                 ocupacaoProfessoresRealTime.set(b.professor_key, new Set());
@@ -320,24 +337,31 @@ export function gerarHorarioAlgoritmico(
     return { success: pendentes.length === 0, aulas: aulasGeradas, pendentes };
   };
 
+  // Helper local para verificar se um turno possui uma aula específica
+  function tnpsPossuemAula(tnp: Turno, a: any, d: string) {
+      // Simplificação: se a aula foi gerada para este turno, ela é deste turno
+      return a.dia_semana === d;
+  }
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const currentProgress = globalProgress + (attempt / maxAttempts);
     
-    let permitirUsoPlanejamento = currentProgress > 0.15; 
-    let ignorarLivreDocencia = currentProgress > 0.5;    
-    let forcarIndividuais = currentProgress > 0.8;
+    // RELAXAMENTO PROGRESSIVO MAIS AGRESSIVO
+    let permitirUsoPlanejamento = currentProgress > 0.10; // Permite usar planejamento após 10%
+    let ignorarLivreDocencia = currentProgress > 0.35;    // Ignora folgas após 35%
+    let forcarIndividuais = currentProgress > 0.65;      // Quebra blocos após 65%
 
     const res = executarTentativa(permitirUsoPlanejamento, ignorarLivreDocencia, forcarIndividuais);
     if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
   }
 
   const resFalha = executarTentativa(true, true, true);
-  let errorMsg = "Conflitos Detectados: ";
+  let errorMsg = "Capacidade Esgotada: ";
   
   if (resFalha.pendentes.length > 0) {
       const p = resFalha.pendentes[0];
-      errorMsg += `O professor ${p.professor_nome} (${p.componente_nome}) ficou com ${p.size} aula(s) ${p.tipo} sem lugar. `;
-      errorMsg += "Isso ocorre quando o docente já atingiu o limite de disponibilidade física entre os turnos publicados.";
+      errorMsg += `O professor ${p.professor_nome} (${p.componente_nome}) está sem horários livres no contraturno para a aula ${p.tipo}. `;
+      errorMsg += "Isso acontece quando o docente já tem todas as janelas ocupadas por aulas presenciais em outros turnos.";
   }
 
   return { 
