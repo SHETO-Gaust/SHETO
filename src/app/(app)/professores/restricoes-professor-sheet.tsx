@@ -7,8 +7,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, CalendarX, Ban, PenSquare, Star } from 'lucide-react';
 import { updateProfessorRestricoes } from './actions';
 import type { ProfessorComDados, Turno, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 type Props = {
   isOpen: boolean;
@@ -45,11 +47,13 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
   const [loading, setLoading] = useState(false);
   const [restricoes, setRestricoes] = useState<any>({});
   const [livreDocencia, setLivreDocencia] = useState<LivreDocenciaItem[]>([]);
+  const [semPreferencia, setSemPreferencia] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setRestricoes(professor.restricoes || {});
       setLivreDocencia(professor.livre_docencia || []);
+      setSemPreferencia(!!professor.sem_preferencia_livre_docencia);
     }
   }, [isOpen, professor]);
 
@@ -58,7 +62,8 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
     const isStar = livreDocencia.some(ld => ld.dia === diaId && ld.periodo === currentPeriodo);
     const currentStatus = restricoes[turno.id]?.[diaId]?.[aulaIndex];
 
-    // Lógica de ciclo: Nada -> Indisponível -> Planejamento -> Livre Docência -> Nada
+    // Lógica de ciclo: Nada -> Indisponível -> Planejamento -> Livre Docência (se !semPreferencia) -> Nada
+    
     if (isStar) {
         // Estava Star -> Limpar Star e voltar para Nada
         setLivreDocencia(prev => prev.filter(ld => !(ld.dia === diaId && ld.periodo === currentPeriodo)));
@@ -75,23 +80,32 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
             return next;
         });
     } else if (currentStatus === 'planejamento') {
-        // Planejamento -> Livre Docência (Star)
-        if (livreDocencia.length >= 2) {
-            toast({ title: 'Limite de Livre Docência', description: 'O professor já possui os 2 períodos permitidos.', variant: 'destructive' });
-            // Pula para Nada
+        // Planejamento -> Livre Docência (Star) OU Nada
+        if (semPreferencia) {
+            // Se sem preferência, pula direto para Nada
             setRestricoes((prev: any) => {
                 const next = JSON.parse(JSON.stringify(prev));
                 if (next[turno.id]?.[diaId]) delete next[turno.id][diaId][aulaIndex];
                 return next;
             });
         } else {
-            // Limpa o planejamento e adiciona Livre Docência
-            setRestricoes((prev: any) => {
-                const next = JSON.parse(JSON.stringify(prev));
-                if (next[turno.id]?.[diaId]) delete next[turno.id][diaId][aulaIndex];
-                return next;
-            });
-            setLivreDocencia(prev => [...prev, { dia: diaId, periodo: currentPeriodo }]);
+            if (livreDocencia.length >= 2) {
+                toast({ title: 'Limite de Livre Docência', description: 'O professor já possui os 2 períodos permitidos.', variant: 'destructive' });
+                // Pula para Nada
+                setRestricoes((prev: any) => {
+                    const next = JSON.parse(JSON.stringify(prev));
+                    if (next[turno.id]?.[diaId]) delete next[turno.id][diaId][aulaIndex];
+                    return next;
+                });
+            } else {
+                // Limpa o planejamento e adiciona Livre Docência
+                setRestricoes((prev: any) => {
+                    const next = JSON.parse(JSON.stringify(prev));
+                    if (next[turno.id]?.[diaId]) delete next[turno.id][diaId][aulaIndex];
+                    return next;
+                });
+                setLivreDocencia(prev => [...prev, { dia: diaId, periodo: currentPeriodo }]);
+            }
         }
     } else {
         // Nada -> Indisponível
@@ -105,9 +119,16 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
     }
   };
 
+  const handleToggleSemPreferencia = (checked: boolean) => {
+      setSemPreferencia(checked);
+      if (checked) {
+          setLivreDocencia([]); // Limpa as seleções manuais se marcar sem preferência
+      }
+  };
+
   const handleSave = async () => {
     setLoading(true);
-    const result = await updateProfessorRestricoes(professor.id, restricoes, livreDocencia);
+    const result = await updateProfessorRestricoes(professor.id, restricoes, livreDocencia, semPreferencia);
     setLoading(false);
 
     if (result.error) {
@@ -124,50 +145,50 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-4xl w-full flex flex-col">
+      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-4xl w-full flex flex-col h-full overflow-hidden">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <CalendarX className="h-5 w-5" />
-            Restrições de Horário
+          <SheetTitle className="flex items-center gap-2 text-xl">
+            <CalendarX className="h-6 w-6 text-primary" />
+            Restrições de Horário: {professor.nome_horario}
           </SheetTitle>
           <SheetDescription>
-            Defina os horários indisponíveis, de planejamento e livre docência para {professor.nome_completo}.
+            Defina os horários indisponíveis, de planejamento e livre docência para este docente.
           </SheetDescription>
-           <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground pt-2">
-              <li className="flex items-center gap-1"><Ban className="h-3 w-3 text-red-500"/> <strong>Clique 1:</strong> Indisponível (bloqueado).</li>
-              <li className="flex items-center gap-1"><PenSquare className="h-3 w-3 text-blue-500"/> <strong>Clique 2:</strong> Planejamento (prioritário).</li>
-              <li className="flex items-center gap-1"><Star className="h-3 w-3 text-amber-500 fill-amber-500"/> <strong>Clique 3:</strong> Livre Docência (Folga de período).</li>
-              <li><strong>Clique 4:</strong> Limpar marcação.</li>
+           <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground pt-3 bg-muted/30 p-3 rounded-lg border border-dashed">
+              <li className="flex items-center gap-1.5"><Ban className="h-3.5 w-3.5 text-red-500"/> <strong>Clique 1:</strong> Indisponível (bloqueado).</li>
+              <li className="flex items-center gap-1.5"><PenSquare className="h-3.5 w-3.5 text-blue-500"/> <strong>Clique 2:</strong> Planejamento (prioritário).</li>
+              <li className="flex items-center gap-1.5"><Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500"/> <strong>Clique 3:</strong> Livre Docência (Folga de período).</li>
+              <li className="opacity-70"><strong>Clique 4:</strong> Limpar marcação.</li>
           </ul>
         </SheetHeader>
 
-        <div className="flex-1 space-y-4 py-6 overflow-y-auto">
+        <div className="flex-1 space-y-4 py-6 overflow-y-auto min-h-0">
             {professorTurnos.length > 0 ? (
                 <Tabs defaultValue={professorTurnos[0].id} className="w-full">
-                    <TabsList>
+                    <TabsList className="bg-muted w-full justify-start overflow-x-auto h-auto p-1">
                         {professorTurnos.map(turno => (
-                            <TabsTrigger key={turno.id} value={turno.id}>{turno.nome}</TabsTrigger>
+                            <TabsTrigger key={turno.id} value={turno.id} className="px-6 py-2.5 uppercase font-bold text-xs">{turno.nome}</TabsTrigger>
                         ))}
                     </TabsList>
                     {professorTurnos.map(turno => (
-                        <TabsContent key={turno.id} value={turno.id}>
-                            <div className="rounded-xl border bg-card overflow-hidden mt-4">
+                        <TabsContent key={turno.id} value={turno.id} className="mt-4 animate-in fade-in slide-in-from-left-2 duration-300">
+                            <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
                                 <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-center">
+                                <table className="w-full text-sm text-center border-collapse">
                                     <thead>
                                         <tr className="bg-muted/50 border-b">
-                                            <th className="p-2 font-medium border-r w-24">Aula</th>
+                                            <th className="p-3 font-bold border-r w-24">Aula</th>
                                             {DIAS_SEMANA_MAP.map(dia => (
-                                                <th key={dia.id} className="p-2 font-medium min-w-[60px]">{dia.label}</th>
+                                                <th key={dia.id} className="p-3 font-bold min-w-[80px]">{dia.label}</th>
                                             ))}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIndex) => (
-                                            <tr key={aulaIndex} className="border-b last:border-0">
-                                                <td className="p-2 font-medium bg-muted/20 border-r">
-                                                    <div className="font-semibold">{aulaIndex + 1}ª</div>
-                                                    <div className="text-[10px] text-muted-foreground">
+                                            <tr key={aulaIndex} className="border-b last:border-0 h-16 hover:bg-muted/5 transition-colors">
+                                                <td className="p-2 font-bold bg-muted/20 border-r">
+                                                    <div className="text-primary text-base">{aulaIndex + 1}ª</div>
+                                                    <div className="text-[10px] text-muted-foreground font-medium">
                                                         {turno.horarios?.[aulaIndex]?.inicio || '--:--'}
                                                     </div>
                                                 </td>
@@ -181,23 +202,29 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                                                             <div 
                                                                 onClick={() => handleCellClick(turno, dia.id, aulaIndex)}
                                                                 className={cn(
-                                                                    "h-14 w-full flex flex-col items-center justify-center cursor-pointer transition-colors",
-                                                                    isStar ? 'bg-amber-50 text-amber-600' :
-                                                                    status === 'indisponivel' ? 'bg-red-50 text-red-600' : 
-                                                                    status === 'planejamento' ? 'bg-blue-50 text-blue-600' : 'hover:bg-accent'
+                                                                    "h-16 w-full flex flex-col items-center justify-center cursor-pointer transition-all",
+                                                                    isStar ? 'bg-amber-50 text-amber-600 shadow-inner' :
+                                                                    status === 'indisponivel' ? 'bg-red-50 text-red-600 shadow-inner' : 
+                                                                    status === 'planejamento' ? 'bg-blue-50 text-blue-600 shadow-inner' : 'hover:bg-accent/50'
                                                                 )}
                                                             >
                                                                 {isStar ? (
                                                                     <>
-                                                                        <Star className="h-5 w-5 fill-amber-500" />
-                                                                        <span className="text-[8px] font-bold uppercase">Livre Doc.</span>
+                                                                        <Star className="h-6 w-6 fill-amber-500 animate-in zoom-in-50 duration-300" />
+                                                                        <span className="text-[8px] font-black uppercase mt-0.5">Folga</span>
                                                                     </>
                                                                 ) : status === 'indisponivel' ? (
-                                                                    <Ban className="h-5 w-5" />
+                                                                    <>
+                                                                        <Ban className="h-6 w-6" />
+                                                                        <span className="text-[8px] font-black uppercase mt-0.5">Ban</span>
+                                                                    </>
                                                                 ) : status === 'planejamento' ? (
-                                                                    <PenSquare className="h-5 w-5" />
+                                                                    <>
+                                                                        <PenSquare className="h-6 w-6" />
+                                                                        <span className="text-[8px] font-black uppercase mt-0.5">Plan.</span>
+                                                                    </>
                                                                 ) : (
-                                                                    <div className="h-1.5 w-1.5 rounded-full bg-muted" />
+                                                                    <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />
                                                                 )}
                                                             </div>
                                                         </td>
@@ -213,20 +240,43 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                     ))}
                 </Tabs>
             ) : (
-                <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-xl">
-                    Este professor não está associado a nenhum turno ativo.
+                <div className="text-center text-muted-foreground p-16 border-2 border-dashed rounded-3xl bg-muted/5 flex flex-col items-center gap-4">
+                    <CalendarX className="h-12 w-12 opacity-20" />
+                    <p className="font-medium">Este professor não está associado a nenhum turno ativo nesta escola.</p>
                 </div>
             )}
         </div>
 
-        <SheetFooter className="mt-auto border-t pt-4 bg-background">
-          <div className="flex items-center gap-4 mr-auto text-[10px] uppercase font-bold text-muted-foreground">
-              <span className="flex items-center gap-1"><Star className="h-3 w-3 text-amber-500 fill-amber-500" /> Livre Docência: {livreDocencia.length}/2</span>
+        <SheetFooter className="mt-auto border-t pt-6 bg-background flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-6 p-3 px-5 rounded-full border bg-slate-50 shadow-sm w-full sm:w-auto">
+              <div className="flex items-center gap-3 border-r pr-6 mr-2">
+                  <Switch 
+                    id="sem-preferencia" 
+                    checked={semPreferencia} 
+                    onCheckedChange={handleToggleSemPreferencia} 
+                    className="data-[state=checked]:bg-primary"
+                  />
+                  <Label htmlFor="sem-preferencia" className="text-xs font-black uppercase text-primary cursor-pointer tracking-tighter whitespace-nowrap">Sem Preferência de Folga</Label>
+              </div>
+              <div className={cn(
+                  "flex items-center gap-2 text-[10px] uppercase font-black transition-opacity",
+                  semPreferencia ? "opacity-20 pointer-events-none" : "opacity-100"
+              )}>
+                  <Star className={cn("h-4 w-4", livreDocencia.length === 2 ? "text-green-500 fill-green-500" : "text-amber-500 fill-amber-500")} /> 
+                  <span>Livre Docência: {livreDocencia.length}/2</span>
+              </div>
           </div>
-          <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button onClick={handleSave} disabled={loading} className="min-w-[100px]">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
-          </Button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button type="button" variant="ghost" onClick={() => setIsOpen(false)} className="flex-1 sm:flex-none">Cancelar</Button>
+            <Button 
+                onClick={handleSave} 
+                disabled={loading || (!semPreferencia && livreDocencia.length < 2 && !professor.id.startsWith('new'))} 
+                className="min-w-[140px] font-black shadow-lg flex-1 sm:flex-none"
+            >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Salvar Alterações
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>

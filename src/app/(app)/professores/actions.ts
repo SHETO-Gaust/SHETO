@@ -114,7 +114,7 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
     if (error.code === '23505') {
         return { error: `Este CPF já está cadastrado nesta unidade escolar.` };
     }
-    return { error: 'Não foi possível salvar o professor.' };
+    return { error: 'Não foi possível salvar the professor.' };
   }
 
   if (componente_ids !== undefined) {
@@ -164,13 +164,22 @@ export async function updateProfessorComponentes(professorId: string, componente
 /* -------------------------------------------------------------------------- */
 /* UPDATE RESTRIÇÕES DO PROFESSOR                     */
 /* -------------------------------------------------------------------------- */
-export async function updateProfessorRestricoes(professorId: string, restricoes: any, livreDocencia?: any[]) {
+export async function updateProfessorRestricoes(
+    professorId: string, 
+    restricoes: any, 
+    livreDocencia?: any[], 
+    semPreferencia: boolean = false
+) {
     const supabase = await createClient();
-    const updateData: any = { restricoes };
+    const updateData: any = { 
+        restricoes,
+        sem_preferencia_livre_docencia: semPreferencia
+    };
     
-    if (livreDocencia) {
+    if (semPreferencia) {
+        updateData.livre_docencia = [];
+    } else if (livreDocencia) {
         updateData.livre_docencia = livreDocencia;
-        updateData.sem_preferencia_livre_docencia = false;
     }
 
     const { error: error } = await supabase.from('professores').update(updateData).eq('id', professorId);
