@@ -62,9 +62,9 @@ import {
   function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
     const nome = turno.nome.toLowerCase();
   
-    if (nome.includes('matutino')) return 'matutino';
-    if (nome.includes('vespertino')) return 'vespertino';
-    if (nome.includes('noturno')) return 'noturno';
+    if (nome.includes('matutino') || nome.includes('manhã')) return 'matutino';
+    if (nome.includes('vespertino') || nome.includes('tarde')) return 'vespertino';
+    if (nome.includes('noturno') || nome.includes('noite')) return 'noturno';
   
     const h = turno.horarios?.[aulaIdx];
     if (h?.inicio) {
@@ -77,6 +77,9 @@ import {
     return aulaIdx < 5 ? 'matutino' : 'vespertino';
   }
   
+  /**
+   * Verifica se dois slots de horários diferentes se sobrepõem no tempo real (minutos).
+   */
   function slotsConflitam(
     turnoA: Turno,
     indexA: number,
@@ -86,23 +89,26 @@ import {
     const hA = turnoA.horarios?.[indexA];
     const hB = turnoB.horarios?.[indexB];
   
+    // 1. Comparação por tempo real (HH:mm)
     if (hA?.inicio && hA?.fim && hB?.inicio && hB?.fim) {
       return hA.inicio < hB.fim && hA.fim > hB.inicio;
     }
   
+    // 2. Se for o mesmo turno físico, o conflito é pelo índice direto
+    if (turnoA.id === turnoB.id) return indexA === indexB;
+  
+    // 3. Heurística por nomes de turnos comuns
     const nomeA = turnoA.nome.toLowerCase();
     const nomeB = turnoB.nome.toLowerCase();
+    const periodos = ['matutino', 'vespertino', 'noturno', 'manhã', 'tarde', 'noite'];
+    const pA = periodos.find(p => nomeA.includes(p));
+    const pB = periodos.find(p => nomeB.includes(p));
+    
+    // Se sabemos que são turnos diferentes (ex: Manhã e Tarde) e não temos horários exatos,
+    // assumimos que não conflitam (permitindo contraturno).
+    if (pA && pB && pA !== pB) return false;
   
-    if (nomeA === nomeB) return indexA === indexB;
-  
-    // Logica simples de sobreposição para Matutino/Vespertino se não houver horários
-    if (
-      (nomeA.includes('matutino') && nomeB.includes('vespertino')) ||
-      (nomeA.includes('vespertino') && nomeB.includes('matutino'))
-    ) {
-      return false;
-    }
-  
+    // 4. Caso extremo: turnos diferentes sem horários e sem nomes reconhecíveis
     return indexA === indexB;
   }
   
@@ -166,12 +172,7 @@ import {
       teacherKeyMap.set(p.id, getTeacherKey(p));
     });
   
-    const getTurnosDisponiveisParaNP = (baseTurno: Turno) => {
-      const n = baseTurno.nome.toLowerCase();
-      return todosTurnos.filter(t => t.id !== baseTurno.id);
-    };
-  
-    const turnosParaNPBase = getTurnosDisponiveisParaNP(turno);
+    const turnosParaNPBase = todosTurnos.filter(t => t.id !== turno.id);
   
     const ocupacoesExistentesPorProfessorDia = new Map<string, OcupacaoExistenteNormalizada[]>();
   
@@ -196,6 +197,7 @@ import {
           const profKey = profId ? teacherKeyMap.get(profId) || null : null;
           const profNome = profInfo?.professor?.nome_horario || 'Sem Professor';
   
+          // Presenciais (no turno atual)
           const presenciais = criarBlocos(c.aulas_presenciais || 0, c.componente_id, configGerminacao, forcarIndividuais);
           for (const size of presenciais) {
             blocos.push({
@@ -214,6 +216,7 @@ import {
             });
           }
   
+          // NP (no contraturno)
           const naoPresenciais = criarBlocos(c.aulas_nao_presenciais || 0, c.componente_id, configGerminacao, forcarIndividuais);
           for (const size of naoPresenciais) {
             blocos.push({
@@ -227,7 +230,7 @@ import {
               professor_nome: profNome,
               size,
               workload: profKey ? (professorWorkloadMap.get(profKey) || 0) : 0,
-              priority: 0, // Prioridade MÁXIMA para NP (Contraturno)
+              priority: 0, // NP é prioridade total para garantir fechamento de carga
             });
           }
         }
@@ -250,8 +253,7 @@ import {
   
       for (const b of todosOsBlocos) {
         let alocado = false;
-        let turnosParaTestar = b.tipo === 'presencial' ? [turno] : turnosParaNPBase;
-        if (turnosParaTestar.length === 0) turnosParaTestar = [turno];
+        let turnosParaTestar = b.tipo === 'presencial' ? [turno] : (turnosParaNPBase.length > 0 ? turnosParaNPBase : [turno]);
   
         for (const targetTurno of turnosParaTestar) {
           if (alocado) break;
@@ -269,19 +271,21 @@ import {
                 const idx = i + k;
                 const slotKey = `${b.turma_id}|${targetTurno.id}|${d}|${idx}`;
                 if (ocupacaoTurmas.has(slotKey)) { livre = false; break; }
+                
+                // Restrições da Série (Matutino não aceita aula no horário X)
                 if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') { livre = false; break; }
   
                 if (b.professor_key) {
                   const profKey = b.professor_key;
                   const profDiaKey = `${profKey}|${d}`;
                   
-                  // Verifica contra ocupações locais desta tentativa
+                  // Conflito contra aulas já alocadas NESTA tentativa
                   const localOcc = ocupacaoProfessoresPorDia.get(profDiaKey) || [];
                   if (localOcc.some(occ => slotsConflitam(targetTurno, idx, turnosById.get(occ.turno_id)!, occ.aula_index))) {
                     livre = false; break;
                   }
   
-                  // Verifica contra ocupações publicadas de outros turnos
+                  // Conflito contra aulas PUBLICADAS de outros turnos
                   const globalOcc = ocupacoesExistentesPorProfessorDia.get(profDiaKey) || [];
                   if (globalOcc.some(occ => slotsConflitam(targetTurno, idx, turnosById.get(occ.turno_id)!, occ.aula_index))) {
                     livre = false; break;
@@ -292,6 +296,7 @@ import {
                   if (rest === 'indisponivel') { livre = false; break; }
                   if (rest === 'planejamento' && !permitirUsoPlanejamento) { livre = false; break; }
                   
+                  // Respeito à Livre Docência (Folga)
                   if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false) {
                     const periodo = getPeriodoDaAula(targetTurno, idx);
                     if (prof.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodo)) {
@@ -331,13 +336,13 @@ import {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const curProg = globalProgress + (attempt / maxAttempts);
       const permitirPlan = force || curProg > 0.15;
-      const ignorarLD = force || curProg > 0.90;
-      const forcarIndiv = force || curProg > 0.70;
+      const ignorarLD = force || curProg > 0.85;
+      const forcarIndiv = force || curProg > 0.75;
   
       const res = executarTentativa(permitirPlan, ignorarLD, forcarIndiv);
       if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
     }
   
     const finalFail = executarTentativa(true, true, true);
-    return { success: false, aulas: finalFail.aulas, attemptsMade: maxAttempts, error: 'Não foi possível alocar todas as aulas sem conflitos.' };
+    return { success: false, aulas: finalFail.aulas, attemptsMade: maxAttempts, error: 'Algumas aulas não puderam ser alocadas devido a conflitos de professores ou restrições de horários.' };
   }

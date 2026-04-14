@@ -78,14 +78,14 @@ export async function gerarLoteHorario(
         .select(`
             id, professor_id, dia_semana, aula_index, tipo, horario_id,
             professor:professores(nome_horario, restricoes, cpf),
-            turma:turmas(nome),
-            componente:componentes_curriculares(nome),
+            turma:turmas(id, nome),
+            componente:componentes_curriculares(id, nome),
             horario:horarios!inner(id, status, turno_id, turno:turnos(*))
         `)
         .in('professor_id', professorIdsGlobais)
         .eq('horarios.status', 'publicado');
 
-    // Filtramos ocupações do próprio turno que está sendo gerado (caso seja uma regeração)
+    // Filtramos ocupações do próprio turno que está sendo gerado
     const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
 
     const result = gerarHorarioAlgoritmico(
@@ -119,13 +119,12 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
     if (hError) return { error: 'Falha ao criar registro do horário.' };
 
     if (aulas.length > 0) {
-        // Deduplicação local e mapeamento correto
         const uniqueMap = new Map();
         const aulasToInsert = [];
 
         for (const a of aulas) {
-            // Chave de unicidade para o novo índice: horario_id, turma_id, dia_semana, aula_index
-            const key = `${a.turma_id}|${a.dia_semana}|${a.aula_index}`;
+            // Chave de unicidade sincronizada com o NOVO índice do banco
+            const key = `${novoHorario.id}|${a.turma_id}|${a.dia_semana}|${a.aula_index}|${a.turno_id}`;
             if (!uniqueMap.has(key)) {
                 uniqueMap.set(key, true);
                 aulasToInsert.push({ 
@@ -136,7 +135,7 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
                     dia_semana: a.dia_semana,
                     aula_index: a.aula_index,
                     tipo: a.tipo,
-                    turno_id: a.turno_id || turnoId // Garante que o turno_id físico seja salvo
+                    turno_id: a.turno_id // Turno físico onde a aula realmente ocorre
                 });
             }
         }
@@ -148,9 +147,9 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
             await supabase.from('horarios').delete().eq('id', novoHorario.id);
             
             if (insertError.code === '23505') {
-                return { error: 'O banco de dados impediu o salvamento devido a um conflito de horários. Rode o script SQL de ajuste de índices.' };
+                return { error: 'Conflito de horários detectado. Por favor, execute o script SQL de atualização de índices no Supabase.' };
             }
-            return { error: 'Erro ao salvar os detalhes da grade.' };
+            return { error: 'Erro ao salvar os detalhes da grade: ' + insertError.message };
         }
     }
 
@@ -195,8 +194,8 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
     const { data: allTurnos } = await supabase.from('turnos').select('*').eq('escola_id', horario.escola_id);
     const nomeTurno = (horario.turno as any).nome.toLowerCase();
     const turnoOposto = allTurnos?.find(t => {
-        if (nomeTurno.includes('matutino')) return t.nome.toLowerCase().includes('vespertino');
-        if (nomeTurno.includes('vespertino')) return t.nome.toLowerCase().includes('matutino');
+        if (nomeTurno.includes('matutino') || nomeTurno.includes('manhã')) return t.nome.toLowerCase().includes('vespertino') || t.nome.toLowerCase().includes('tarde');
+        if (nomeTurno.includes('vespertino') || nomeTurno.includes('tarde')) return t.nome.toLowerCase().includes('matutino') || t.nome.toLowerCase().includes('manhã');
         return false;
     }) || allTurnos?.find(t => t.id !== (horario.turno as any).id);
 
