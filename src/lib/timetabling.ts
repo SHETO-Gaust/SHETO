@@ -1,3 +1,4 @@
+
 import {
     type Turno,
     type TurmaComDados,
@@ -331,15 +332,15 @@ import {
               professor_nome: profNome,
               size,
               workload,
-              priority: 2,
+              priority: 0, // Prioridade MÁXIMA para NP (quanto menor, mais cedo aloca)
             });
           }
         }
       }
   
       blocos.sort((a, b) => {
-        if (b.workload !== a.workload) return b.workload - a.workload;
         if (a.priority !== b.priority) return a.priority - b.priority;
+        if (b.workload !== a.workload) return b.workload - a.workload;
         return b.size - a.size;
       });
   
@@ -352,14 +353,8 @@ import {
       forcarIndividuais: boolean
     ) => {
       const aulasGeradas: HorarioAulaGeradaAlgoritmo[] = [];
-  
-      // professor_key|dia -> [{ turno_id, aula_index }]
       const ocupacaoProfessoresPorDia = new Map<string, SlotOcupado[]>();
-  
-      // turma_id|dia -> [{ turno_id, aula_index }]
       const ocupacaoTurmasPorDia = new Map<string, SlotOcupado[]>();
-  
-      // índice exato para conflito idêntico e consulta rápida
       const ocupacaoTurmas = new Set<string>();
   
       const todosOsBlocos = construirTodosOsBlocos(forcarIndividuais);
@@ -384,28 +379,18 @@ import {
   
               if (b.professor_id) {
                 const prof = professoresById.get(b.professor_id);
-  
                 if (prof?.sem_preferencia_livre_docencia === false) {
                   for (let k = 0; k < b.size; k++) {
                     const periodo = getPeriodoDaAula(targetTurno, i + k);
-                    const bateLivreDocencia = prof.livre_docencia?.some(
-                      ld => ld.dia === d && ld.periodo === periodo
-                    );
-                    if (bateLivreDocencia) {
-                      weight += 10000;
-                      break;
-                    }
+                    const bateLD = prof.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodo);
+                    if (bateLD) weight += 10000;
                   }
                 }
-  
                 for (let k = 0; k < b.size; k++) {
                   const res = prof?.restricoes?.[targetTurno.id]?.[d]?.[i + k];
-                  if (res === 'planejamento') {
-                    weight += permitirUsoPlanejamento ? 10 : 5000;
-                  }
+                  if (res === 'planejamento') weight += permitirUsoPlanejamento ? 10 : 5000;
                 }
               }
-  
               slots.push({ d, i, weight });
             }
           }
@@ -413,107 +398,52 @@ import {
           slots.sort((a, b) => a.weight - b.weight);
   
           for (const slot of slots) {
-            const hitsLivreDocencia = slot.weight >= 10000;
-            const hitsPlanejamento = slot.weight >= 5000 && slot.weight < 10000;
-
-            // Se bater em Livre Docência e NÃO puder ignorar, pula.
-            if (hitsLivreDocencia && !ignorarLivreDocencia) continue;
-            // Se bater em Planejamento e NÃO puder ignorar, pula.
-            if (hitsPlanejamento && !permitirUsoPlanejamento) continue;
+            if (slot.weight >= 10000 && !ignorarLivreDocencia) continue;
+            if (slot.weight >= 5000 && !permitirUsoPlanejamento && slot.weight < 10000) continue;
   
             const { d, i } = slot;
             let livre = true;
   
             for (let k = 0; k < b.size; k++) {
               const idx = i + k;
-  
-              // 1) Conflito exato de turma no mesmo turno/slot
               const turmaSlotKey = `${b.turma_id}|${targetTurno.id}|${d}|${idx}`;
-              if (ocupacaoTurmas.has(turmaSlotKey)) {
-                livre = false;
-                break;
-              }
+              if (ocupacaoTurmas.has(turmaSlotKey)) { livre = false; break; }
   
-              // 2) Conflito de turma por sobreposição entre turnos
               const turmaDiaKey = `${b.turma_id}|${d}`;
               const ocupacoesTurmaNoDia = ocupacaoTurmasPorDia.get(turmaDiaKey) || [];
-  
               const conflitoTurma = ocupacoesTurmaNoDia.some(occ => {
                 const occTurno = turnosById.get(occ.turno_id);
                 return !!occTurno && slotsConflitam(targetTurno, idx, occTurno, occ.aula_index);
               });
+              if (conflitoTurma) { livre = false; break; }
   
-              if (conflitoTurma) {
-                livre = false;
-                break;
-              }
+              if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') { livre = false; break; }
   
-              // 3) Restrição da série
-              if (b.tipo === 'presencial') {
-                if (b.serie_restricoes?.[d]?.[idx] === 'proibido') {
-                  livre = false;
-                  break;
-                }
-              }
-  
-              // 4) Conflitos e restrições do professor
               if (b.professor_key) {
-                const professorDiaKey = `${b.professor_key}|${d}`;
+                const profKey = b.professor_key;
+                const profDiaKey = `${profKey}|${d}`;
+                const globalOcc = ocupacoesExistentesPorProfessorDia.get(profDiaKey) || [];
+                if (globalOcc.some(occ => {
+                    const occT = turnosById.get(occ.turno_id);
+                    return !!occT && slotsConflitam(targetTurno, idx, occT, occ.aula_index);
+                })) { livre = false; break; }
   
-                // 4.1 conflito global já publicado
-                const ocupacoesExistentesNoDia = ocupacoesExistentesPorProfessorDia.get(professorDiaKey) || [];
-                const conflitoGlobal = ocupacoesExistentesNoDia.some(occ => {
-                  const occTurno = turnosById.get(occ.turno_id);
-                  return !!occTurno && slotsConflitam(targetTurno, idx, occTurno, occ.aula_index);
-                });
+                const localOcc = ocupacaoProfessoresPorDia.get(profDiaKey) || [];
+                if (localOcc.some(occ => {
+                    const occT = turnosById.get(occ.turno_id);
+                    return !!occT && slotsConflitam(targetTurno, idx, occT, occ.aula_index);
+                })) { livre = false; break; }
   
-                if (conflitoGlobal) {
-                  livre = false;
-                  break;
-                }
-  
-                // 4.2 conflito local da mesma geração
-                const ocupacoesProfessorNoDia = ocupacaoProfessoresPorDia.get(professorDiaKey) || [];
-                const conflitoLocalProfessor = ocupacoesProfessorNoDia.some(occ => {
-                  const occTurno = turnosById.get(occ.turno_id);
-                  return !!occTurno && slotsConflitam(targetTurno, idx, occTurno, occ.aula_index);
-                });
-  
-                if (conflitoLocalProfessor) {
-                  livre = false;
-                  break;
-                }
-  
-                // 4.3 restrições individuais
                 const prof = professoresById.get(b.professor_id!);
-                const restricao = prof?.restricoes?.[targetTurno.id]?.[d]?.[idx];
-  
-                if (restricao === 'indisponivel') {
-                  livre = false;
-                  break;
-                }
-  
-                if (restricao === 'planejamento' && !permitirUsoPlanejamento) {
-                  livre = false;
-                  break;
-                }
-
-                // 4.4 Check rigoroso de Livre Docência
-                if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false) {
-                    const periodo = getPeriodoDaAula(targetTurno, idx);
-                    const bateLD = prof.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodo);
-                    if (bateLD) {
-                        livre = false;
-                        break;
-                    }
-                }
+                const res = prof?.restricoes?.[targetTurno.id]?.[d]?.[idx];
+                if (res === 'indisponivel') { livre = false; break; }
+                if (res === 'planejamento' && !permitirUsoPlanejamento) { livre = false; break; }
               }
             }
   
             if (livre) {
               for (let k = 0; k < b.size; k++) {
                 const idx = i + k;
-  
                 aulasGeradas.push({
                   turma_id: b.turma_id,
                   componente_id: b.componente_id,
@@ -523,79 +453,32 @@ import {
                   tipo: b.tipo,
                   turno_id: targetTurno.id,
                 });
-  
-                const turmaSlotKey = `${b.turma_id}|${targetTurno.id}|${d}|${idx}`;
-                ocupacaoTurmas.add(turmaSlotKey);
-  
-                const turmaDiaKey = `${b.turma_id}|${d}`;
-                pushMapArray(ocupacaoTurmasPorDia, turmaDiaKey, {
-                  turno_id: targetTurno.id,
-                  aula_index: idx,
-                });
-  
-                if (b.professor_key) {
-                  const professorDiaKey = `${b.professor_key}|${d}`;
-                  pushMapArray(ocupacaoProfessoresPorDia, professorDiaKey, {
-                    turno_id: targetTurno.id,
-                    aula_index: idx,
-                  });
-                }
+                const tSlotKey = `${b.turma_id}|${targetTurno.id}|${d}|${idx}`;
+                ocupacaoTurmas.add(tSlotKey);
+                pushMapArray(ocupacaoTurmasPorDia, `${b.turma_id}|${d}`, { turno_id: targetTurno.id, aula_index: idx });
+                if (b.professor_key) pushMapArray(ocupacaoProfessoresPorDia, `${b.professor_key}|${d}`, { turno_id: targetTurno.id, aula_index: idx });
               }
-  
               alocado = true;
               break;
             }
           }
         }
-  
         if (alocado) b.placed = true;
       }
-  
       const pendentes = todosOsBlocos.filter(b => !b.placed);
-  
-      return {
-        success: pendentes.length === 0,
-        aulas: aulasGeradas,
-        pendentes,
-      };
+      return { success: pendentes.length === 0, aulas: aulasGeradas, pendentes };
     };
   
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const currentProgress = globalProgress + (attempt / maxAttempts);
+      const curProg = globalProgress + (attempt / maxAttempts);
+      const permitirPlan = force || curProg > 0.15;
+      const ignorarLD = force || curProg > 0.90;
+      const forcarIndiv = force || curProg > 0.70;
   
-      // Relaxamento gradual e focado
-      const permitirUsoPlanejamento = force || currentProgress > 0.15;
-      const ignorarLivreDocencia = force || currentProgress > 0.90; // Respeito quase total à folga
-      const forcarIndividuais = force || currentProgress > 0.70;
-  
-      const res = executarTentativa(
-        permitirUsoPlanejamento,
-        ignorarLivreDocencia,
-        forcarIndividuais
-      );
-  
-      if (res.success) {
-        return {
-          success: true,
-          aulas: res.aulas,
-          attemptsMade: attempt + 1,
-        };
-      }
+      const res = executarTentativa(permitirPlan, ignorarLD, forcarIndiv);
+      if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
     }
   
     const resFalha = executarTentativa(true, true, true);
-  
-    let errorMsg = 'Capacidade Esgotada: ';
-    if (resFalha.pendentes.length > 0) {
-      const p = resFalha.pendentes[0];
-      errorMsg += `O professor ${p.professor_nome} (${p.componente_nome}) está sem horários livres no contraturno para a aula ${p.tipo}. `;
-      errorMsg += 'Isso acontece quando o docente já tem todas as janelas ocupadas por aulas presenciais em outros turnos.';
-    }
-  
-    return {
-      success: false,
-      aulas: resFalha.aulas,
-      attemptsMade: maxAttempts,
-      error: errorMsg,
-    };
+    return { success: false, aulas: resFalha.aulas, attemptsMade: maxAttempts, error: 'A capacidade do professor ou da turma foi excedida neste slot.' };
   }

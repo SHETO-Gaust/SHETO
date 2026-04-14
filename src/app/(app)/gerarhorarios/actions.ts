@@ -1,3 +1,4 @@
+
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
@@ -110,6 +111,7 @@ export async function gerarLoteHorario(
 export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: string, aulas: any[]) {
     const supabase = await createClient();
     
+    // 1. Criar cabeçalho do horário
     const { data: novoHorario, error: hError } = await supabase
         .from('horarios')
         .insert({
@@ -123,27 +125,38 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
     if (hError) return { error: `Falha ao criar registro do horário: ${hError.message}` };
 
     if (aulas.length > 0) {
-        // Higienização RIGOROSA: 
-        // 1. Enviamos apenas colunas reais.
-        // 2. Garantimos que IDs vazios sejam NULL (importante para professor_id opcional).
-        // 3. Incluímos obrigatoriamente o turno_id para cada aula.
-        const aulasToInsert = aulas.map(a => ({ 
-            horario_id: novoHorario.id, 
-            turma_id: a.turma_id,
-            componente_id: a.componente_id,
-            professor_id: (a.professor_id && a.professor_id !== '' && a.professor_id !== 'none') ? a.professor_id : null,
-            dia_semana: a.dia_semana,
-            aula_index: a.aula_index,
-            tipo: a.tipo,
-            turno_id: a.turno_id || turnoId // Correção: repassando o ID do turno para a aula
-        }));
+        // 2. Higienização e Unicidade Interna
+        // Garantimos que não existam duas aulas para a mesma turma/dia/aula dentro do rascunho
+        const uniqueMap = new Map();
+        
+        const aulasToInsert = [];
+        for (const a of aulas) {
+            const key = `${a.turma_id}|${a.dia_semana}|${a.aula_index}|${a.turno_id || turnoId}`;
+            if (!uniqueMap.has(key)) {
+                uniqueMap.set(key, true);
+                aulasToInsert.push({ 
+                    horario_id: novoHorario.id, 
+                    turma_id: a.turma_id,
+                    componente_id: a.componente_id,
+                    professor_id: (a.professor_id && a.professor_id !== '' && a.professor_id !== 'none') ? a.professor_id : null,
+                    dia_semana: a.dia_semana,
+                    aula_index: a.aula_index,
+                    tipo: a.tipo,
+                    turno_id: a.turno_id || turnoId
+                });
+            }
+        }
 
         const { error: insertError } = await supabase.from('horario_aulas').insert(aulasToInsert);
         
         if (insertError) {
             console.error('Erro detalhado no salvamento:', insertError);
-            // Rollback manual do cabeçalho do horário
             await supabase.from('horarios').delete().eq('id', novoHorario.id);
+            
+            if (insertError.code === '23505') {
+                return { error: `O banco de dados impediu o salvamento deste rascunho devido a um conflito de horários com uma grade já existente. Por favor, execute o script SQL de correção de índices ou delete rascunhos antigos deste turno.` };
+            }
+            
             return { error: `Erro técnico ao salvar as aulas: ${insertError.message}` };
         }
     }
@@ -168,7 +181,10 @@ export async function consolidarHorario(id: string) {
 export async function reverterParaRascunho(id: string) {
     const supabase = await createClient();
     const { error } = await supabase.from('horarios').update({ status: 'em_rascunho' }).eq('id', id);
-    if (error) return { error: 'Não foi possível reverter para rascunho.' };
+    if (error) {
+        console.error('Erro ao reverter:', error);
+        return { error: 'Não foi possível reverter para rascunho.' };
+    }
     revalidatePath('/gerarhorarios');
     return { success: true };
 }
