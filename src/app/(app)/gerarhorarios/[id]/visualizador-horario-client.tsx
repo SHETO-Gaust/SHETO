@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useTransition, useEffect } from 'react';
@@ -101,6 +100,30 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
   }, [turmas, professores, diasAtivos, forceTeacherId]);
 
   const isIntegral = horario.turno.nome.toLowerCase().includes('integral');
+
+  const handleConsolidar = () => {
+      startAction(async () => {
+          const result = await consolidarHorario(horario.id);
+          if (result.error) {
+              toast({ title: 'Erro ao publicar', description: result.error, variant: 'destructive' });
+          } else {
+              toast({ title: 'Horário Publicado!', description: 'Esta grade agora é a oficial para consulta pública.' });
+              window.location.reload();
+          }
+      });
+  };
+
+  const handleReverter = () => {
+      startAction(async () => {
+          const result = await reverterParaRascunho(horario.id);
+          if (result.error) {
+              toast({ title: 'Erro ao reverter', description: result.error, variant: 'destructive' });
+          } else {
+              toast({ title: 'Rascunho Reativado', description: 'O horário não é mais exibido publicamente.' });
+              window.location.reload();
+          }
+      });
+  };
 
   const GradeHoraria = ({ targetId, isProfessorView, label, turnoInfo, dataset, tipo }: any) => {
     if (!turnoInfo) return null;
@@ -238,45 +261,34 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
         ...(horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId) || [])
     ];
 
-    // Detecção dinâmica de turnos físicos envolvidos para este professor
     const turnosEnvolvidos = useMemo(() => {
         const turnosMap = new Map<string, Turno>();
         
         allTeacherAulas.forEach(aula => {
             let turnoFisico: Turno | undefined;
-            
-            // Se for do horário principal atual
             if (aula.horario_id === horario.id) {
-                // Se for NP, acontece no oposto. Se for presencial, no próprio.
                 turnoFisico = aula.tipo === 'nao_presencial' ? horario.turno_oposto : horario.turno;
             } else {
-                // Se for de outro horário publicado, usamos o turno que veio no objeto 'horario' anexado à aula
                 const baseTurno = (aula as any).horario?.turno;
                 if (baseTurno) {
-                    // Nota: Aqui assumimos que outras_aulas_publicadas já mapeiam para o turno correto
-                    // conforme implementado no actions.ts do visualizador operacional
                     turnoFisico = baseTurno;
                 }
             }
-            
             if (turnoFisico) {
                 turnosMap.set(turnoFisico.id, turnoFisico);
             }
         });
 
-        // Adiciona turnos onde há restrições de planejamento ou livre docência, 
-        // mesmo que não haja aulas, para manter a fidelidade da agenda
         const possibleBaseTurnos = [horario.turno];
         if (horario.turno_oposto) possibleBaseTurnos.push(horario.turno_oposto);
         
         possibleBaseTurnos.forEach(t => {
             const hasRestricao = prof.restricoes?.[t.id] && Object.keys(prof.restricoes[t.id]).length > 0;
             const hasLivreDocencia = prof.livre_docencia?.some(ld => {
-                // Verifica se o período da LD coincide com este turno
                 const nomeT = t.nome.toLowerCase();
                 if (ld.periodo === 'matutino' && (nomeT.includes('matutino') || nomeT.includes('integral'))) return true;
                 if (ld.periodo === 'vespertino' && (nomeT.includes('vespertino') || nomeT.includes('integral'))) return true;
-                if (ld.periodo === 'noturno' && nomeT.includes('noturno')) return true;
+                if (ld.periodo === 'noturno') return nomeT.includes('noturno');
                 return false;
             });
 
@@ -417,6 +429,30 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-4 bg-muted/20 p-4 rounded-xl border print:hidden">
+          <div className="flex-1">
+              <span className="text-xs font-bold uppercase text-muted-foreground block mb-1">Status do Horário</span>
+              {horario.status === 'publicado' ? (
+                  <div className="flex items-center gap-2">
+                      <Badge className="bg-green-500 text-white gap-1"><CheckCircle2 className="h-3 w-3"/> Oficializado (Público)</Badge>
+                      <Button variant="outline" size="sm" onClick={handleReverter} disabled={isActionPending} className="h-7 text-[10px] font-bold">
+                          {isActionPending ? <Loader2 className="animate-spin h-3 w-3"/> : <Undo2 className="h-3 w-3 mr-1"/>}
+                          Reverter para Rascunho
+                      </Button>
+                  </div>
+              ) : (
+                  <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">Rascunho (Privado)</Badge>
+                      <Button size="sm" onClick={handleConsolidar} disabled={isActionPending} className="h-7 text-[10px] font-bold bg-green-600 hover:bg-green-700">
+                          {isActionPending ? <Loader2 className="animate-spin h-3 w-3"/> : <Save className="h-3 w-3 mr-1"/>}
+                          Publicar Grade Oficial
+                      </Button>
+                  </div>
+              )}
+          </div>
+          <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
+      </div>
+
       <Card className="print:border-none print:shadow-none">
         <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6 print:hidden">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="w-auto">
@@ -428,7 +464,6 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
           </Tabs>
           
           <div className="flex flex-wrap items-center gap-4">
-            <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
             {viewMode === 'single' && (
                 <Select value={selectedTurmaId} onValueChange={setSelectedTurmaId}>
                     <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Turma" /></SelectTrigger>

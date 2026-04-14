@@ -69,11 +69,8 @@ export async function gerarLoteHorario(
         return { error: `Nenhuma turma vinculada ao turno "${turnoData.nome}". Verifique o Passo 6.` };
     }
 
-    // Busca exaustiva por CPF para capturar TODAS as ocupações do professor na rede
     const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
     const allTeacherIds = allProfessores?.map(p => p.id) || [];
-    
-    // Além dos IDs locais, buscamos outros registros que compartilham o mesmo CPF
     const { data: globalProfessors } = await supabase.from('professores').select('id').in('cpf', cpfs);
     const professorIdsGlobais = Array.from(new Set([...allTeacherIds, ...(globalProfessors?.map(p => p.id) || [])]));
 
@@ -93,7 +90,6 @@ export async function gerarLoteHorario(
         .in('professor_id', professorIdsGlobais)
         .eq('horarios.status', 'publicado');
 
-    // Remove ocupações do próprio turno que estamos gerando
     const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
 
     const result = gerarHorarioAlgoritmico(
@@ -113,6 +109,7 @@ export async function gerarLoteHorario(
 
 export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: string, aulas: any[]) {
     const supabase = await createClient();
+    
     const { data: novoHorario, error: hError } = await supabase
         .from('horarios')
         .insert({
@@ -126,7 +123,17 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
     if (hError) return { error: 'Falha ao criar registro.' };
 
     if (aulas.length > 0) {
-        const aulasToInsert = aulas.map(a => ({ horario_id: novoHorario.id, ...a }));
+        // Higienização: Enviamos apenas colunas que existem no banco de dados
+        const aulasToInsert = aulas.map(a => ({ 
+            horario_id: novoHorario.id, 
+            turma_id: a.turma_id,
+            componente_id: a.componente_id,
+            professor_id: a.professor_id,
+            dia_semana: a.dia_semana,
+            aula_index: a.aula_index,
+            tipo: a.tipo
+        }));
+
         const { error: insertError } = await supabase.from('horario_aulas').insert(aulasToInsert);
         if (insertError) {
             await supabase.from('horarios').delete().eq('id', novoHorario.id);
@@ -136,26 +143,6 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
 
     revalidatePath('/gerarhorarios');
     return { data: novoHorario };
-}
-
-export async function swapAulasManualmente(aula1Id: string, dia1: string, idx1: number, aula2Id: string | null, dia2: string, idx2: number) {
-    const supabase = await createClient();
-
-    try {
-        if (aula2Id) {
-            await supabase.from('horario_aulas').update({ dia_semana: 'temp', aula_index: -99 }).eq('id', aula1Id);
-            await supabase.from('horario_aulas').update({ dia_semana: dia1, aula_index: idx1 }).eq('id', aula2Id);
-            await supabase.from('horario_aulas').update({ dia_semana: dia2, aula_index: idx2 }).eq('id', aula1Id);
-        } else {
-            await supabase.from('horario_aulas').update({ dia_semana: dia2, aula_index: idx2 }).eq('id', aula1Id);
-        }
-
-        revalidatePath('/gerarhorarios');
-        return { success: true };
-    } catch (error) {
-        console.error('Erro no swap de aulas:', error);
-        return { error: 'Falha ao processar a troca de horários.' };
-    }
 }
 
 export async function consolidarHorario(id: string) {
