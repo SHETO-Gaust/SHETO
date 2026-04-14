@@ -126,6 +126,7 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
         // Higienização RIGOROSA: 
         // 1. Enviamos apenas colunas reais.
         // 2. Garantimos que IDs vazios sejam NULL (importante para professor_id opcional).
+        // 3. Incluímos obrigatoriamente o turno_id para cada aula.
         const aulasToInsert = aulas.map(a => ({ 
             horario_id: novoHorario.id, 
             turma_id: a.turma_id,
@@ -133,7 +134,8 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
             professor_id: (a.professor_id && a.professor_id !== '' && a.professor_id !== 'none') ? a.professor_id : null,
             dia_semana: a.dia_semana,
             aula_index: a.aula_index,
-            tipo: a.tipo
+            tipo: a.tipo,
+            turno_id: a.turno_id || turnoId // Correção: repassando o ID do turno para a aula
         }));
 
         const { error: insertError } = await supabase.from('horario_aulas').insert(aulasToInsert);
