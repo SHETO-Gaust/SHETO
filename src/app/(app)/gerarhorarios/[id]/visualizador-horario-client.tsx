@@ -109,6 +109,8 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
     if (diasAtivos.length > 0 && !selectedDayId) setSelectedDayId(diasAtivos[0].id);
   }, [turmas, professores, diasAtivos, forceTeacherId]);
 
+  const isIntegral = horario.turno.nome.toLowerCase().includes('integral');
+
   const handleConsolidar = () => {
       startAction(async () => {
           const result = await consolidarHorario(horario.id);
@@ -367,11 +369,10 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
 
   if (viewMode === 'none') {
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 py-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-8">
             {[
                 { id: 'single', label: 'Turma por Turma', icon: Layout, desc: 'Foco em uma sala individual.' },
                 { id: 'all', label: 'Todas as Turmas', icon: Layers, desc: 'Lista vertical completa.' },
-                { id: 'teachers', label: 'Por Professor', icon: User, desc: 'Agenda individual do docente.' },
                 { id: 'by-day', label: 'Visão por Dia', icon: CalendarDays, desc: 'Tabela operacional diária.' }
             ].map(opt => (
                 <Card 
@@ -400,7 +401,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                 <TabsList className="h-10">
                     <TabsTrigger value="single" className="gap-2"><Layout className="h-3.5 w-3.5" /> Turmas</TabsTrigger>
                     <TabsTrigger value="all" className="gap-2"><Layers className="h-3.5 w-3.5" /> Todas</TabsTrigger>
-                    <TabsTrigger value="teachers" className="gap-2"><User className="h-3.5 w-3.5" /> Docentes</TabsTrigger>
+                    {/* Gatilho Docentes removido da visualização por turmas por redundância */}
                     <TabsTrigger value="by-day" className="gap-2"><CalendarDays className="h-3.5 w-3.5" /> Por Dia</TabsTrigger>
                 </TabsList>
           </Tabs>
@@ -426,7 +427,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
           {viewMode === 'single' ? (
             <div className="space-y-8 animate-in fade-in duration-500">
                 <GradeHoraria targetId={selectedTurmaId} label="Grade Regular" turnoInfo={horario.turno} tipo="presencial" />
-                <GradeHoraria targetId={selectedTurmaId} label="Grade do Contraturno" turnoInfo={horario.turno_oposto} tipo="nao_presencial" />
+                {!isIntegral && <GradeHoraria targetId={selectedTurmaId} label="Grade do Contraturno" turnoInfo={horario.turno_oposto} tipo="nao_presencial" />}
             </div>
           ) : viewMode === 'all' ? (
             <div className="space-y-16 animate-in fade-in duration-500">
@@ -434,7 +435,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                     <div key={turma.id} className="space-y-6 break-after-page">
                         <h2 className="text-xl font-black uppercase">TURMA {turma.nome}</h2>
                         <GradeHoraria targetId={turma.id} label="Grade Regular" turnoInfo={horario.turno} tipo="presencial" />
-                        <GradeHoraria targetId={turma.id} label="Grade do Contraturno" turnoInfo={horario.turno_oposto} tipo="nao_presencial" />
+                        {!isIntegral && <GradeHoraria targetId={turma.id} label="Grade do Contraturno" turnoInfo={horario.turno_oposto} tipo="nao_presencial" />}
                     </div>
                 ))}
             </div>
