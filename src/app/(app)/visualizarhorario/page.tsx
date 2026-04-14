@@ -1,86 +1,51 @@
 
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/lib/types";
-import { getTurnosAtivos } from "./actions";
-import { AlertTriangle, Search } from "lucide-react";
+import { redirect } from "next/navigation";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Search, AlertTriangle } from "lucide-react";
 import { VisualizadorOperacionalClient } from "./visualizador-operacional-client";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function VisualizarHorarioPage() {
   const supabase = await createClient();
-
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Erro</CardTitle>
-          <CardDescription>Usuário não encontrado.</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
+  if (!user) redirect('/login');
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('ue')
     .eq('id', user.id)
-    .single<Pick<Profile, 'ue'>>();
+    .single();
 
   const escolaId = profile?.ue;
 
   if (!escolaId) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><AlertTriangle /> Nenhuma Escola Selecionada</CardTitle>
-          <CardDescription>
-            Por favor, selecione uma escola no menu superior para visualizar os horários oficiais.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-  
-  const { data: turnosAtivos, error } = await getTurnosAtivos(escolaId);
-
-  if (error) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><AlertTriangle /> Erro ao carregar</CardTitle>
-                <CardDescription>{error}</CardDescription>
-            </CardHeader>
+      <div className="p-6">
+        <Card className="border-orange-200 bg-orange-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-800"><AlertTriangle /> Nenhuma Escola Selecionada</CardTitle>
+            <CardDescription className="text-orange-700">
+              Selecione uma unidade escolar no menu superior para visualizar os horários oficiais.
+            </CardDescription>
+          </CardHeader>
         </Card>
-    );
-  }
-
-  if (!turnosAtivos || turnosAtivos.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><AlertTriangle /> Nenhum Turno Ativo</CardTitle>
-          <CardDescription>
-            Não há turnos ativos cadastrados. Ative pelo menos um turno para visualizar horários.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
         <div className="space-y-1 print:hidden">
-            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
                 <Search className="h-6 w-6 text-primary" />
                 Passo 8: Visualizar Horário Oficial
             </h1>
-            <p className="text-sm text-muted-foreground">Consulte as grades horárias que já foram consolidadas e estão em vigor na unidade escolar.</p>
+            <p className="text-sm text-muted-foreground">Portal de consulta da unidade escolar. Selecione o modo de visualização desejado.</p>
         </div>
         
-        <VisualizadorOperacionalClient turnosAtivos={turnosAtivos} />
+        <VisualizadorOperacionalClient escolaId={escolaId} />
         
         <StepNavigation currentStep={8} />
     </div>
