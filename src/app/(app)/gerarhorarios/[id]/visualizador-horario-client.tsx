@@ -5,7 +5,7 @@ import { useState, useMemo, useTransition, useEffect } from 'react';
 import type { HorarioCompleto, Turno, LivreDocenciaPeriodo } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee, Layers, CalendarDays, Users } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -60,15 +60,6 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
   const [isActionPending, startAction] = useTransition();
   const { toast } = useToast();
 
-  const [selectedSlot, setSelectedSlot] = useState<{ 
-    id: string, 
-    dia: string, 
-    index: number, 
-    professorId: string | null,
-    componenteNome: string,
-    turmaId: string
-  } | null>(null);
-
   const turmas = useMemo(() => {
     const map = new Map();
     horario.aulas.forEach(aula => {
@@ -110,30 +101,6 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
   }, [turmas, professores, diasAtivos, forceTeacherId]);
 
   const isIntegral = horario.turno.nome.toLowerCase().includes('integral');
-
-  const handleConsolidar = () => {
-      startAction(async () => {
-          const result = await consolidarHorario(horario.id);
-          if (result.error) {
-              toast({ title: 'Erro ao publicar', description: result.error, variant: 'destructive' });
-          } else {
-              toast({ title: 'Horário Publicado!', description: 'Esta grade agora é a oficial para este turno.' });
-              window.location.reload();
-          }
-      });
-  };
-
-  const handleReverter = () => {
-      startAction(async () => {
-          const result = await reverterParaRascunho(horario.id);
-          if (result.error) {
-              toast({ title: 'Erro ao reverter', description: result.error, variant: 'destructive' });
-          } else {
-              toast({ title: 'Publicação Cancelada', description: 'O horário voltou ao estado de rascunho.' });
-              window.location.reload();
-          }
-      });
-  }
 
   const GradeHoraria = ({ targetId, isProfessorView, label, turnoInfo, dataset, tipo }: any) => {
     if (!turnoInfo) return null;
@@ -271,16 +238,55 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
         ...(horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId) || [])
     ];
 
+    // Detecção dinâmica de turnos físicos envolvidos para este professor
     const turnosEnvolvidos = useMemo(() => {
         const turnosMap = new Map<string, Turno>();
-        turnosMap.set(horario.turno.id, horario.turno);
-        if (horario.turno_oposto) turnosMap.set(horario.turno_oposto.id, horario.turno_oposto);
-        horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId).forEach(a => {
-            const t = (a as any).horario?.turno;
-            if (t) turnosMap.set(t.id, t);
+        
+        allTeacherAulas.forEach(aula => {
+            let turnoFisico: Turno | undefined;
+            
+            // Se for do horário principal atual
+            if (aula.horario_id === horario.id) {
+                // Se for NP, acontece no oposto. Se for presencial, no próprio.
+                turnoFisico = aula.tipo === 'nao_presencial' ? horario.turno_oposto : horario.turno;
+            } else {
+                // Se for de outro horário publicado, usamos o turno que veio no objeto 'horario' anexado à aula
+                const baseTurno = (aula as any).horario?.turno;
+                if (baseTurno) {
+                    // Nota: Aqui assumimos que outras_aulas_publicadas já mapeiam para o turno correto
+                    // conforme implementado no actions.ts do visualizador operacional
+                    turnoFisico = baseTurno;
+                }
+            }
+            
+            if (turnoFisico) {
+                turnosMap.set(turnoFisico.id, turnoFisico);
+            }
         });
+
+        // Adiciona turnos onde há restrições de planejamento ou livre docência, 
+        // mesmo que não haja aulas, para manter a fidelidade da agenda
+        const possibleBaseTurnos = [horario.turno];
+        if (horario.turno_oposto) possibleBaseTurnos.push(horario.turno_oposto);
+        
+        possibleBaseTurnos.forEach(t => {
+            const hasRestricao = prof.restricoes?.[t.id] && Object.keys(prof.restricoes[t.id]).length > 0;
+            const hasLivreDocencia = prof.livre_docencia?.some(ld => {
+                // Verifica se o período da LD coincide com este turno
+                const nomeT = t.nome.toLowerCase();
+                if (ld.periodo === 'matutino' && (nomeT.includes('matutino') || nomeT.includes('integral'))) return true;
+                if (ld.periodo === 'vespertino' && (nomeT.includes('vespertino') || nomeT.includes('integral'))) return true;
+                if (ld.periodo === 'noturno' && nomeT.includes('noturno')) return true;
+                return false;
+            });
+
+            if (hasRestricao || hasLivreDocencia) {
+                turnosMap.set(t.id, t);
+            }
+        });
+
         return Array.from(turnosMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
-    }, [professorId]);
+    }, [professorId, allTeacherAulas, prof]);
 
     return (
         <div className="space-y-8 pt-4 break-after-page print:pt-0">
@@ -293,15 +299,31 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                     <p className="text-sm text-muted-foreground">Grade Docente Consolidada</p>
                 </div>
             </div>
-            {turnosEnvolvidos.map(turno => {
-                const aulasDesteTurno = allTeacherAulas.filter(a => {
-                    if (a.horario_id === horario.id) {
-                        return a.tipo === 'nao_presencial' ? turno.id === horario.turno_oposto?.id : turno.id === horario.turno_id;
-                    }
-                    return (a as any).horario?.turno_id === turno.id;
-                });
-                return <GradeHoraria key={turno.id} targetId={professorId} isProfessorView={true} label={`Turno: ${turno.nome}`} turnoInfo={turno} dataset={aulasDesteTurno} />;
-            })}
+            
+            {turnosEnvolvidos.length > 0 ? (
+                turnosEnvolvidos.map(turno => {
+                    const aulasDesteTurno = allTeacherAulas.filter(a => {
+                        if (a.horario_id === horario.id) {
+                            return a.tipo === 'nao_presencial' ? turno.id === horario.turno_oposto?.id : turno.id === horario.turno_id;
+                        }
+                        return (a as any).horario?.turno_id === turno.id;
+                    });
+                    return (
+                        <GradeHoraria 
+                            key={turno.id} 
+                            targetId={professorId} 
+                            isProfessorView={true} 
+                            label={`Turno: ${turno.nome}`} 
+                            turnoInfo={turno} 
+                            dataset={aulasDesteTurno} 
+                        />
+                    );
+                })
+            ) : (
+                <div className="p-12 text-center border-2 border-dashed rounded-2xl bg-muted/5">
+                    <p className="text-muted-foreground">Este professor não possui aulas ou restrições em nenhum turno publicado.</p>
+                </div>
+            )}
         </div>
     );
   }
@@ -401,7 +423,6 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                 <TabsList className="h-10">
                     <TabsTrigger value="single" className="gap-2"><Layout className="h-3.5 w-3.5" /> Turmas</TabsTrigger>
                     <TabsTrigger value="all" className="gap-2"><Layers className="h-3.5 w-3.5" /> Todas</TabsTrigger>
-                    {/* Gatilho Docentes removido da visualização por turmas por redundância */}
                     <TabsTrigger value="by-day" className="gap-2"><CalendarDays className="h-3.5 w-3.5" /> Por Dia</TabsTrigger>
                 </TabsList>
           </Tabs>
