@@ -61,7 +61,7 @@ export async function gerarLoteHorario(
     const turnoData = turnoResult.data;
 
     const turmasDoTurno = allTurmas?.filter(t => {
-        const s = Array.isArray(t.serie) ? t.serie[0] : t.serie;
+        const s = t.serie;
         return s?.turno_id === turnoId;
     }) || [];
 
@@ -120,24 +120,29 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
         })
         .select().single();
 
-    if (hError) return { error: 'Falha ao criar registro.' };
+    if (hError) return { error: `Falha ao criar registro do horário: ${hError.message}` };
 
     if (aulas.length > 0) {
-        // Higienização: Enviamos apenas colunas que existem no banco de dados
+        // Higienização RIGOROSA: 
+        // 1. Enviamos apenas colunas reais.
+        // 2. Garantimos que IDs vazios sejam NULL (importante para professor_id opcional).
         const aulasToInsert = aulas.map(a => ({ 
             horario_id: novoHorario.id, 
             turma_id: a.turma_id,
             componente_id: a.componente_id,
-            professor_id: a.professor_id,
+            professor_id: (a.professor_id && a.professor_id !== '' && a.professor_id !== 'none') ? a.professor_id : null,
             dia_semana: a.dia_semana,
             aula_index: a.aula_index,
             tipo: a.tipo
         }));
 
         const { error: insertError } = await supabase.from('horario_aulas').insert(aulasToInsert);
+        
         if (insertError) {
+            console.error('Erro detalhado no salvamento:', insertError);
+            // Rollback manual do cabeçalho do horário
             await supabase.from('horarios').delete().eq('id', novoHorario.id);
-            return { error: 'Erro ao salvar a grade.' };
+            return { error: `Erro técnico ao salvar as aulas: ${insertError.message}` };
         }
     }
 
