@@ -385,7 +385,7 @@ import {
               if (b.professor_id) {
                 const prof = professoresById.get(b.professor_id);
   
-                if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false) {
+                if (prof?.sem_preferencia_livre_docencia === false) {
                   for (let k = 0; k < b.size; k++) {
                     const periodo = getPeriodoDaAula(targetTurno, i + k);
                     const bateLivreDocencia = prof.livre_docencia?.some(
@@ -413,9 +413,13 @@ import {
           slots.sort((a, b) => a.weight - b.weight);
   
           for (const slot of slots) {
-            if (slot.weight >= 5000 && !ignorarLivreDocencia && !permitirUsoPlanejamento) {
-              continue;
-            }
+            const hitsLivreDocencia = slot.weight >= 10000;
+            const hitsPlanejamento = slot.weight >= 5000 && slot.weight < 10000;
+
+            // Se bater em Livre Docência e NÃO puder ignorar, pula.
+            if (hitsLivreDocencia && !ignorarLivreDocencia) continue;
+            // Se bater em Planejamento e NÃO puder ignorar, pula.
+            if (hitsPlanejamento && !permitirUsoPlanejamento) continue;
   
             const { d, i } = slot;
             let livre = true;
@@ -493,6 +497,16 @@ import {
                   livre = false;
                   break;
                 }
+
+                // 4.4 Check rigoroso de Livre Docência
+                if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false) {
+                    const periodo = getPeriodoDaAula(targetTurno, idx);
+                    const bateLD = prof.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodo);
+                    if (bateLD) {
+                        livre = false;
+                        break;
+                    }
+                }
               }
             }
   
@@ -549,9 +563,10 @@ import {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const currentProgress = globalProgress + (attempt / maxAttempts);
   
-      const permitirUsoPlanejamento = force || currentProgress > 0.10;
-      const ignorarLivreDocencia = force || currentProgress > 0.35;
-      const forcarIndividuais = force || currentProgress > 0.65;
+      // Relaxamento gradual e focado
+      const permitirUsoPlanejamento = force || currentProgress > 0.15;
+      const ignorarLivreDocencia = force || currentProgress > 0.90; // Respeito quase total à folga
+      const forcarIndividuais = force || currentProgress > 0.70;
   
       const res = executarTentativa(
         permitirUsoPlanejamento,
