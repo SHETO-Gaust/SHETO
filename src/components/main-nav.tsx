@@ -14,6 +14,10 @@ import {
   Layers,
   Search,
   UserX,
+<<<<<<< HEAD
+=======
+  Wand2,
+>>>>>>> 3bc12c2 (teste)
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -34,13 +38,22 @@ const allLinks = [
   { href: '/gerarhorarios', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios', step: 7 },
   { href: '/visualizarhorario', label: 'Visualizar Horário', icon: Search, module: 'horarios', group: 'horarios', step: 8 },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios', step: 9 },
+<<<<<<< HEAD
   { href: '/substituicoes', label: 'Substituições', icon: UserX, module: 'horarios', group: 'horarios', step: 10 },
+=======
+  { href: '/refinodehorario', label: 'Refino de Horário', icon: Wand2, module: 'horarios', group: 'detalhes', step: 10 },
+  { href: '/substituicoes', label: 'Substituições', icon: UserX, module: 'horarios', group: 'detalhes', step: 11 },
+>>>>>>> 3bc12c2 (teste)
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
 ];
 
 const linkGroups = [
     { id: 'dados-horario', label: 'Dados do Horário' },
     { id: 'horarios', label: 'Horários' },
+<<<<<<< HEAD
+=======
+    { id: 'detalhes', label: 'Detalhes' },
+>>>>>>> 3bc12c2 (teste)
     { id: 'management', label: 'Gestão' },
 ];
 
@@ -53,7 +66,12 @@ export function MainNav({ profile }: { profile: Profile | null }) {
       
       const groupModules: {[key: string]: string[]} = {
         'dados-horario': ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'],
+<<<<<<< HEAD
         'horarios': ['horarios']
+=======
+        'horarios': ['horarios'],
+        'detalhes': ['horarios']
+>>>>>>> 3bc12c2 (teste)
       };
 
       for (const group in groupModules) {

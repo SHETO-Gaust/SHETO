@@ -5,7 +5,11 @@ import type { Turno, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+<<<<<<< HEAD
 import { Ban, PenSquare, Loader2, CheckCircle2, Send, Info, Star, MessageSquare } from 'lucide-react';
+=======
+import { Ban, PenSquare, Loader2, CheckCircle2, Send, Info, Star, MessageSquare, CalendarDays } from 'lucide-react';
+>>>>>>> 3bc12c2 (teste)
 import { cn } from '@/lib/utils';
 import { responderSolicitacao } from '@/app/(app)/professores/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +39,10 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
   const [restricoes, setRestricoes] = useState<any>(professor.restricoes || {});
   const [livreDocencia, setLivreDocencia] = useState<LivreDocenciaItem[]>(professor.livre_docencia || []);
   const [semPreferencia, setSemPreferencia] = useState(professor.sem_preferencia_livre_docencia || false);
+<<<<<<< HEAD
+=======
+  const [diasPreferidos, setDiasPreferidos] = useState<string[]>(professor.dias_preferidos || []);
+>>>>>>> 3bc12c2 (teste)
   const [justificativa, setJustificativa] = useState('');
   const [isPending, startTransition] = useTransition();
   const [submitted, setSubmitted] = useState(false);
@@ -101,7 +109,11 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
       }
 
       startTransition(async () => {
+<<<<<<< HEAD
           const result = await responderSolicitacao(token, restricoes, semPreferencia ? [] : livreDocencia, semPreferencia, justificativa);
+=======
+          const result = await responderSolicitacao(token, restricoes, semPreferencia ? [] : livreDocencia, semPreferencia, justificativa, diasPreferidos);
+>>>>>>> 3bc12c2 (teste)
           if (result.error) {
               toast({ title: 'Erro ao enviar', description: result.error, variant: 'destructive' });
           } else {
@@ -135,9 +147,16 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
           <div className="space-y-2">
               <p className="font-bold text-blue-900 text-lg">Preferências e Regras</p>
               <ul className="text-blue-800 text-sm space-y-2 opacity-90">
+<<<<<<< HEAD
                   <li>• <strong>Livre Docência:</strong> Você deve escolher obrigatoriamente <strong>2 meios períodos</strong> (blocos de Manhã, Tarde ou Noite) livres ou optar por <strong>Sem Preferência</strong>.</li>
                   <li>• <strong>Indisponibilidade:</strong> Clique na grade para marcar horários que você possui outros vínculos ou restrições totais.</li>
                   <li>• <strong>Nota:</strong> Estas informações são <strong>sugestões</strong>. A coordenação priorizará seu atendimento, mas a grade final depende das necessidades da escola.</li>
+=======
+                  <li>• <strong>Livre Docência:</strong> Escolha obrigatoriamente <strong>2 meios períodos</strong> livres ou opte por <strong>Sem Preferência</strong>.</li>
+                  <li>• <strong>Dias Preferidos:</strong> Informe em quais dias você prefere concentrar suas aulas (opcional).</li>
+                  <li>• <strong>Indisponibilidade:</strong> Clique na grade para marcar horários com outros vínculos ou restrições totais.</li>
+                  <li>• <strong>Nota:</strong> Estas informações são <strong>preferências</strong>. A coordenação priorizará seu atendimento, mas a grade final depende das necessidades da escola.</li>
+>>>>>>> 3bc12c2 (teste)
               </ul>
           </div>
       </div>
@@ -213,11 +232,56 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
           </CardContent>
       </Card>
 
+<<<<<<< HEAD
+=======
+      {/* ── Dias Preferidos ── */}
+      <Card className="shadow-lg border-violet-200/60 overflow-hidden">
+          <CardHeader className="bg-violet-50 border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                  <CalendarDays className="h-5 w-5 text-violet-600" />
+                  2. Dias Preferidos para Concentração de Aulas
+              </CardTitle>
+              <CardDescription>Selecione os dias em que prefere ter suas aulas concentradas. Esta informação é opcional e tratada como preferência.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6">
+              <div className="flex flex-wrap gap-3">
+                  {DIAS_SEMANA_MAP.map(dia => {
+                      const isSelected = diasPreferidos.includes(dia.id);
+                      return (
+                          <button
+                              key={dia.id}
+                              type="button"
+                              onClick={() => setDiasPreferidos(prev =>
+                                  isSelected ? prev.filter(d => d !== dia.id) : [...prev, dia.id]
+                              )}
+                              className={cn(
+                                  'px-6 py-3 rounded-xl text-sm font-black uppercase tracking-widest border-2 transition-all select-none',
+                                  isSelected
+                                      ? 'bg-violet-600 border-violet-600 text-white shadow-lg scale-[1.03]'
+                                      : 'bg-white border-slate-200 text-slate-500 hover:border-violet-300'
+                              )}
+                          >
+                              {dia.label}
+                          </button>
+                      );
+                  })}
+              </div>
+              {diasPreferidos.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-4 italic">Nenhum dia selecionado — o sistema usará qualquer dia disponível.</p>
+              )}
+          </CardContent>
+      </Card>
+
+>>>>>>> 3bc12c2 (teste)
       <Card className="shadow-2xl border-none overflow-hidden">
         <CardHeader className="bg-slate-900 text-white pb-8">
             <CardTitle className="flex items-center gap-2">
                 <Ban className="h-5 w-5" />
+<<<<<<< HEAD
                 2. Outras Indisponibilidades
+=======
+                3. Outras Indisponibilidades
+>>>>>>> 3bc12c2 (teste)
             </CardTitle>
             <CardDescription className="text-slate-400">Marque apenas horários específicos de restrição em seus turnos de aula.</CardDescription>
         </CardHeader>
@@ -301,7 +365,11 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
           <CardHeader className="bg-slate-50 border-b">
               <CardTitle className="text-lg flex items-center gap-2">
                   <MessageSquare className="h-5 w-5 text-primary" />
+<<<<<<< HEAD
                   3. Justificativa
+=======
+                  4. Justificativa
+>>>>>>> 3bc12c2 (teste)
               </CardTitle>
               <CardDescription>Explique resumidamente os motivos das suas escolhas de indisponibilidade e livre docência.</CardDescription>
           </CardHeader>

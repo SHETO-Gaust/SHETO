@@ -10,7 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+<<<<<<< HEAD
 import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star, MessageSquare } from 'lucide-react';
+=======
+import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star, MessageSquare, CalendarDays } from 'lucide-react';
+>>>>>>> 3bc12c2 (teste)
 import { upsertProfessor } from './actions';
 import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
@@ -50,6 +54,10 @@ const formSchema = z.object({
   })).max(2, 'No máximo 2 períodos de livre docência.'),
   sem_preferencia_livre_docencia: z.boolean().default(false),
   justificativa: z.string().nullable().optional(),
+<<<<<<< HEAD
+=======
+  dias_preferidos: z.array(z.string()).default([]),
+>>>>>>> 3bc12c2 (teste)
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -94,6 +102,10 @@ export function EditProfessorSheet({
       livre_docencia: [],
       sem_preferencia_livre_docencia: false,
       justificativa: '',
+<<<<<<< HEAD
+=======
+      dias_preferidos: [],
+>>>>>>> 3bc12c2 (teste)
     },
   });
 
@@ -116,6 +128,10 @@ export function EditProfessorSheet({
         livre_docencia: professor?.livre_docencia ?? [],
         sem_preferencia_livre_docencia: professor?.sem_preferencia_livre_docencia ?? false,
         justificativa: professor?.justificativa ?? '',
+<<<<<<< HEAD
+=======
+        dias_preferidos: professor?.dias_preferidos ?? [],
+>>>>>>> 3bc12c2 (teste)
       });
     }
   }, [isOpen, professor, escolaId, form]);
@@ -440,6 +456,57 @@ export function EditProfessorSheet({
 
                     <Separator />
 
+<<<<<<< HEAD
+=======
+                    {/* Dias Preferidos */}
+                    <Card className="border-violet-200/60 shadow-sm overflow-hidden">
+                        <CardHeader className="bg-violet-50/50 py-4 flex flex-row items-center gap-3">
+                            <CalendarDays className="h-4 w-4 text-violet-600" />
+                            <div>
+                                <CardTitle className="text-sm text-violet-900">Dias Preferidos para Concentração de Aulas</CardTitle>
+                                <p className="text-[10px] text-violet-700/70 mt-0.5">O motor priorizará estes dias ao alocar aulas. Soft constraint — relaxada se necessário.</p>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                            <FormField control={form.control} name="dias_preferidos" render={({ field }) => (
+                                <FormItem>
+                                    <div className="flex flex-wrap gap-2">
+                                        {DIAS_SEMANA_MAP.map(dia => {
+                                            const isSelected = (field.value || []).includes(dia.id);
+                                            return (
+                                                <Button
+                                                    key={dia.id}
+                                                    type="button"
+                                                    variant={isSelected ? 'default' : 'outline'}
+                                                    className={cn(
+                                                        'h-10 px-5 text-[11px] font-bold uppercase tracking-wider transition-all',
+                                                        isSelected && 'bg-violet-600 hover:bg-violet-700 border-violet-600'
+                                                    )}
+                                                    onClick={() => {
+                                                        const current = field.value || [];
+                                                        field.onChange(
+                                                            isSelected
+                                                                ? current.filter(d => d !== dia.id)
+                                                                : [...current, dia.id]
+                                                        );
+                                                    }}
+                                                >
+                                                    {dia.label}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+                                    {(field.value || []).length === 0 && (
+                                        <p className="text-[10px] text-muted-foreground mt-2 italic">Nenhum dia selecionado — o motor usará qualquer dia disponível.</p>
+                                    )}
+                                </FormItem>
+                            )} />
+                        </CardContent>
+                    </Card>
+
+                    <Separator />
+
+>>>>>>> 3bc12c2 (teste)
                     <div className="space-y-4">
                         <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
                             <CalendarX className="h-4 w-4" /> Outras Indisponibilidades

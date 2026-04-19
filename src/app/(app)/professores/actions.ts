@@ -4,7 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestricao, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
+<<<<<<< HEAD
 import { sendRestrictionRequestEmail } from '@/lib/mail';
+=======
+import { sendRestrictionRequestEmail, sendPreferenciasConfirmacaoEmail } from '@/lib/mail';
+>>>>>>> 3bc12c2 (teste)
 import { randomBytes } from 'crypto';
 import { validateCPF } from '@/lib/utils';
 
@@ -83,6 +87,10 @@ const upsertProfessorSchema = z.object({
   livre_docencia: z.array(z.any()).optional(),
   sem_preferencia_livre_docencia: z.boolean().optional(),
   justificativa: z.string().nullable().optional(),
+<<<<<<< HEAD
+=======
+  dias_preferidos: z.array(z.string()).optional(),
+>>>>>>> 3bc12c2 (teste)
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
@@ -168,7 +176,12 @@ export async function updateProfessorRestricoes(
     professorId: string, 
     restricoes: any, 
     livreDocencia?: any[], 
+<<<<<<< HEAD
     semPreferencia: boolean = false
+=======
+    semPreferencia: boolean = false,
+    diasPreferidos?: string[]
+>>>>>>> 3bc12c2 (teste)
 ) {
     const supabase = await createClient();
     const updateData: any = { 
@@ -182,6 +195,13 @@ export async function updateProfessorRestricoes(
         updateData.livre_docencia = livreDocencia;
     }
 
+<<<<<<< HEAD
+=======
+    if (diasPreferidos !== undefined) {
+        updateData.dias_preferidos = diasPreferidos;
+    }
+
+>>>>>>> 3bc12c2 (teste)
     const { error: error } = await supabase.from('professores').update(updateData).eq('id', professorId);
     if (error) return { error: 'Não foi possível salvar as restrições de horário.' };
     revalidatePath('/professores');
@@ -239,6 +259,10 @@ export async function getSolicitacaoByToken(token: string) {
                 livre_docencia,
                 sem_preferencia_livre_docencia,
                 justificativa,
+<<<<<<< HEAD
+=======
+                dias_preferidos,
+>>>>>>> 3bc12c2 (teste)
                 escola:escolas(escolar),
                 turnos_ids
             )
@@ -265,7 +289,18 @@ export async function getSolicitacaoByToken(token: string) {
 /* -------------------------------------------------------------------------- */
 /* PÁGINA PÚBLICA: ENVIAR RESPOSTA                     */
 /* -------------------------------------------------------------------------- */
+<<<<<<< HEAD
 export async function responderSolicitacao(token: string, restricoes: any, livreDocencia: LivreDocenciaItem[], semPreferencia: boolean, justificativa: string) {
+=======
+export async function responderSolicitacao(
+    token: string,
+    restricoes: any,
+    livreDocencia: LivreDocenciaItem[],
+    semPreferencia: boolean,
+    justificativa: string,
+    diasPreferidos: string[] = []
+) {
+>>>>>>> 3bc12c2 (teste)
     const supabase = await createAdminClient();
     
     const { data: sol } = await supabase.from('solicitacoes_restricoes').select('id, status').eq('token', token).maybeSingle();
@@ -278,6 +313,10 @@ export async function responderSolicitacao(token: string, restricoes: any, livre
             livre_docencia_temp: livreDocencia,
             sem_preferencia_livre_docencia_temp: semPreferencia,
             justificativa: justificativa,
+<<<<<<< HEAD
+=======
+            dias_preferidos_temp: diasPreferidos,
+>>>>>>> 3bc12c2 (teste)
             status: 'respondido'
         })
         .eq('token', token);
@@ -295,6 +334,7 @@ export async function processarRespostaRestricao(
     dadosFinais?: any, 
     livreDocenciaFinal?: LivreDocenciaItem[],
     semPreferenciaFinal?: boolean,
+<<<<<<< HEAD
     justificativaFinal?: string
 ) {
     const supabase = await createClient();
@@ -307,6 +347,28 @@ export async function processarRespostaRestricao(
         const livreParaAplicar = livreDocenciaFinal || sol.livre_docencia_temp;
         const semPrefParaAplicar = semPreferenciaFinal !== undefined ? semPreferenciaFinal : sol.sem_preferencia_livre_docencia_temp;
         const justParaAplicar = justificativaFinal !== undefined ? justificativaFinal : sol.justificativa;
+=======
+    justificativaFinal?: string,
+    diasPreferidosFinal?: string[],
+    enviarEmail: boolean = false
+) {
+    const supabase = await createClient();
+    
+    const { data: sol } = await supabase
+        .from('solicitacoes_restricoes')
+        .select('*, professor:professores(id, nome_completo, email, escola:escolas(escolar))')
+        .eq('id', solicitacaoId)
+        .maybeSingle();
+    if (!sol) return { error: 'Solicitação não encontrada.' };
+
+    if (acao === 'confirmar') {
+        const dadosParaAplicar    = dadosFinais || sol.dados_temp;
+        const livreParaAplicar    = livreDocenciaFinal || sol.livre_docencia_temp;
+        const semPrefParaAplicar  = semPreferenciaFinal !== undefined ? semPreferenciaFinal : sol.sem_preferencia_livre_docencia_temp;
+        const justParaAplicar     = justificativaFinal !== undefined ? justificativaFinal : sol.justificativa;
+        // Coordenador pode sobrescrever os dias preferidos na revisão
+        const diasParaAplicar     = diasPreferidosFinal !== undefined ? diasPreferidosFinal : ((sol as any).dias_preferidos_temp || []);
+>>>>>>> 3bc12c2 (teste)
         
         const { error: pError } = await supabase
             .from('professores')
@@ -314,11 +376,54 @@ export async function processarRespostaRestricao(
                 restricoes: dadosParaAplicar,
                 livre_docencia: livreParaAplicar,
                 sem_preferencia_livre_docencia: semPrefParaAplicar,
+<<<<<<< HEAD
                 justificativa: justParaAplicar
+=======
+                justificativa: justParaAplicar,
+                dias_preferidos: diasParaAplicar,
+>>>>>>> 3bc12c2 (teste)
             })
             .eq('id', sol.professor_id);
         
         if (pError) return { error: 'Erro ao aplicar restrições ao cadastro.' };
+<<<<<<< HEAD
+=======
+
+        // Enviar e-mail de confirmação se solicitado
+        if (enviarEmail) {
+            const prof = (sol as any).professor;
+            const email = prof?.email;
+            const schoolName = prof?.escola?.escolar || 'Unidade Escolar';
+            if (email) {
+                // Busca nomes dos turnos para o e-mail
+                const turnoNomes: Record<string, string> = {};
+                const turnoHorarios: Record<string, any[]> = {};
+                const restricoesParaEmail = dadosParaAplicar || {};
+                const turnoIds = Object.keys(restricoesParaEmail);
+                if (turnoIds.length > 0) {
+                    const { data: turnosData } = await supabase
+                        .from('turnos')
+                        .select('id, nome, horarios')
+                        .in('id', turnoIds);
+                    (turnosData || []).forEach((t: any) => {
+                        turnoNomes[t.id] = t.nome;
+                        turnoHorarios[t.id] = t.horarios || [];
+                    });
+                }
+                await sendPreferenciasConfirmacaoEmail({
+                    to: email,
+                    name: prof.nome_completo,
+                    schoolName,
+                    diasPreferidos: diasParaAplicar,
+                    livreDocencia: semPrefParaAplicar ? [] : (livreParaAplicar || []),
+                    semPreferencia: semPrefParaAplicar,
+                    restricoes: restricoesParaEmail,
+                    turnoNomes,
+                    turnoHorarios,
+                });
+            }
+        }
+>>>>>>> 3bc12c2 (teste)
     }
 
     const { error: sError } = await supabase

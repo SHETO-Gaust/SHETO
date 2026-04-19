@@ -15,6 +15,10 @@ import {
   Search,
   UserX,
   ShieldCheck,
+<<<<<<< HEAD
+=======
+  Wand2,
+>>>>>>> 3bc12c2 (teste)
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -35,21 +39,34 @@ const allLinks = [
   { href: '/gerarhorarios', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios', step: 7 },
   { href: '/visualizarhorario', label: 'Visualizar Horário', icon: Search, module: 'horarios', group: 'horarios', step: 8 },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios', step: 9 },
+<<<<<<< HEAD
   { href: '/substituicoes', label: 'Substituições', icon: UserX, module: 'horarios', group: 'horarios', step: 10 },
+=======
+  { href: '/refinodehorario', label: 'Refino de Horário', icon: Wand2, module: 'horarios', group: 'horarios', step: 10 },
+  { href: '/substituicoes', label: 'Substituições', icon: UserX, module: 'horarios', group: 'detalhes', step: 11 },
+>>>>>>> 3bc12c2 (teste)
   { href: '/auditoria', label: 'Auditoria de Dados', icon: ShieldCheck, module: 'auditoria', group: 'management' },
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
 ];
 
 const linkGroups = [
+<<<<<<< HEAD
     { id: 'dados-horario', label: 'Dados do Horário' },
     { id: 'horarios', label: 'Horários' },
     { id: 'management', label: 'Gestão' },
+=======
+  { id: 'dados-horario', label: 'Dados do Horário' },
+  { id: 'horarios', label: 'Horários' },
+  { id: 'detalhes', label: 'Detalhes' },
+  { id: 'management', label: 'Gestão' },
+>>>>>>> 3bc12c2 (teste)
 ];
 
 export function MainNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
 
   const hasAccess = (module: string) => {
+<<<<<<< HEAD
       if (profile?.role === 'admin') return true;
       if (module === 'dashboard') return true;
       
@@ -65,11 +82,33 @@ export function MainNav({ profile }: { profile: Profile | null }) {
       }
 
       return profile?.modules?.includes(module) || false;
+=======
+    if (profile?.role === 'admin') return true;
+    if (module === 'dashboard') return true;
+
+    const groupModules: { [key: string]: string[] } = {
+      'dados-horario': ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'],
+      'horarios': ['horarios'],
+      'detalhes': ['horarios']
+    };
+
+    for (const group in groupModules) {
+      if (groupModules[group].includes(module)) {
+        return profile?.modules?.includes(group) || false;
+      }
+    }
+
+    return profile?.modules?.includes(module) || false;
+>>>>>>> 3bc12c2 (teste)
   }
 
   const visibleLinks = allLinks.filter(link => hasAccess(link.module));
   const mainLinks = visibleLinks.filter(l => !l.group);
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> 3bc12c2 (teste)
   return (
     <nav className="p-2">
       <SidebarMenu>
@@ -88,6 +127,7 @@ export function MainNav({ profile }: { profile: Profile | null }) {
           </SidebarMenuItem>
         ))}
       </SidebarMenu>
+<<<<<<< HEAD
       
       {linkGroups.map(group => {
           const groupLinks = visibleLinks.filter(l => l.group === group.id);
@@ -121,6 +161,41 @@ export function MainNav({ profile }: { profile: Profile | null }) {
                 </SidebarMenu>
             </div>
           )
+=======
+
+      {linkGroups.map(group => {
+        const groupLinks = visibleLinks.filter(l => l.group === group.id);
+        if (groupLinks.length === 0) return null;
+
+        return (
+          <div className="pt-5" key={group.id}>
+            <p className="px-3 mb-2 text-xs font-semibold uppercase text-sidebar-foreground/60 tracking-wider">
+              {group.label}
+            </p>
+            <SidebarMenu>
+              {groupLinks.map((link) => (
+                <SidebarMenuItem key={link.href}>
+                  <Link href={link.href} passHref>
+                    <SidebarMenuButton
+                      className={cn('justify-start')}
+                      isActive={pathname.startsWith(link.href)}
+                      tooltip={link.label}
+                    >
+                      <link.icon className="h-5 w-5" />
+                      <span className="text-base flex-1">{link.label}</span>
+                      {link.step && (
+                        <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-bold text-sidebar-accent-foreground">
+                          {link.step}
+                        </span>
+                      )}
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </div>
+        )
+>>>>>>> 3bc12c2 (teste)
       })}
     </nav>
   );

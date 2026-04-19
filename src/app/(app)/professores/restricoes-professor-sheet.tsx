@@ -4,7 +4,11 @@ import { useEffect, useState, useMemo } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+<<<<<<< HEAD
 import { Loader2, CalendarX, Ban, PenSquare, Star } from 'lucide-react';
+=======
+import { Loader2, CalendarX, Ban, PenSquare, Star, CalendarDays } from 'lucide-react';
+>>>>>>> 3bc12c2 (teste)
 import { updateProfessorRestricoes } from './actions';
 import type { ProfessorComDados, Turno, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,12 +52,20 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
   const [restricoes, setRestricoes] = useState<any>({});
   const [livreDocencia, setLivreDocencia] = useState<LivreDocenciaItem[]>([]);
   const [semPreferencia, setSemPreferencia] = useState(false);
+<<<<<<< HEAD
+=======
+  const [diasPreferidos, setDiasPreferidos] = useState<string[]>([]);
+>>>>>>> 3bc12c2 (teste)
 
   useEffect(() => {
     if (isOpen) {
       setRestricoes(professor.restricoes || {});
       setLivreDocencia(professor.livre_docencia || []);
       setSemPreferencia(!!professor.sem_preferencia_livre_docencia);
+<<<<<<< HEAD
+=======
+      setDiasPreferidos(professor.dias_preferidos || []);
+>>>>>>> 3bc12c2 (teste)
     }
   }, [isOpen, professor]);
 
@@ -128,7 +140,11 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
 
   const handleSave = async () => {
     setLoading(true);
+<<<<<<< HEAD
     const result = await updateProfessorRestricoes(professor.id, restricoes, livreDocencia, semPreferencia);
+=======
+    const result = await updateProfessorRestricoes(professor.id, restricoes, livreDocencia, semPreferencia, diasPreferidos);
+>>>>>>> 3bc12c2 (teste)
     setLoading(false);
 
     if (result.error) {
@@ -163,6 +179,44 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
         </SheetHeader>
 
         <div className="flex-1 space-y-4 py-6 overflow-y-auto min-h-0">
+<<<<<<< HEAD
+=======
+
+            {/* Dias Preferidos para Concentração */}
+            <div className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                    <CalendarDays className="h-4 w-4 text-violet-600" />
+                    <p className="text-sm font-bold text-violet-900">Dias Preferidos para Concentração de Aulas</p>
+                </div>
+                <p className="text-[11px] text-violet-700/70 mb-3">O motor priorizará estes dias ao alocar aulas. Soft constraint — relaxada se necessário.</p>
+                <div className="flex flex-wrap gap-2">
+                    {DIAS_SEMANA_MAP.map(dia => {
+                        const isSelected = diasPreferidos.includes(dia.id);
+                        return (
+                            <button
+                                key={dia.id}
+                                type="button"
+                                onClick={() => setDiasPreferidos(prev =>
+                                    isSelected ? prev.filter(d => d !== dia.id) : [...prev, dia.id]
+                                )}
+                                className={cn(
+                                    'px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest border-2 transition-all select-none',
+                                    isSelected
+                                        ? 'bg-violet-600 border-violet-600 text-white shadow-md scale-[1.04]'
+                                        : 'bg-white border-slate-200 text-slate-500 hover:border-violet-300'
+                                )}
+                            >
+                                {dia.label}
+                            </button>
+                        );
+                    })}
+                </div>
+                {diasPreferidos.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-2 italic">Nenhum dia selecionado — o motor usará qualquer dia disponível.</p>
+                )}
+            </div>
+
+>>>>>>> 3bc12c2 (teste)
             {professorTurnos.length > 0 ? (
                 <Tabs defaultValue={professorTurnos[0].id} className="w-full">
                     <TabsList className="bg-muted w-full justify-start overflow-x-auto h-auto p-1">

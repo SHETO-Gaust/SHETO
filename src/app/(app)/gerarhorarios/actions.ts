@@ -76,7 +76,11 @@ export async function gerarLoteHorario(
     const { data: ocupacoesAtivas } = await supabase
         .from('horario_aulas')
         .select(`
+<<<<<<< HEAD
             id, professor_id, dia_semana, aula_index, tipo, horario_id,
+=======
+            id, professor_id, dia_semana, aula_index, tipo, horario_id, turno_id,
+>>>>>>> 3bc12c2 (teste)
             professor:professores(nome_horario, restricoes, cpf),
             turma:turmas(id, nome),
             componente:componentes_curriculares(id, nome),
