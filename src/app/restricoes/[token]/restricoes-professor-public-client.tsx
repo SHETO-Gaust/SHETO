@@ -5,11 +5,7 @@ import type { Turno, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-<<<<<<< HEAD
-import { Ban, PenSquare, Loader2, CheckCircle2, Send, Info, Star, MessageSquare } from 'lucide-react';
-=======
 import { Ban, PenSquare, Loader2, CheckCircle2, Send, Info, Star, MessageSquare, CalendarDays } from 'lucide-react';
->>>>>>> 3bc12c2 (teste)
 import { cn } from '@/lib/utils';
 import { responderSolicitacao } from '@/app/(app)/professores/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -39,10 +35,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
   const [restricoes, setRestricoes] = useState<any>(professor.restricoes || {});
   const [livreDocencia, setLivreDocencia] = useState<LivreDocenciaItem[]>(professor.livre_docencia || []);
   const [semPreferencia, setSemPreferencia] = useState(professor.sem_preferencia_livre_docencia || false);
-<<<<<<< HEAD
-=======
   const [diasPreferidos, setDiasPreferidos] = useState<string[]>(professor.dias_preferidos || []);
->>>>>>> 3bc12c2 (teste)
   const [justificativa, setJustificativa] = useState('');
   const [isPending, startTransition] = useTransition();
   const [submitted, setSubmitted] = useState(false);
@@ -109,11 +102,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
       }
 
       startTransition(async () => {
-<<<<<<< HEAD
-          const result = await responderSolicitacao(token, restricoes, semPreferencia ? [] : livreDocencia, semPreferencia, justificativa);
-=======
           const result = await responderSolicitacao(token, restricoes, semPreferencia ? [] : livreDocencia, semPreferencia, justificativa, diasPreferidos);
->>>>>>> 3bc12c2 (teste)
           if (result.error) {
               toast({ title: 'Erro ao enviar', description: result.error, variant: 'destructive' });
           } else {
@@ -147,16 +136,10 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
           <div className="space-y-2">
               <p className="font-bold text-blue-900 text-lg">Preferências e Regras</p>
               <ul className="text-blue-800 text-sm space-y-2 opacity-90">
-<<<<<<< HEAD
-                  <li>• <strong>Livre Docência:</strong> Você deve escolher obrigatoriamente <strong>2 meios períodos</strong> (blocos de Manhã, Tarde ou Noite) livres ou optar por <strong>Sem Preferência</strong>.</li>
-                  <li>• <strong>Indisponibilidade:</strong> Clique na grade para marcar horários que você possui outros vínculos ou restrições totais.</li>
-                  <li>• <strong>Nota:</strong> Estas informações são <strong>sugestões</strong>. A coordenação priorizará seu atendimento, mas a grade final depende das necessidades da escola.</li>
-=======
                   <li>• <strong>Livre Docência:</strong> Escolha obrigatoriamente <strong>2 meios períodos</strong> livres ou opte por <strong>Sem Preferência</strong>.</li>
                   <li>• <strong>Dias Preferidos:</strong> Informe em quais dias você prefere concentrar suas aulas (opcional).</li>
                   <li>• <strong>Indisponibilidade:</strong> Clique na grade para marcar horários com outros vínculos ou restrições totais.</li>
                   <li>• <strong>Nota:</strong> Estas informações são <strong>preferências</strong>. A coordenação priorizará seu atendimento, mas a grade final depende das necessidades da escola.</li>
->>>>>>> 3bc12c2 (teste)
               </ul>
           </div>
       </div>
@@ -171,7 +154,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                 <CardDescription>Escolha dois períodos reais em que você prefere não ter nenhuma aula alocada.</CardDescription>
               </div>
               
-              <div className="flex items-center space-x-3 bg-white/50 p-2 px-4 rounded-full border border-primary/20 shadow-sm">
+              <div className="flex items-center space-x-3 bg-background/50 p-2 px-4 rounded-full border border-primary/20 shadow-sm">
                   <Label htmlFor="sem-pref" className="text-xs font-black uppercase text-primary cursor-pointer">Sem Preferência</Label>
                   <Switch 
                     id="sem-pref"
@@ -202,7 +185,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                                                     isSelected ? "bg-primary border-primary text-white shadow-md scale-[1.02]" : "bg-background border-muted hover:border-primary/30"
                                                 )}
                                             >
-                                                <div className={cn("h-4 w-4 rounded-sm border flex items-center justify-center", isSelected ? "bg-white border-white" : "border-primary/30")}>
+                                                <div className={cn("h-4 w-4 rounded-sm border flex items-center justify-center", isSelected ? "bg-background border-white" : "border-primary/30")}>
                                                     {isSelected && <CheckCircle2 className="h-3 w-3 text-primary" />}
                                                 </div>
                                                 <span className="text-xs font-bold uppercase">{dia.label}</span>
@@ -232,8 +215,6 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
           </CardContent>
       </Card>
 
-<<<<<<< HEAD
-=======
       {/* ── Dias Preferidos ── */}
       <Card className="shadow-lg border-violet-200/60 overflow-hidden">
           <CardHeader className="bg-violet-50 border-b">
@@ -258,7 +239,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                                   'px-6 py-3 rounded-xl text-sm font-black uppercase tracking-widest border-2 transition-all select-none',
                                   isSelected
                                       ? 'bg-violet-600 border-violet-600 text-white shadow-lg scale-[1.03]'
-                                      : 'bg-white border-slate-200 text-slate-500 hover:border-violet-300'
+                                      : 'bg-background border-border text-muted-foreground hover:border-violet-300'
                               )}
                           >
                               {dia.label}
@@ -272,36 +253,31 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
           </CardContent>
       </Card>
 
->>>>>>> 3bc12c2 (teste)
       <Card className="shadow-2xl border-none overflow-hidden">
-        <CardHeader className="bg-slate-900 text-white pb-8">
+        <CardHeader className="bg-secondary text-white pb-8">
             <CardTitle className="flex items-center gap-2">
                 <Ban className="h-5 w-5" />
-<<<<<<< HEAD
-                2. Outras Indisponibilidades
-=======
                 3. Outras Indisponibilidades
->>>>>>> 3bc12c2 (teste)
             </CardTitle>
-            <CardDescription className="text-slate-400">Marque apenas horários específicos de restrição em seus turnos de aula.</CardDescription>
+            <CardDescription className="text-muted-foreground">Marque apenas horários específicos de restrição em seus turnos de aula.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
             <Tabs defaultValue={turnos[0]?.id} className="w-full">
-                <TabsList className="w-full justify-start rounded-none border-b h-14 px-6 bg-slate-50 gap-4 overflow-x-auto">
+                <TabsList className="w-full justify-start rounded-none border-b h-14 px-6 bg-muted/50 gap-4 overflow-x-auto">
                     {turnos.map(turno => (
-                        <TabsTrigger key={turno.id} value={turno.id} className="text-xs font-bold uppercase tracking-wider data-[state=active]:bg-white data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-14 px-6 transition-all whitespace-nowrap">
+                        <TabsTrigger key={turno.id} value={turno.id} className="text-xs font-bold uppercase tracking-wider data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-14 px-6 transition-all whitespace-nowrap">
                             {turno.nome}
                         </TabsTrigger>
                     ))}
                 </TabsList>
                 {turnos.map(turno => (
                     <TabsContent key={turno.id} value={turno.id} className="p-6 m-0 animate-in fade-in slide-in-from-left-2 duration-300">
-                        <div className="rounded-xl border shadow-inner bg-slate-50/50 overflow-hidden">
+                        <div className="rounded-xl border shadow-inner bg-muted/50/50 overflow-hidden">
                             <div className="overflow-x-auto">
                             <table className="w-full text-sm text-center border-collapse">
                                 <thead>
-                                    <tr className="bg-white border-b">
-                                        <th className="p-4 font-bold border-r w-28 bg-slate-50/80">Horário</th>
+                                    <tr className="bg-background border-b">
+                                        <th className="p-4 font-bold border-r w-28 bg-muted/50/80">Horário</th>
                                         {DIAS_SEMANA_MAP.filter(d => turno.dias_semana.includes(d.id)).map(dia => (
                                             <th key={dia.id} className="p-4 font-bold">{dia.label}</th>
                                         ))}
@@ -310,7 +286,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                                 <tbody>
                                     {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIndex) => (
                                         <tr key={aulaIndex} className="border-b last:border-0 h-24">
-                                            <td className="p-2 font-bold bg-white border-r">
+                                            <td className="p-2 font-bold bg-background border-r">
                                                 <div className="text-primary text-base font-black">{aulaIndex + 1}ª</div>
                                                 <div className="text-[10px] text-muted-foreground uppercase tracking-tighter">
                                                     {turno.horarios?.[aulaIndex]?.inicio || '--:--'} às {turno.horarios?.[aulaIndex]?.fim || '--:--'}
@@ -328,7 +304,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                                                                 "h-full w-full rounded-lg flex flex-col items-center justify-center transition-all",
                                                                 status === 'indisponivel' ? 'bg-red-500 text-white shadow-lg cursor-pointer hover:scale-95' : 
                                                                 isCoordinationSet ? 'bg-blue-100 text-blue-700 border-2 border-blue-200 cursor-not-allowed opacity-80' : 
-                                                                'bg-white border-2 border-dashed border-slate-200 hover:border-slate-400 text-slate-300 cursor-pointer hover:scale-95'
+                                                                'bg-background border-2 border-dashed border-border hover:border-slate-400 text-muted-foreground/60 cursor-pointer hover:scale-95'
                                                             )}
                                                         >
                                                             {status === 'indisponivel' ? (
@@ -362,14 +338,10 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
       </Card>
 
       <Card className="shadow-lg border-primary/10 overflow-hidden">
-          <CardHeader className="bg-slate-50 border-b">
+          <CardHeader className="bg-muted/50 border-b">
               <CardTitle className="text-lg flex items-center gap-2">
                   <MessageSquare className="h-5 w-5 text-primary" />
-<<<<<<< HEAD
-                  3. Justificativa
-=======
                   4. Justificativa
->>>>>>> 3bc12c2 (teste)
               </CardTitle>
               <CardDescription>Explique resumidamente os motivos das suas escolhas de indisponibilidade e livre docência.</CardDescription>
           </CardHeader>
@@ -381,10 +353,10 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                 onChange={(e) => setJustificativa(e.target.value)}
               />
           </CardContent>
-          <CardFooter className="p-8 bg-slate-50 border-t flex flex-col md:flex-row items-center justify-between gap-6">
+          <CardFooter className="p-8 bg-muted/50 border-t flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-1 text-center md:text-left max-w-md">
-                <p className="font-bold text-slate-900">Revisou suas escolhas?</p>
-                <p className="text-xs text-slate-500">Lembre-se que a escola priorizará sua livre docência, mas o horário final depende da organização de todas as turmas.</p>
+                <p className="font-bold text-foreground">Revisou suas escolhas?</p>
+                <p className="text-xs text-muted-foreground">Lembre-se que a escola priorizará sua livre docência, mas o horário final depende da organização de todas as turmas.</p>
             </div>
             <Button 
                 size="lg" 

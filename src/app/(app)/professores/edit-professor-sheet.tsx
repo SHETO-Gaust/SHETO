@@ -10,11 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-<<<<<<< HEAD
-import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star, MessageSquare } from 'lucide-react';
-=======
 import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star, MessageSquare, CalendarDays } from 'lucide-react';
->>>>>>> 3bc12c2 (teste)
 import { upsertProfessor } from './actions';
 import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
@@ -54,10 +50,7 @@ const formSchema = z.object({
   })).max(2, 'No máximo 2 períodos de livre docência.'),
   sem_preferencia_livre_docencia: z.boolean().default(false),
   justificativa: z.string().nullable().optional(),
-<<<<<<< HEAD
-=======
   dias_preferidos: z.array(z.string()).default([]),
->>>>>>> 3bc12c2 (teste)
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -102,10 +95,7 @@ export function EditProfessorSheet({
       livre_docencia: [],
       sem_preferencia_livre_docencia: false,
       justificativa: '',
-<<<<<<< HEAD
-=======
       dias_preferidos: [],
->>>>>>> 3bc12c2 (teste)
     },
   });
 
@@ -128,10 +118,7 @@ export function EditProfessorSheet({
         livre_docencia: professor?.livre_docencia ?? [],
         sem_preferencia_livre_docencia: professor?.sem_preferencia_livre_docencia ?? false,
         justificativa: professor?.justificativa ?? '',
-<<<<<<< HEAD
-=======
         dias_preferidos: professor?.dias_preferidos ?? [],
->>>>>>> 3bc12c2 (teste)
       });
     }
   }, [isOpen, professor, escolaId, form]);
@@ -456,8 +443,6 @@ export function EditProfessorSheet({
 
                     <Separator />
 
-<<<<<<< HEAD
-=======
                     {/* Dias Preferidos */}
                     <Card className="border-violet-200/60 shadow-sm overflow-hidden">
                         <CardHeader className="bg-violet-50/50 py-4 flex flex-row items-center gap-3">
@@ -506,7 +491,6 @@ export function EditProfessorSheet({
 
                     <Separator />
 
->>>>>>> 3bc12c2 (teste)
                     <div className="space-y-4">
                         <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
                             <CalendarX className="h-4 w-4" /> Outras Indisponibilidades

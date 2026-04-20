@@ -20,6 +20,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/login/actions';
 import { headers } from 'next/headers';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 const moduleMap: { [key: string]: string } = {
     '/dashboard': 'dashboard',
@@ -30,6 +31,7 @@ const moduleMap: { [key: string]: string } = {
     '/visualizarhorario': 'horarios',
     '/relatorios': 'horarios',
     '/usuarios': 'usuarios',
+    '/unidades': 'unidades',
     '/turno': 'turno',
     '/ensino': 'ensino',
     '/serie': 'serie',
@@ -122,7 +124,9 @@ export default async function AppLayout({
       } else {
         const userModules = Array.isArray(userProfile?.modules) ? userProfile.modules : [];
         const groupModule = ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'].includes(moduleName) ? 'dados-horario'
-                            : moduleName === 'horarios' ? 'horarios' : null;
+                            : moduleName === 'horarios' ? 'horarios'
+                            : ['usuarios', 'auditoria', 'unidades'].includes(moduleName) ? 'usuarios'
+                            : null;
 
         if(groupModule) {
             hasPermission = userModules.includes(groupModule);
@@ -155,10 +159,11 @@ export default async function AppLayout({
             <SchoolSelector userProfile={userProfile as any} allEscolas={allEscolas} />
           </div>
           <div className="ml-auto flex items-center gap-4 shrink-0">
+            <ThemeToggle />
             <UserNav user={user} profile={userProfile as any} />
           </div>
         </header>
-        <div className="flex-1 bg-white p-4 sm:p-6 overflow-auto">
+        <div className="flex-1 bg-background p-4 sm:p-6 overflow-auto">
             {hasPermission ? children : <AccessDenied />}
         </div>
         <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">

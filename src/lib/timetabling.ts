@@ -24,18 +24,12 @@ import {
     turno_id: string;
   };
   
-<<<<<<< HEAD
-  type SlotOcupado = {
-    turno_id: string;
-    aula_index: number;
-=======
   /** Slot já ocupado por um professor — armazena minutos reais para evitar re-lookup de turno */
   type SlotOcupado = {
     turno_id: string;
     aula_index: number;
     inicio_min: number; // minutos desde meia-noite
     fim_min: number;
->>>>>>> 3bc12c2 (teste)
   };
   
   type BlocoGeracao = {
@@ -51,10 +45,7 @@ import {
     workload: number;
     priority: number;
     serie_restricoes?: Record<string, Record<number, string>>;
-<<<<<<< HEAD
-=======
     turno_np_id?: string | null; // turno NP pré-determinado para este bloco
->>>>>>> 3bc12c2 (teste)
     placed?: boolean;
   };
   
@@ -63,17 +54,12 @@ import {
     dia_semana: string;
     aula_index: number;
     turno_id: string;
-<<<<<<< HEAD
-  };
-  
-=======
     inicio_min: number;
     fim_min: number;
   };
   
   // ─── Helpers ────────────────────────────────────────────────────────────────
   
->>>>>>> 3bc12c2 (teste)
   function getTeacherKey(p: { id: string; cpf?: string | null }): string {
     if (p.cpf && p.cpf.trim().length >= 11) {
       return `cpf:${p.cpf.replace(/\D/g, '')}`;
@@ -81,11 +67,6 @@ import {
     return `id:${p.id}`;
   }
   
-<<<<<<< HEAD
-  function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
-    const nome = turno.nome.toLowerCase();
-  
-=======
   /** Converte "HH:mm" → minutos desde meia-noite. Retorna -1 se inválido. */
   function timeToMinutes(hhmm: string | undefined | null): number {
     if (!hhmm) return -1;
@@ -134,7 +115,6 @@ import {
   
   function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
     const nome = turno.nome.toLowerCase();
->>>>>>> 3bc12c2 (teste)
     if (nome.includes('matutino') || nome.includes('manhã')) return 'matutino';
     if (nome.includes('vespertino') || nome.includes('tarde')) return 'vespertino';
     if (nome.includes('noturno') || nome.includes('noite')) return 'noturno';
@@ -146,51 +126,9 @@ import {
       if (hora < 18) return 'vespertino';
       return 'noturno';
     }
-<<<<<<< HEAD
-  
     return aulaIdx < 5 ? 'matutino' : 'vespertino';
   }
   
-  /**
-   * Verifica se dois slots de horários diferentes se sobrepõem no tempo real (minutos).
-   */
-  function slotsConflitam(
-    turnoA: Turno,
-    indexA: number,
-    turnoB: Turno,
-    indexB: number
-  ): boolean {
-    const hA = turnoA.horarios?.[indexA];
-    const hB = turnoB.horarios?.[indexB];
-  
-    // 1. Comparação por tempo real (HH:mm)
-    if (hA?.inicio && hA?.fim && hB?.inicio && hB?.fim) {
-      return hA.inicio < hB.fim && hA.fim > hB.inicio;
-    }
-  
-    // 2. Se for o mesmo turno físico, o conflito é pelo índice direto
-    if (turnoA.id === turnoB.id) return indexA === indexB;
-  
-    // 3. Heurística por nomes de turnos comuns
-    const nomeA = turnoA.nome.toLowerCase();
-    const nomeB = turnoB.nome.toLowerCase();
-    const periodos = ['matutino', 'vespertino', 'noturno', 'manhã', 'tarde', 'noite'];
-    const pA = periodos.find(p => nomeA.includes(p));
-    const pB = periodos.find(p => nomeB.includes(p));
-    
-    // Se sabemos que são turnos diferentes (ex: Manhã e Tarde) e não temos horários exatos,
-    // assumimos que não conflitam (permitindo contraturno).
-    if (pA && pB && pA !== pB) return false;
-  
-    // 4. Caso extremo: turnos diferentes sem horários e sem nomes reconhecíveis
-    return indexA === indexB;
-  }
-  
-=======
-    return aulaIdx < 5 ? 'matutino' : 'vespertino';
-  }
-  
->>>>>>> 3bc12c2 (teste)
   function pushMapArray<T>(map: Map<string, T[]>, key: string, value: T) {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(value);
@@ -202,10 +140,7 @@ import {
     configGerminacao: ConfiguracaoGerminacao[],
     forcarIndividuais: boolean = false
   ): number[] {
-<<<<<<< HEAD
-=======
     if (total <= 0) return [];
->>>>>>> 3bc12c2 (teste)
     if (forcarIndividuais) return Array(total).fill(1);
   
     const config = configGerminacao.find(cfg => cfg.componente_id === compId);
@@ -215,10 +150,6 @@ import {
   
     const blocos: number[] = [];
     let restante = total;
-<<<<<<< HEAD
-  
-=======
->>>>>>> 3bc12c2 (teste)
     while (restante > 0) {
       if (restante >= config.tamanho_bloco) {
         blocos.push(config.tamanho_bloco);
@@ -228,12 +159,6 @@ import {
         restante = 0;
       }
     }
-<<<<<<< HEAD
-  
-    return blocos;
-  }
-  
-=======
     return blocos;
   }
   
@@ -261,9 +186,59 @@ import {
     return oposto || outros[0] || turno;
   }
   
+  // ─── Helpers de constraint por slot ─────────────────────────────────────────
+  
+  /**
+   * HARD CONSTRAINT — BAN (indisponivel)
+   * Retorna true se o professor está marcado como "indisponivel" naquele slot.
+   * Jamais pode ser violado. Não afetado por nenhum relaxamento progressivo.
+   */
+  function isBanHardBlocked(
+    prof: ProfessorComDados | undefined,
+    turnoId: string,
+    dia: string,
+    idx: number,
+  ): boolean {
+    return prof?.restricoes?.[turnoId]?.[dia]?.[idx] === 'indisponivel';
+  }
+  
+  /**
+   * HARD CONSTRAINT — FOLGA (livre docência)
+   * Retorna true se o período daquele slot está marcado como livre docência
+   * para o professor. Jamais pode ser violado. Não afetado por nenhum
+   * relaxamento progressivo.
+   *
+   * Condição ativa somente quando sem_preferencia_livre_docencia === false,
+   * o que indica que o professor TEM preferência de livre docência definida.
+   */
+  function isFolgaHardBlocked(
+    prof: ProfessorComDados | undefined,
+    turno: Turno,
+    dia: string,
+    idx: number,
+  ): boolean {
+    // Se o professor marcou "sem preferência" (checkbox de dispensa), não bloquear
+    if (!prof || prof.sem_preferencia_livre_docencia !== false) return false;
+    const periodo = getPeriodoDaAula(turno, idx);
+    return prof.livre_docencia?.some(ld => ld.dia === dia && ld.periodo === periodo) ?? false;
+  }
+  
+  /**
+   * SOFT CONSTRAINT — PLANEJAMENTO (plan)
+   * Retorna true se o slot está marcado como "planejamento".
+   * Pode ser usado como último recurso quando permitirUsoPlanejamento = true.
+   */
+  function isPlanejamentoSoftBlocked(
+    prof: ProfessorComDados | undefined,
+    turnoId: string,
+    dia: string,
+    idx: number,
+  ): boolean {
+    return prof?.restricoes?.[turnoId]?.[dia]?.[idx] === 'planejamento';
+  }
+  
   // ─── Motor principal ─────────────────────────────────────────────────────────
   
->>>>>>> 3bc12c2 (teste)
   export function gerarHorarioAlgoritmico(
     turno: Turno,
     turmas: TurmaComDados[],
@@ -284,30 +259,17 @@ import {
     const professoresById = new Map<string, ProfessorComDados>(professores.map(p => [p.id, p]));
   
     const teacherKeyMap = new Map<string, string>();
-<<<<<<< HEAD
-    const professorWorkloadMap = new Map<string, number>();
-  
-    professores.forEach(p => {
-      teacherKeyMap.set(p.id, getTeacherKey(p));
-    });
-  
-    const turnosParaNPBase = todosTurnos.filter(t => t.id !== turno.id);
-  
-=======
     professores.forEach(p => teacherKeyMap.set(p.id, getTeacherKey(p)));
   
     // Turno NP global (único, determinístico) para este horário
     const turnoNP = resolverTurnoNP(turno, todosTurnos);
   
     // ── Normalizar ocupações externas (publicadas) com minutos reais ──
->>>>>>> 3bc12c2 (teste)
     const ocupacoesExistentesPorProfessorDia = new Map<string, OcupacaoExistenteNormalizada[]>();
   
     for (const o of ocupacoesExistentes) {
       const pKey = getTeacherKey({ id: o.professor_id, cpf: o.professor?.cpf });
-<<<<<<< HEAD
-=======
-
+  
       // ATENÇÃO: para aulas NP do contraturno, `o.turno_id` é o turno FÍSICO (ex: Vespertino)
       // enquanto `o.horario.turno_id` é o turno do HORÁRIO (ex: Matutino).
       // Devemos usar o turno FÍSICO para calcular os minutos reais.
@@ -315,18 +277,11 @@ import {
       const turnoOcc = turnosById.get(fisicaTurnoId);
       const [ini, fim] = turnoOcc ? getSlotMinutes(turnoOcc, o.aula_index) : [-1, -1];
 
->>>>>>> 3bc12c2 (teste)
       const mapKey = `${pKey}|${o.dia_semana}`;
       pushMapArray(ocupacoesExistentesPorProfessorDia, mapKey, {
         professor_key: pKey,
         dia_semana: o.dia_semana,
         aula_index: o.aula_index,
-<<<<<<< HEAD
-        turno_id: o.horario?.turno_id || o.turno_id
-      });
-    }
-  
-=======
         turno_id: fisicaTurnoId,
         inicio_min: ini,
         fim_min: fim,
@@ -334,7 +289,6 @@ import {
     }
   
     // ── Construção dos blocos ────────────────────────────────────────────────
->>>>>>> 3bc12c2 (teste)
     const construirTodosOsBlocos = (forcarIndividuais: boolean): BlocoGeracao[] => {
       const blocos: BlocoGeracao[] = [];
   
@@ -343,45 +297,6 @@ import {
           const profInfo = t.professores.find(p => p.componente_id === c.componente_id);
           const profId = profInfo?.professor_id || null;
           const profKey = profId ? teacherKeyMap.get(profId) || null : null;
-<<<<<<< HEAD
-          const profNome = profInfo?.professor?.nome_horario || 'Sem Professor';
-  
-          // Presenciais (no turno atual)
-          const presenciais = criarBlocos(c.aulas_presenciais || 0, c.componente_id, configGerminacao, forcarIndividuais);
-          for (const size of presenciais) {
-            blocos.push({
-              tipo: 'presencial',
-              turma_id: t.id,
-              turma_nome: t.nome,
-              componente_id: c.componente_id,
-              componente_nome: (c as any).componente?.nome || 'Disciplina',
-              professor_id: profId,
-              professor_key: profKey,
-              professor_nome: profNome,
-              size,
-              serie_restricoes: t.serie.restricoes,
-              workload: profKey ? (professorWorkloadMap.get(profKey) || 0) : 0,
-              priority: 1,
-            });
-          }
-  
-          // NP (no contraturno)
-          const naoPresenciais = criarBlocos(c.aulas_nao_presenciais || 0, c.componente_id, configGerminacao, forcarIndividuais);
-          for (const size of naoPresenciais) {
-            blocos.push({
-              tipo: 'nao_presencial',
-              turma_id: t.id,
-              turma_nome: t.nome,
-              componente_id: c.componente_id,
-              componente_nome: (c as any).componente?.nome || 'Disciplina',
-              professor_id: profId,
-              professor_key: profKey,
-              professor_nome: profNome,
-              size,
-              workload: profKey ? (professorWorkloadMap.get(profKey) || 0) : 0,
-              priority: 0, // NP é prioridade total para garantir fechamento de carga
-            });
-=======
           const profNome = (profInfo as any)?.professor?.nome_horario || 'Sem Professor';
   
           // Presenciais — no turno principal
@@ -426,15 +341,11 @@ import {
                 turno_np_id: turnoNP.id,
               });
             }
->>>>>>> 3bc12c2 (teste)
           }
         }
       }
   
-<<<<<<< HEAD
-=======
       // Ordenar: menor priority primeiro; entre iguais, bloco maior primeiro
->>>>>>> 3bc12c2 (teste)
       blocos.sort((a, b) => {
         if (a.priority !== b.priority) return a.priority - b.priority;
         return b.size - a.size;
@@ -443,15 +354,25 @@ import {
       return blocos;
     };
   
-<<<<<<< HEAD
-    const executarTentativa = (permitirUsoPlanejamento: boolean, ignorarLivreDocencia: boolean, forcarIndividuais: boolean) => {
-      const aulasGeradas: HorarioAulaGeradaAlgoritmo[] = [];
-      const ocupacaoProfessoresPorDia = new Map<string, SlotOcupado[]>();
-=======
     // ── Tentativa de alocação ────────────────────────────────────────────────
+    /**
+     * Parâmetros de relaxamento progressivo:
+     *
+     * - permitirUsoPlanejamento: quando true, slots de "planejamento" (SOFT)
+     *   podem ser usados. Começa false, relaxa cedo (>15% das tentativas).
+     *
+     * - forcarIndividuais: quando true, desativa geminação para maximizar
+     *   chances de encaixe. Relaxa perto do fim (>75%).
+     *
+     * - ignorarDiasPreferidos: quando true, ignora a preferência de
+     *   concentração de dias do professor. Relaxa perto do fim (>70%).
+     *
+     * NOTA: NÃO existe mais parâmetro `ignorarLivreDocencia`.
+     * BAN (indisponivel) e FOLGA (livre docência) são SEMPRE hard constraints
+     * e NUNCA são afetados por relaxamento progressivo.
+     */
     const executarTentativa = (
       permitirUsoPlanejamento: boolean,
-      ignorarLivreDocencia: boolean,
       forcarIndividuais: boolean,
       ignorarDiasPreferidos: boolean = false
     ) => {
@@ -464,53 +385,12 @@ import {
       const ocupacaoProfessoresPorDia = new Map<string, SlotOcupado[]>();
   
       /** Conjuntos de slots de turma já ocupados: `turmaId|turnoId|dia|idx` */
->>>>>>> 3bc12c2 (teste)
       const ocupacaoTurmas = new Set<string>();
   
       const todosOsBlocos = construirTodosOsBlocos(forcarIndividuais);
   
       for (const b of todosOsBlocos) {
         let alocado = false;
-<<<<<<< HEAD
-        let turnosParaTestar = b.tipo === 'presencial' ? [turno] : (turnosParaNPBase.length > 0 ? turnosParaNPBase : [turno]);
-  
-        for (const targetTurno of turnosParaTestar) {
-          if (alocado) break;
-  
-          const dias = [...(targetTurno.dias_semana || [])].sort(() => Math.random() - 0.5);
-          for (const d of dias) {
-            if (alocado) break;
-            
-            const startSlots = Array.from({ length: targetTurno.aulas_por_dia - b.size + 1 }, (_, k) => k).sort(() => Math.random() - 0.5);
-            
-            for (const i of startSlots) {
-              let livre = true;
-              
-              for (let k = 0; k < b.size; k++) {
-                const idx = i + k;
-                const slotKey = `${b.turma_id}|${targetTurno.id}|${d}|${idx}`;
-                if (ocupacaoTurmas.has(slotKey)) { livre = false; break; }
-                
-                // Restrições da Série (Matutino não aceita aula no horário X)
-                if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') { livre = false; break; }
-  
-                if (b.professor_key) {
-                  const profKey = b.professor_key;
-                  const profDiaKey = `${profKey}|${d}`;
-                  
-                  // Conflito contra aulas já alocadas NESTA tentativa
-                  const localOcc = ocupacaoProfessoresPorDia.get(profDiaKey) || [];
-                  if (localOcc.some(occ => slotsConflitam(targetTurno, idx, turnosById.get(occ.turno_id)!, occ.aula_index))) {
-                    livre = false; break;
-                  }
-  
-                  // Conflito contra aulas PUBLICADAS de outros turnos
-                  const globalOcc = ocupacoesExistentesPorProfessorDia.get(profDiaKey) || [];
-                  if (globalOcc.some(occ => slotsConflitam(targetTurno, idx, turnosById.get(occ.turno_id)!, occ.aula_index))) {
-                    livre = false; break;
-                  }
-  
-=======
   
         // Determinar turnos a testar para este bloco
         const turnosParaTestar: Turno[] =
@@ -560,16 +440,16 @@ import {
               for (let k = 0; k < b.size; k++) {
                 const idx = i + k;
                 const slotKey = `${b.turma_id}|${targetTurno.id}|${d}|${idx}`;
-  
-                // 1. Slot da turma já ocupado?
+
+                // ── HARD CONSTRAINT 1: slot da turma já ocupado ──────────────
                 if (ocupacaoTurmas.has(slotKey)) { livre = false; break; }
-  
-                // 2. Restrição de série (presencial)?
+
+                // ── HARD CONSTRAINT 2: restrição proibida da série ───────────
                 if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') {
                   livre = false; break;
                 }
   
-                // 3. Conflito de professor
+                // ── Verificações de professor ────────────────────────────────
                 if (b.professor_key) {
                   const profKey = b.professor_key;
                   const profDiaKey = `${profKey}|${d}`;
@@ -577,7 +457,7 @@ import {
                   // Minutos do slot candidato
                   const [iniCand, fimCand] = getSlotMinutes(targetTurno, idx);
   
-                  // 3a. Conflito contra aulas já alocadas NESTA tentativa
+                  // ── HARD CONSTRAINT 3a: conflito contra aulas já alocadas NESTA tentativa ──
                   const localOcc = ocupacaoProfessoresPorDia.get(profDiaKey) || [];
                   const conflitaLocal = localOcc.some(occ =>
                     minutesConflitam(
@@ -589,7 +469,7 @@ import {
                   );
                   if (conflitaLocal) { livre = false; break; }
   
-                  // 3b. Conflito contra aulas PUBLICADAS de outros turnos
+                  // ── HARD CONSTRAINT 3b: conflito contra aulas PUBLICADAS de outros turnos ──
                   const globalOcc = ocupacoesExistentesPorProfessorDia.get(profDiaKey) || [];
                   const conflitaGlobal = globalOcc.some(occ =>
                     minutesConflitam(
@@ -601,37 +481,33 @@ import {
                   );
                   if (conflitaGlobal) { livre = false; break; }
   
-                  // 3c. Restrições manuais do professor (indisponivel / planejamento)
->>>>>>> 3bc12c2 (teste)
                   const prof = professoresById.get(b.professor_id!);
-                  const rest = prof?.restricoes?.[targetTurno.id]?.[d]?.[idx];
-                  if (rest === 'indisponivel') { livre = false; break; }
-                  if (rest === 'planejamento' && !permitirUsoPlanejamento) { livre = false; break; }
-<<<<<<< HEAD
-                  
-                  // Respeito à Livre Docência (Folga)
-                  if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false) {
-                    const periodo = getPeriodoDaAula(targetTurno, idx);
-                    if (prof.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodo)) {
-                        livre = false; break;
-=======
   
-                  // 3d. Livre Docência
-                  if (!ignorarLivreDocencia && prof?.sem_preferencia_livre_docencia === false) {
-                    const periodo = getPeriodoDaAula(targetTurno, idx);
-                    if (prof.livre_docencia?.some(ld => ld.dia === d && ld.periodo === periodo)) {
-                      livre = false; break;
->>>>>>> 3bc12c2 (teste)
-                    }
+                  // ── HARD CONSTRAINT 3c: BAN (indisponivel) ──────────────────
+                  // Bloqueio absoluto. Jamais pode receber aula.
+                  // Não afetado por nenhum parâmetro de relaxamento.
+                  if (isBanHardBlocked(prof, targetTurno.id, d, idx)) {
+                    livre = false; break;
+                  }
+  
+                  // ── HARD CONSTRAINT 3d: FOLGA (livre docência) ──────────────
+                  // Bloqueio absoluto. Jamais pode receber aula.
+                  // Não afetado por nenhum parâmetro de relaxamento.
+                  if (isFolgaHardBlocked(prof, targetTurno, d, idx)) {
+                    livre = false; break;
+                  }
+  
+                  // ── SOFT CONSTRAINT 3e: PLANEJAMENTO ───────────────────────
+                  // Bloqueio suave. Pode ser usado como último recurso
+                  // quando permitirUsoPlanejamento = true (após 15% das tentativas).
+                  if (isPlanejamentoSoftBlocked(prof, targetTurno.id, d, idx) && !permitirUsoPlanejamento) {
+                    livre = false; break;
                   }
                 }
               }
   
               if (livre) {
-<<<<<<< HEAD
-=======
                 // Alocar todos os slots do bloco
->>>>>>> 3bc12c2 (teste)
                 for (let k = 0; k < b.size; k++) {
                   const idx = i + k;
                   aulasGeradas.push({
@@ -643,10 +519,6 @@ import {
                     tipo: b.tipo,
                     turno_id: targetTurno.id,
                   });
-<<<<<<< HEAD
-                  ocupacaoTurmas.add(`${b.turma_id}|${targetTurno.id}|${d}|${idx}`);
-                  if (b.professor_key) pushMapArray(ocupacaoProfessoresPorDia, `${b.professor_key}|${d}`, { turno_id: targetTurno.id, aula_index: idx });
-=======
   
                   ocupacaoTurmas.add(`${b.turma_id}|${targetTurno.id}|${d}|${idx}`);
   
@@ -659,7 +531,6 @@ import {
                       fim_min: fim,
                     });
                   }
->>>>>>> 3bc12c2 (teste)
                 }
                 alocado = true;
                 break;
@@ -667,51 +538,44 @@ import {
             }
           }
         }
-<<<<<<< HEAD
-        if (alocado) b.placed = true;
-      }
-=======
   
         if (alocado) b.placed = true;
       }
   
->>>>>>> 3bc12c2 (teste)
       const pendentes = todosOsBlocos.filter(b => !b.placed);
       return { success: pendentes.length === 0, aulas: aulasGeradas, pendentes };
     };
   
-<<<<<<< HEAD
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const curProg = globalProgress + (attempt / maxAttempts);
-      const permitirPlan = force || curProg > 0.15;
-      const ignorarLD = force || curProg > 0.85;
-      const forcarIndiv = force || curProg > 0.75;
-  
-      const res = executarTentativa(permitirPlan, ignorarLD, forcarIndiv);
-      if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
-    }
-  
-    const finalFail = executarTentativa(true, true, true);
-    return { success: false, aulas: finalFail.aulas, attemptsMade: maxAttempts, error: 'Algumas aulas não puderam ser alocadas devido a conflitos de professores ou restrições de horários.' };
-=======
     // ── Loop de tentativas ───────────────────────────────────────────────────
+    //
+    // Relaxamento progressivo:
+    //   • permitirUsoPlanejamento: relaxa após 15% (SOFT — planejamento pode ser usado)
+    //   • forcarIndividuais:       relaxa após 75% (desfaz geminação)
+    //   • ignorarDiasPreferidos:   relaxa após 70% (ignora preferência de concentração de dias)
+    //
+    // O que NUNCA é relaxado:
+    //   • BAN (indisponivel)     → hard constraint permanente
+    //   • FOLGA (livre docência) → hard constraint permanente
+    //   • conflitos de professor → hard constraint permanente
+    //   • conflitos de turma     → hard constraint permanente
+    //   • restrições de série    → hard constraint permanente
+    //
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const curProg = globalProgress + (attempt / maxAttempts);
-      const permitirPlan         = force || curProg > 0.15;
-      const ignorarLD            = force || curProg > 0.85;
-      const forcarIndiv          = force || curProg > 0.75;
-      const ignorarDiasPref      = force || curProg > 0.70; // Relaxa preferência de dias apenas nos últimos 30% das tentativas
+      const permitirPlan    = force || curProg > 0.15;
+      const forcarIndiv     = force || curProg > 0.75;
+      const ignorarDiasPref = force || curProg > 0.70;
   
-      const res = executarTentativa(permitirPlan, ignorarLD, forcarIndiv, ignorarDiasPref);
+      const res = executarTentativa(permitirPlan, forcarIndiv, ignorarDiasPref);
       if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
     }
   
-    const finalFail = executarTentativa(true, true, true, true);
+    // Tentativa final de fallback — relaxa tudo que é SOFT, mas mantém HARD constraints
+    const finalFail = executarTentativa(true, true, true);
     return {
       success: false,
       aulas: finalFail.aulas,
       attemptsMade: maxAttempts,
       error: 'Algumas aulas não puderam ser alocadas devido a conflitos de professores ou restrições de horários.',
     };
->>>>>>> 3bc12c2 (teste)
   }

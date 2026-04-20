@@ -72,18 +72,11 @@ export type Professor = {
     turnos_ids: string[];
     aulas_disponiveis: number;
     aulas_planejamento: number;
-<<<<<<< HEAD
-    restricoes?: any; // JSONB for restrictions
-    livre_docencia?: LivreDocenciaItem[]; // JSONB for free shifts
-    sem_preferencia_livre_docencia?: boolean;
-    justificativa?: string | null;
-=======
     restricoes?: any;
     livre_docencia?: LivreDocenciaItem[];
     sem_preferencia_livre_docencia?: boolean;
     justificativa?: string | null;
     dias_preferidos?: string[]; // Dias preferidos para concentração de aulas
->>>>>>> 3bc12c2 (teste)
     created_at: string;
 };
 

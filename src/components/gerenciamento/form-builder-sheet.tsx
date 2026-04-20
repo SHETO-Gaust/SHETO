@@ -151,7 +151,7 @@ export function FormBuilderSheet({ isOpen, setIsOpen, formacao, onUpdate }: Form
                 <h4 className="text-lg font-semibold mb-4">Campos Padrão</h4>
                 <div className="space-y-4">
                     {formConfig.fields.map((field: any) => (
-                        <div key={field.id} className="p-4 border rounded-lg bg-slate-50/50">
+                        <div key={field.id} className="p-4 border rounded-lg bg-muted/50/50">
                             <div className="flex items-center justify-between">
                                 <Label htmlFor={`field-${field.id}`} className="text-base">{field.label}</Label>
                                 <div className="flex items-center space-x-2">

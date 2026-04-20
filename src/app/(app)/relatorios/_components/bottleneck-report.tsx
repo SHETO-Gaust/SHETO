@@ -54,7 +54,7 @@ export function BottleneckReport({ data }: { data: any }) {
                           <td key={d.dia} className={cn("p-2 text-center transition-colors", isCritical ? "bg-destructive/10" : "bg-green-50/30")}>
                             <div className={cn(
                                 "flex flex-col items-center justify-center p-2 rounded-lg border shadow-sm h-full",
-                                isCritical ? "border-destructive/30 bg-white" : "border-green-200 bg-white"
+                                isCritical ? "border-destructive/30 bg-background" : "border-green-200 bg-background"
                             )}>
                                 <span className={cn("text-lg font-black", isCritical ? "text-destructive" : "text-green-700")}>
                                     {slot.disponiveis}

@@ -149,7 +149,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
                                 </div>
                             </div>
                             
-                            <div className="p-6 flex-1 bg-white">
+                            <div className="p-6 flex-1 bg-background">
                                 <div className="flex items-center gap-2 mb-4">
                                     <UserCheck className="h-4 w-4 text-green-600" />
                                     <span className="text-sm font-bold uppercase tracking-tight">Substitutos Disponíveis (Livre de aulas e planejamento)</span>

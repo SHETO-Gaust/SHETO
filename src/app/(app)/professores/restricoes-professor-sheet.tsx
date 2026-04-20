@@ -4,11 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-<<<<<<< HEAD
-import { Loader2, CalendarX, Ban, PenSquare, Star } from 'lucide-react';
-=======
 import { Loader2, CalendarX, Ban, PenSquare, Star, CalendarDays } from 'lucide-react';
->>>>>>> 3bc12c2 (teste)
 import { updateProfessorRestricoes } from './actions';
 import type { ProfessorComDados, Turno, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -52,20 +48,14 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
   const [restricoes, setRestricoes] = useState<any>({});
   const [livreDocencia, setLivreDocencia] = useState<LivreDocenciaItem[]>([]);
   const [semPreferencia, setSemPreferencia] = useState(false);
-<<<<<<< HEAD
-=======
   const [diasPreferidos, setDiasPreferidos] = useState<string[]>([]);
->>>>>>> 3bc12c2 (teste)
 
   useEffect(() => {
     if (isOpen) {
       setRestricoes(professor.restricoes || {});
       setLivreDocencia(professor.livre_docencia || []);
       setSemPreferencia(!!professor.sem_preferencia_livre_docencia);
-<<<<<<< HEAD
-=======
       setDiasPreferidos(professor.dias_preferidos || []);
->>>>>>> 3bc12c2 (teste)
     }
   }, [isOpen, professor]);
 
@@ -140,11 +130,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
 
   const handleSave = async () => {
     setLoading(true);
-<<<<<<< HEAD
-    const result = await updateProfessorRestricoes(professor.id, restricoes, livreDocencia, semPreferencia);
-=======
     const result = await updateProfessorRestricoes(professor.id, restricoes, livreDocencia, semPreferencia, diasPreferidos);
->>>>>>> 3bc12c2 (teste)
     setLoading(false);
 
     if (result.error) {
@@ -179,8 +165,6 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
         </SheetHeader>
 
         <div className="flex-1 space-y-4 py-6 overflow-y-auto min-h-0">
-<<<<<<< HEAD
-=======
 
             {/* Dias Preferidos para Concentração */}
             <div className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-4">
@@ -203,7 +187,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                                     'px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest border-2 transition-all select-none',
                                     isSelected
                                         ? 'bg-violet-600 border-violet-600 text-white shadow-md scale-[1.04]'
-                                        : 'bg-white border-slate-200 text-slate-500 hover:border-violet-300'
+                                        : 'bg-background border-border text-muted-foreground hover:border-violet-300'
                                 )}
                             >
                                 {dia.label}
@@ -216,7 +200,6 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                 )}
             </div>
 
->>>>>>> 3bc12c2 (teste)
             {professorTurnos.length > 0 ? (
                 <Tabs defaultValue={professorTurnos[0].id} className="w-full">
                     <TabsList className="bg-muted w-full justify-start overflow-x-auto h-auto p-1">
@@ -302,7 +285,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
         </div>
 
         <SheetFooter className="mt-auto border-t pt-6 bg-background flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-6 p-3 px-5 rounded-full border bg-slate-50 shadow-sm w-full sm:w-auto">
+          <div className="flex items-center gap-6 p-3 px-5 rounded-full border bg-muted/50 shadow-sm w-full sm:w-auto">
               <div className="flex items-center gap-3 border-r pr-6 mr-2">
                   <Switch 
                     id="sem-preferencia" 

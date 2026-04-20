@@ -169,7 +169,7 @@ export function UploadInscritosDialog({ isOpen, setIsOpen, formacao, onUpdate }:
             <div 
                 className={cn(
                     "flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
-                    isDragging ? "border-primary bg-primary/10" : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+                    isDragging ? "border-primary bg-primary/10" : "border-gray-300 hover:border-gray-400 hover:bg-muted/50"
                 )}
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
@@ -183,7 +183,7 @@ export function UploadInscritosDialog({ isOpen, setIsOpen, formacao, onUpdate }:
                         <p className="text-sm">Arquivo pronto para ser enviado!</p>
                     </div>
                 ) : (
-                    <div className="text-center text-gray-500">
+                    <div className="text-center text-muted-foreground">
                         <FileUp className="mx-auto h-12 w-12" />
                         <p className="font-semibold">Arraste e solte o arquivo aqui</p>
                         <p className="text-sm">ou clique para selecionar</p>

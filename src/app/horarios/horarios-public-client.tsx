@@ -256,7 +256,7 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
           </Card>
       ) : (
           <div className="space-y-8 animate-in fade-in duration-500">
-              <Card className="bg-white shadow-lg overflow-hidden border-t-4 border-t-orange-500">
+              <Card className="bg-background shadow-lg overflow-hidden border-t-4 border-t-orange-500">
                   <CardContent className="p-8">
                       <div className="max-w-md mx-auto space-y-4">
                           <div className="text-center space-y-2">

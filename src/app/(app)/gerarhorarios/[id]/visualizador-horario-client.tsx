@@ -6,19 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-<<<<<<< HEAD
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee, Layers, CalendarDays, Users } from 'lucide-react';
-=======
 import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, FileDown, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee, Layers, CalendarDays, Users } from 'lucide-react';
->>>>>>> 3bc12c2 (teste)
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho, swapAulasManualmente } from '../actions';
 import { useToast } from '@/hooks/use-toast';
-<<<<<<< HEAD
-=======
 import { exportarHorarioXLSX } from '@/lib/export-horario';
->>>>>>> 3bc12c2 (teste)
 import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
@@ -172,7 +165,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                 <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                     <thead>
-                    <tr className="bg-muted/50 border-b print:bg-gray-100 print:border-black">
+                    <tr className="bg-muted/50 border-b print:bg-muted print:border-black">
                         <th className="p-2 text-left font-medium border-r w-24 print:w-20 print:border-black print:text-[8px]">Horário</th>
                         {diasAtivosLocal.map(dia => (
                         <th key={dia.id} className="p-2 text-center font-medium min-w-[100px] print:border-black print:text-[8px]">
@@ -188,7 +181,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
 
                         rows.push(
                             <tr key={`aula-${aulaIndex}`} className="border-b last:border-0 hover:bg-muted/10 transition-colors h-16 print:h-auto print:border-black">
-                                <td className="p-2 print:p-1 font-medium bg-muted/20 border-r print:border-black print:bg-white">
+                                <td className="p-2 print:p-1 font-medium bg-muted/20 border-r print:border-black print:bg-background">
                                     <div className="font-bold text-primary print:text-black print:text-[8px]">{aulaIndex + 1}ª Aula</div>
                                     <div className="text-[9px] text-muted-foreground font-normal print:text-[7px]">
                                     {hConfig?.inicio || '--:--'} - {hConfig?.fim || '--:--'}
@@ -458,16 +451,12 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                   </div>
               )}
           </div>
-<<<<<<< HEAD
-          <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
-=======
           <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => exportarHorarioXLSX(horario)} className="gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800">
                   <FileDown className="h-4 w-4" /> Exportar .xlsx
               </Button>
               <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
           </div>
->>>>>>> 3bc12c2 (teste)
       </div>
 
       <Card className="print:border-none print:shadow-none">

@@ -12,12 +12,8 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-<<<<<<< HEAD
-import { PlusCircle, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Ban, PenSquare, MousePointer2, Info, Star, MessageSquare } from 'lucide-react';
-=======
 import { PlusCircle, CalendarX, Trash2, Pencil, Mail, Loader2, CheckCircle2, XCircle, AlertCircle, Ban, PenSquare, MousePointer2, Info, Star, MessageSquare, CalendarDays } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
->>>>>>> 3bc12c2 (teste)
 import {
   Tooltip,
   TooltipContent,
@@ -82,11 +78,8 @@ export function ProfessoresClient({
   const [reviewData, setReviewData] = useState<any>(null);
   const [reviewLivreDocencia, setReviewLivreDocencia] = useState<LivreDocenciaItem[]>([]);
   const [reviewSemPreferencia, setReviewSemPreferencia] = useState(false);
-<<<<<<< HEAD
-=======
   const [reviewDiasPreferidos, setReviewDiasPreferidos] = useState<string[]>([]);
   const [reviewEnviarEmail, setReviewEnviarEmail] = useState(false);
->>>>>>> 3bc12c2 (teste)
   const [reviewJustificativa, setReviewJustificativa] = useState('');
   const [isSendingMail, setIsSendingMail] = useState<string | null>(null);
   const [isActionPending, startAction] = useTransition();
@@ -161,28 +154,20 @@ export function ProfessoresClient({
 
   const handleReviewAction = (solicitacaoId: string, acao: 'confirmar' | 'rejeitar') => {
       startAction(async () => {
-<<<<<<< HEAD
-          const result = await processarRespostaRestricao(solicitacaoId, acao, reviewData, reviewLivreDocencia, reviewSemPreferencia, reviewJustificativa);
-=======
           const result = await processarRespostaRestricao(
               solicitacaoId, acao,
               reviewData, reviewLivreDocencia, reviewSemPreferencia, reviewJustificativa,
               reviewDiasPreferidos,
               acao === 'confirmar' ? reviewEnviarEmail : false
           );
->>>>>>> 3bc12c2 (teste)
           if (result.error) {
               toast({ title: 'Erro ao processar', description: result.error, variant: 'destructive' });
           } else {
               toast({ 
                   title: acao === 'confirmar' ? 'Dados Aplicados!' : 'Resposta Descartada',
-<<<<<<< HEAD
-                  description: acao === 'confirmar' ? 'As preferências do professor foram integradas ao sistema.' : 'A sugestão do professor foi ignorada.'
-=======
                   description: acao === 'confirmar'
                       ? `Preferências aplicadas${reviewEnviarEmail ? ' — e-mail enviado ao professor.' : '.'}`
                       : 'A sugestão do professor foi ignorada.'
->>>>>>> 3bc12c2 (teste)
               });
               setIsReviewOpen(false);
               setReviewData(null);
@@ -207,10 +192,7 @@ export function ProfessoresClient({
       setReviewData(professor.solicitacao_pendente?.dados_temp || {});
       setReviewLivreDocencia(professor.solicitacao_pendente?.livre_docencia_temp || []);
       setReviewSemPreferencia(professor.solicitacao_pendente?.sem_preferencia_livre_docencia_temp || false);
-<<<<<<< HEAD
-=======
       setReviewDiasPreferidos((professor.solicitacao_pendente as any)?.dias_preferidos_temp || []);
->>>>>>> 3bc12c2 (teste)
       setReviewJustificativa(professor.solicitacao_pendente?.justificativa || '');
       setIsReviewOpen(true);
   };
@@ -222,11 +204,8 @@ export function ProfessoresClient({
     setReviewData(null);
     setReviewLivreDocencia([]);
     setReviewSemPreferencia(false);
-<<<<<<< HEAD
-=======
     setReviewDiasPreferidos([]);
     setReviewEnviarEmail(false);
->>>>>>> 3bc12c2 (teste)
     setReviewJustificativa('');
     setTimeout(() => {
         setSelectedProfessor(null);
@@ -394,8 +373,6 @@ export function ProfessoresClient({
                         </div>
                     )}
 
-<<<<<<< HEAD
-=======
                     {/* DIAS PREFERIDOS (editável pelo coordenador) */}
                     <div className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-4">
                         <div className="flex items-center gap-2 mb-3">
@@ -416,7 +393,7 @@ export function ProfessoresClient({
                                             'px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest border-2 transition-all select-none',
                                             isSelected
                                                 ? 'bg-violet-600 border-violet-600 text-white shadow-md scale-[1.03]'
-                                                : 'bg-white border-slate-200 text-slate-500 hover:border-violet-300'
+                                                : 'bg-background border-border text-muted-foreground hover:border-violet-300'
                                         )}
                                     >
                                         {dia.label}
@@ -429,7 +406,6 @@ export function ProfessoresClient({
                         )}
                     </div>
 
->>>>>>> 3bc12c2 (teste)
                     {/* SEÇÃO LIVRE DOCÊNCIA REVISÃO */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between border-b pb-2">
@@ -524,7 +500,7 @@ export function ProfessoresClient({
                                                                         key={dia.id} 
                                                                         className={cn(
                                                                             "p-1 border-r last:border-r-0 transition-colors group",
-                                                                            !isPlanejamento && "cursor-pointer hover:bg-slate-50",
+                                                                            !isPlanejamento && "cursor-pointer hover:bg-muted/50",
                                                                             isIndisponivel ? "bg-red-50" : isPlanejamento ? "bg-blue-50" : ""
                                                                         )}
                                                                         onClick={() => handleReviewCellClick(turno.id, dia.id, aulaIdx)}
@@ -536,7 +512,7 @@ export function ProfessoresClient({
                                                                             
                                                                             {!isPlanejamento && (
                                                                                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/5 rounded">
-                                                                                    <MousePointer2 className="h-3 w-3 text-slate-400" />
+                                                                                    <MousePointer2 className="h-3 w-3 text-muted-foreground" />
                                                                                 </div>
                                                                             )}
                                                                         </div>
@@ -556,7 +532,7 @@ export function ProfessoresClient({
                 </div>
               </ScrollArea>
 
-              <AlertDialogFooter className="p-6 border-t bg-slate-50 flex-row items-center justify-between sm:justify-between gap-4">
+              <AlertDialogFooter className="p-6 border-t bg-muted/50 flex-row items-center justify-between sm:justify-between gap-4">
                   <div className="flex gap-2">
                     <Button 
                         variant="ghost" 
@@ -568,8 +544,6 @@ export function ProfessoresClient({
                     </Button>
                     <AlertDialogCancel className="mt-0">Fechar</AlertDialogCancel>
                   </div>
-<<<<<<< HEAD
-=======
 
                   {/* Checkbox: enviar cópia ao professor */}
                   <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer select-none" onClick={() => setReviewEnviarEmail(v => !v)}>
@@ -579,7 +553,6 @@ export function ProfessoresClient({
                       </label>
                   </div>
 
->>>>>>> 3bc12c2 (teste)
                   <Button 
                     disabled={isActionPending || (!reviewSemPreferencia && reviewLivreDocencia.length !== 2)} 
                     onClick={() => handleReviewAction(selectedProfessor!.solicitacao_pendente!.id, 'confirmar')} 

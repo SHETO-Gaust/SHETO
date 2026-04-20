@@ -241,7 +241,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                             Encontramos uma solução completa, mas ela exige mover algumas aulas de **Contraturno (NP)** de horários que já estão publicados em outros turnos.
                         </p>
                         
-                        <div className="bg-white/80 p-4 rounded-xl border border-blue-100 shadow-inner">
+                        <div className="bg-background/80 p-4 rounded-xl border border-blue-100 shadow-inner">
                             <p className="text-xs uppercase font-bold text-blue-600 mb-3 tracking-widest">Alterações Necessárias:</p>
                             <div className="space-y-3">
                                 {sugestao.map((s, i) => (

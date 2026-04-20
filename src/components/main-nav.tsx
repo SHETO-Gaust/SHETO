@@ -14,10 +14,9 @@ import {
   Layers,
   Search,
   UserX,
-<<<<<<< HEAD
-=======
   Wand2,
->>>>>>> 3bc12c2 (teste)
+  ShieldCheck,
+  Building2,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -38,22 +37,17 @@ const allLinks = [
   { href: '/gerarhorarios', label: 'Gerar Horário', icon: Clock, module: 'horarios', group: 'horarios', step: 7 },
   { href: '/visualizarhorario', label: 'Visualizar Horário', icon: Search, module: 'horarios', group: 'horarios', step: 8 },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, module: 'horarios', group: 'horarios', step: 9 },
-<<<<<<< HEAD
-  { href: '/substituicoes', label: 'Substituições', icon: UserX, module: 'horarios', group: 'horarios', step: 10 },
-=======
   { href: '/refinodehorario', label: 'Refino de Horário', icon: Wand2, module: 'horarios', group: 'detalhes', step: 10 },
   { href: '/substituicoes', label: 'Substituições', icon: UserX, module: 'horarios', group: 'detalhes', step: 11 },
->>>>>>> 3bc12c2 (teste)
+  { href: '/auditoria', label: 'Auditoria de Dados', icon: ShieldCheck, module: 'auditoria', group: 'management' },
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
+  { href: '/unidades', label: 'Unidades', icon: Building2, module: 'unidades', group: 'management' },
 ];
 
 const linkGroups = [
     { id: 'dados-horario', label: 'Dados do Horário' },
     { id: 'horarios', label: 'Horários' },
-<<<<<<< HEAD
-=======
     { id: 'detalhes', label: 'Detalhes' },
->>>>>>> 3bc12c2 (teste)
     { id: 'management', label: 'Gestão' },
 ];
 
@@ -66,12 +60,9 @@ export function MainNav({ profile }: { profile: Profile | null }) {
       
       const groupModules: {[key: string]: string[]} = {
         'dados-horario': ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'],
-<<<<<<< HEAD
-        'horarios': ['horarios']
-=======
         'horarios': ['horarios'],
-        'detalhes': ['horarios']
->>>>>>> 3bc12c2 (teste)
+        'detalhes': ['horarios'],
+        'usuarios': ['usuarios', 'auditoria', 'unidades']
       };
 
       for (const group in groupModules) {
@@ -86,6 +77,13 @@ export function MainNav({ profile }: { profile: Profile | null }) {
   const visibleLinks = allLinks.filter(link => hasAccess(link.module));
   const mainLinks = visibleLinks.filter(l => !l.group);
   
+  // LOGS TEMPORÁRIOS SOLICITADOS PARA DIAGNÓSTICO
+  console.log('[MAIN_NAV] profile:', profile);
+  console.log('[MAIN_NAV] role:', profile?.role);
+  console.log('[MAIN_NAV] modules:', profile?.modules);
+  console.log('[MAIN_NAV] visibleLinks:', visibleLinks.map(l => ({ title: l.label, href: l.href, module: l.module })));
+  console.log('[MAIN_NAV] gestaoLinks:', visibleLinks.filter(l => l.group === 'management'));
+
   return (
     <nav className="p-2">
       <SidebarMenu>

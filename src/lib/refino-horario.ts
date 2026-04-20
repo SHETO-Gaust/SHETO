@@ -24,21 +24,42 @@ export type Move = {
   novoTurnoId: string;
 };
 
+/**
+ * Represents a single movement within an option, with full metadata for rich UI rendering.
+ */
+export type PassoDetalhado = {
+  aulaId: string;
+  /** true = this is the primary move requested by the user; false = secondary/support move */
+  isPrincipal: boolean;
+  componente_sigla: string;
+  componente_nome: string;
+  turma_nome: string;
+  professor_nome: string;
+  turno_nome: string;
+  tipo: 'presencial' | 'nao_presencial';
+  // Origin
+  origemDia: string;
+  origemSlot: number;
+  // Destination
+  destinoDia: string;
+  destinoSlot: number;
+  destinoTurnoId: string;
+};
+
 export type Possibilidade = {
   id: string;
   moves: Move[];
   impactoTurmas: number;
   impactoProfessores: number;
   qtdMovimentos: number;
-  // Detalhamento textual de cada passo
-  passos: string[];
+  passos: PassoDetalhado[];
 };
 
 export type ImpactoAnalise = {
   status: 'livre' | 'sugestao' | 'atencao' | 'bloqueado' | 'possibilidades';
   mensagem: string;
-  mudancasNecessarias: Move[]; 
-  possibilidades?: Possibilidade[]; 
+  mudancasNecessarias: Move[];
+  possibilidades?: Possibilidade[];
 };
 
 // ============================================
@@ -121,28 +142,26 @@ export function analisarMovimento(
     return { status: 'livre', mensagem: 'A aula já encontra-se neste slot.', mudancasNecessarias: [] };
   }
 
-  // Se não foi ativado o deep search, fazemos a validação inicial.
-  const turnosOrigem = turnosById.get(aulaOrigem.turno_id);
   const [iniDest, fimDest] = getSlotMinutes(turnosById.get(turnoDestinoId), slotDestino);
 
   // Achar se ha alguem da Turma no destino
-  const turmaNoDestinoAqui = todasAulas.find(a => 
+  const turmaNoDestinoAqui = todasAulas.find(a =>
     a.id !== aulaOrigem.id && a.turma_id === aulaOrigem.turma_id &&
     a.dia_semana === diaDestino && a.aula_index === slotDestino && a.turno_id === turnoDestinoId
   );
 
-  // Achar conflito de linha cronologica absoluta da TURMA 
-  const turmaNoDestinoTempo = todasAulas.find(a => 
+  // Achar conflito de linha cronologica absoluta da TURMA
+  const turmaNoDestinoTempo = todasAulas.find(a =>
     a.id !== aulaOrigem.id && a.turma_id === aulaOrigem.turma_id &&
-    a.dia_semana === diaDestino && 
+    a.dia_semana === diaDestino &&
     (() => {
         const [iA, fA] = getSlotMinutes(turnosById.get(a.turno_id), a.aula_index);
         return minutesConflitam(iniDest, fimDest, iA, fA);
     })()
   );
-  
+
   const profKey = getProfessorKey(aulaOrigem.professor_id, aulaOrigem.professor_cpf);
-  const profNoDestinoTempo = !profKey ? null : todasAulas.find(a => 
+  const profNoDestinoTempo = !profKey ? null : todasAulas.find(a =>
       a.id !== aulaOrigem.id && a.professor_id &&
       getProfessorKey(a.professor_id, a.professor_cpf) === profKey &&
       a.dia_semana === diaDestino &&
@@ -184,7 +203,7 @@ export function analisarMovimento(
       // Iteramos a grade simulada usando base + diff
       for (const tAula of todasAulas) {
           if (tAula.id === aula.id) continue;
-          
+
           let curDia = tAula.dia_semana;
           let curSlot = tAula.aula_index;
           let curTurno = tAula.turno_id;
@@ -194,11 +213,11 @@ export function analisarMovimento(
               const [d, s, t] = sState.split('|');
               curDia = d; curSlot = parseInt(s, 10); curTurno = t;
               // Se foi ejetada e está flutuando, a string seria "floating" (marcaremos -1)
-              if (curSlot === -1) continue; 
+              if (curSlot === -1) continue;
           }
 
           if (curDia !== dia) continue;
-          
+
           const tA = turnosById.get(curTurno);
           const [iA, fA] = getSlotMinutes(tA, curSlot);
           if (!minutesConflitam(iniT, fimT, iA, fA)) continue;
@@ -213,7 +232,7 @@ export function analisarMovimento(
   // Prepara o estado inicial
   const initialState: SolverState = {
       moves: [],
-      openTargetSlots: [{ dia: aulaOrigem.dia_semana, slot: aulaOrigem.aula_index, turnoId: aulaOrigem.turno_id }], // A origem ficou buraco!
+      openTargetSlots: [{ dia: aulaOrigem.dia_semana, slot: aulaOrigem.aula_index, turnoId: aulaOrigem.turno_id }],
       displacedLessons: [],
       simulatedAssignments: new Map(),
       depth: 0
@@ -221,11 +240,11 @@ export function analisarMovimento(
 
   initialState.moves.push({ aulaId: aulaOrigem.id, novoDia: diaDestino, novoSlot: slotDestino, novoTurnoId: turnoDestinoId });
   initialState.simulatedAssignments.set(aulaId, `${diaDestino}|${slotDestino}|${turnoDestinoId}`);
-  
+
   // Quem estava lá?
-  const displacedInit = todasAulas.find(a => 
+  const displacedInit = todasAulas.find(a =>
        a.id !== aulaOrigem.id &&
-       a.dia_semana === diaDestino && 
+       a.dia_semana === diaDestino &&
        (()=>{
             const [iA, fA] = getSlotMinutes(turnosById.get(a.turno_id), a.aula_index);
             return minutesConflitam(iniDest, fimDest, iA, fA) && (a.turma_id === aulaOrigem.turma_id || getProfessorKey(a.professor_id, a.professor_cpf) === profKey);
@@ -243,8 +262,8 @@ export function analisarMovimento(
   function dfs(currentState: SolverState) {
       if (Date.now() - startMs > MAX_TIME_MS) return;
       if (solutions.length >= MAX_SOLUTIONS) return;
-      
-      // Estado está limpo? Se não há aulas flutuando e TODOS os openSlots de origem foram fechados (ou seja, ciclo puro)
+
+      // Estado está limpo? Se não há aulas flutuando e TODOS os openSlots de origem foram fechados
       if (currentState.displacedLessons.length === 0 && currentState.openTargetSlots.length === 0) {
           solutions.push(currentState);
           return;
@@ -253,23 +272,20 @@ export function analisarMovimento(
       // Evita loops hiper-profundos
       if (currentState.depth >= MAX_DEPTH) return;
 
-      // Pega aula flutuando (se existir). Se não existir, pega o último openSlot e manda preencher!
       if (currentState.displacedLessons.length > 0) {
           const lesson = currentState.displacedLessons[0];
-          
+
           // Tenta colocar essa lesson num dos openTargetSlots
           for (let i = 0; i < currentState.openTargetSlots.length; i++) {
               const target = currentState.openTargetSlots[i];
-              // Verifica se a lesson PODE ir para o target
               if (isSlotValid(lesson, target.dia, target.slot, target.turnoId, currentState)) {
-                  // Pode! Clona o estado
                   const newState = cloneState(currentState);
                   newState.depth++;
-                  newState.displacedLessons.shift(); // Remove working lesson
-                  newState.openTargetSlots.splice(i, 1); // Fechou um buraco
+                  newState.displacedLessons.shift();
+                  newState.openTargetSlots.splice(i, 1);
                   newState.moves.push({ aulaId: lesson.id, novoDia: target.dia, novoSlot: target.slot, novoTurnoId: target.turnoId });
                   newState.simulatedAssignments.set(lesson.id, `${target.dia}|${target.slot}|${target.turnoId}`);
-                  
+
                   const hash = hashState(newState.moves);
                   if (!visited.has(hash)) {
                       visited.add(hash);
@@ -279,18 +295,16 @@ export function analisarMovimento(
           }
 
           // Ou então, tenta empurrar ALGUEM pra ejetar ALGUEM (extensão de cadeia).
-          // Mas para evitar O(N^2) colossal, varremos os dias que a turma atende para trocar.
           const diasTurno = turnosById.get(lesson.turno_id)?.dias_semana || [];
           const slotsTurno = turnosById.get(lesson.turno_id)?.aulas_por_dia || 0;
 
           for (const d of diasTurno) {
               for (let s = 0; s < slotsTurno; s++) {
-                  // A lição tenta tomar X
                   const [iX, fX] = getSlotMinutes(turnosById.get(lesson.turno_id), s);
-                  
-                  const targetAula = todasAulas.find(a => 
+
+                  const targetAula = todasAulas.find(a =>
                       a.id !== lesson.id &&
-                      a.turma_id === lesson.turma_id && // só permuta com a propria turma para cadeias compactas
+                      a.turma_id === lesson.turma_id &&
                       a.dia_semana === d &&
                       (() => {
                            const sA = currentState.simulatedAssignments.get(a.id);
@@ -306,8 +320,6 @@ export function analisarMovimento(
                   );
 
                   if (targetAula) {
-                      // Check if lesson can take over targetAula's spot BEFORE ejecting targetAula
-                      // We must simulate targetAula missing
                       const curAssign = currentState.simulatedAssignments.get(targetAula.id);
                       currentState.simulatedAssignments.set(targetAula.id, 'floating|-1|x');
                       const valid = isSlotValid(lesson, d, s, lesson.turno_id, currentState);
@@ -318,7 +330,7 @@ export function analisarMovimento(
                          const nState = cloneState(currentState);
                          nState.depth++;
                          nState.displacedLessons.shift();
-                         nState.displacedLessons.push(targetAula); // Nova a ser ejetada
+                         nState.displacedLessons.push(targetAula);
                          nState.moves.push({ aulaId: lesson.id, novoDia: d, novoSlot: s, novoTurnoId: lesson.turno_id });
                          nState.simulatedAssignments.set(lesson.id, `${d}|${s}|${lesson.turno_id}`);
                          nState.simulatedAssignments.set(targetAula.id, 'floating|-1|x');
@@ -334,30 +346,21 @@ export function analisarMovimento(
           }
 
       } else if (currentState.openTargetSlots.length > 0) {
-          // Nenhuma lesson flutuando, mas sobrou um buraco aberto (Ex: movimento inicial foi pro vazio).
-          // Temos que achar alguma aula da mesma TURMA para PUXAR pra tapar esse target e criar outro buraco (fechando outro ciclo).
           const target = currentState.openTargetSlots[0];
-          
-          // Pegamos uma aula de Ponta (fim do dia / começo) pra não criar buraco feio no meio
-          const turmaCandidates = todasAulas.filter(a => 
+
+          const turmaCandidates = todasAulas.filter(a =>
               a.id !== aulaId && a.turma_id === au_turmaId &&
               !currentState.simulatedAssignments.has(a.id)
-          ).sort((a, b) => b.aula_index - a.aula_index); // prioriza aulas no final do dia
-          
+          ).sort((a, b) => b.aula_index - a.aula_index);
+
           for (const cand of turmaCandidates) {
               if (isSlotValid(cand, target.dia, target.slot, target.turnoId, currentState)) {
                   const nState = cloneState(currentState);
                   nState.depth++;
-                  nState.openTargetSlots.shift(); // Fechou este buraco
-                  // Abriu novo
+                  nState.openTargetSlots.shift();
                   nState.moves.push({ aulaId: cand.id, novoDia: target.dia, novoSlot: target.slot, novoTurnoId: target.turnoId });
                   nState.simulatedAssignments.set(cand.id, `${target.dia}|${target.slot}|${target.turnoId}`);
-                  // Nota: paramos o "pulling" chain se abrirmos um buraco no topo/fim que não importa?
-                  // Pela matemática de ciclos puros para n-lados, vamos apenas forçar fechar ciclos.
-                  // Se nState chegar no limit depth, ele nunca devolve.
-                  // Para flexibilizar e permitir compactação como Válida, se o cand_index for o ultimo slot real, 
-                  // deixamos o OpenTarget sumir magicaente? A regra é rígida: NÃO PODE DEIXAR LACUNA. Entao sempre eh ciclo fechado.
-                  
+
                   const hsh = hashState(nState.moves);
                   if (!visited.has(hsh)) {
                       visited.add(hsh);
@@ -391,30 +394,41 @@ export function analisarMovimento(
 
   // Filtragem e Ranking das soluções
   const sortedSolutions = solutions.sort((a,b) => {
-      // Menor quantidade de movimentos
       if (a.moves.length !== b.moves.length) return a.moves.length - b.moves.length;
-      return 0; // Pode expadir priorização se necessário
+      return 0;
   });
 
   const topSols = sortedSolutions.slice(0, MAX_SOLUTIONS);
 
-  const DIAS_SHORT: any = { segunda: 'Seg', terca: 'Ter', quarta: 'Qua', quinta: 'Qui', sexta: 'Sex', sabado: 'Sáb' };
-
   const possibilidadesRender: Possibilidade[] = topSols.map((sol, index) => {
-      // Build textual steps
-      const impactosProf = new Set();
-      const impactosTurm = new Set();
-      const passosText: string[] = [];
-      
-      sol.moves.forEach(m => {
-          const aName = todasAulas.find(a => a.id === m.aulaId)?.componente_sigla || 'Aula';
-          const tName = todasAulas.find(a => a.id === m.aulaId)?.turma_nome || '';
-          const pName = todasAulas.find(a => a.id === m.aulaId)?.professor_nome || '';
-          
-          impactosTurm.add(tName);
-          if(pName) impactosProf.add(pName);
-          
-          passosText.push(`${aName} (${tName}) ➔ ${DIAS_SHORT[m.novoDia]} ${m.novoSlot + 1}ª`);
+      const impactosProf = new Set<string>();
+      const impactosTurm = new Set<string>();
+      const passosDetalhados: PassoDetalhado[] = [];
+
+      sol.moves.forEach((m, mIdx) => {
+          const aula = todasAulas.find(a => a.id === m.aulaId);
+          if (!aula) return;
+
+          const turnoNome = turnosById.get(m.novoTurnoId)?.nome || turnosById.get(aula.turno_id)?.nome || '';
+
+          impactosTurm.add(aula.turma_nome);
+          if (aula.professor_nome) impactosProf.add(aula.professor_nome);
+
+          passosDetalhados.push({
+              aulaId: m.aulaId,
+              isPrincipal: mIdx === 0, // first move is always the user's requested move
+              componente_sigla: aula.componente_sigla,
+              componente_nome: aula.componente_nome,
+              turma_nome: aula.turma_nome,
+              professor_nome: aula.professor_nome,
+              turno_nome: turnoNome,
+              tipo: aula.tipo,
+              origemDia: aula.dia_semana,
+              origemSlot: aula.aula_index,
+              destinoDia: m.novoDia,
+              destinoSlot: m.novoSlot,
+              destinoTurnoId: m.novoTurnoId,
+          });
       });
 
       return {
@@ -423,13 +437,13 @@ export function analisarMovimento(
           impactoTurmas: impactosTurm.size,
           impactoProfessores: impactosProf.size,
           qtdMovimentos: sol.moves.length,
-          passos: passosText
+          passos: passosDetalhados,
       };
   });
 
   return {
       status: 'possibilidades',
-      mensagem: `Simplicidade direta não atingida. O Motor analisou toda a linha cronológica absoluta calculando cadeias perfeitas e encontrou ${possibilidadesRender.length} solução(ões) sem deixar buracos na grade. Selecione uma opção.`,
+      mensagem: `Motor analisou toda a linha cronológica e encontrou ${possibilidadesRender.length} rota(s) sem buracos. Selecione uma opção e clique em Aplicar.`,
       mudancasNecessarias: [],
       possibilidades: possibilidadesRender
   };

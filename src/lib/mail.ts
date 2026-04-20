@@ -146,27 +146,16 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
           <h2 style="color: #1e3a8a; margin: 0;">Preferências de Disponibilidade</h2>
           <p style="color: #64748b;">Sistema de Horário Escolar (SHE)</p>
         </div>
-<<<<<<< HEAD
-        
-        <div class="content">
-          <p>Prezado(a) Professor(a) <strong>${data.name}</strong>,</p>
-          <p>A coordenação pedagógica da unidade <strong>${data.schoolName}</strong> solicita que você informe sua disponibilidade e sugestão de <strong>Livre Docência (2 meios períodos livres)</strong>.</p>
-          
-          <p>Clique no botão abaixo para acessar sua grade individual:</p>
-=======
                 <div class="content">
           <p>Prezado(a) Professor(a) <strong>${data.name}</strong>,</p>
           <p>A coordenação pedagógica da unidade <strong>${data.schoolName}</strong> solicita que você informe suas preferências de horário para a montagem da grade escolar.</p>
           
           <p>Clique no botão abaixo para acessar seu formulário individual:</p>
->>>>>>> 3bc12c2 (teste)
 
           <div style="text-align: center;">
             <a href="${requestUrl}" class="button">Informar Minhas Preferências</a>
           </div>
 
-<<<<<<< HEAD
-=======
           <div style="margin: 20px 0; padding: 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
             <p style="margin: 0 0 8px; font-weight: bold; font-size: 13px;">O formulário contém 4 seções:</p>
             <ol style="margin: 0; padding-left: 20px; font-size: 13px; color: #475569; line-height: 1.8;">
@@ -177,7 +166,6 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
             </ol>
           </div>
 
->>>>>>> 3bc12c2 (teste)
           <div class="warning">
             <strong>Atenção:</strong> As informações preenchidas são tratadas como <strong>preferências</strong>. 
             A coordenação fará o possível para atendê-las, mas a definição final da grade depende das necessidades logísticas e pedagógicas da unidade escolar.
@@ -208,8 +196,6 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
     console.error('Erro ao enviar e-mail de restrição:', error);
     return { error: 'Falha no envio do e-mail. Verifique a configuração SMTP do servidor.' };
   }
-<<<<<<< HEAD
-=======
 }
 
 // ─── E-mail de confirmação de preferências ───────────────────────────────────
@@ -357,5 +343,4 @@ export async function sendPreferenciasConfirmacaoEmail(data: ConfirmacaoPreferen
     console.error('Erro ao enviar confirmação:', err);
     return { error: 'Falha no envio do e-mail de confirmação.' };
   }
->>>>>>> 3bc12c2 (teste)
 }

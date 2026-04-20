@@ -38,7 +38,7 @@ export default async function PublicRestrictionPage({ params }: { params: { toke
 
   return (
     <div className="min-h-screen bg-muted/20 pb-12">
-      <header className="bg-white border-b shadow-sm sticky top-0 z-30">
+      <header className="bg-background border-b shadow-sm sticky top-0 z-30">
           <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
               <div className="flex items-center gap-3">
                   <Clock className="h-6 w-6 text-primary" />
@@ -53,7 +53,7 @@ export default async function PublicRestrictionPage({ params }: { params: { toke
 
       <main className="max-w-5xl mx-auto px-4 pt-8 space-y-8">
           <div className="space-y-2">
-              <h1 className="text-3xl font-black text-slate-900 leading-tight">Olá, Prof. {professor.nome_horario}</h1>
+              <h1 className="text-3xl font-black text-foreground leading-tight">Olá, Prof. {professor.nome_horario}</h1>
               <p className="text-slate-600 text-lg">
                   Informe abaixo seus horários de <strong>indisponibilidade</strong> para que possamos organizar a grade horária.
               </p>
