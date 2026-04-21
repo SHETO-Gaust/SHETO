@@ -263,18 +263,26 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
     ];
 
     const turnosEnvolvidos = useMemo(() => {
-        const turnosMap = new Map<string, Turno>();
+        const globalTurnos = new Map<string, Turno>();
+        globalTurnos.set(horario.turno.id, horario.turno);
+        if (horario.turno_oposto) globalTurnos.set(horario.turno_oposto.id, horario.turno_oposto);
         
+        allTeacherAulas.forEach(a => {
+            const baseT = (a as any).horario?.turno;
+            if (baseT) globalTurnos.set(baseT.id, baseT);
+        });
+
+        const turnosMap = new Map<string, Turno>();
         allTeacherAulas.forEach(aula => {
             let turnoFisico: Turno | undefined;
-            if (aula.horario_id === horario.id) {
+            if (aula.turno_id && globalTurnos.has(aula.turno_id)) {
+                turnoFisico = globalTurnos.get(aula.turno_id);
+            } else if (aula.horario_id === horario.id) {
                 turnoFisico = aula.tipo === 'nao_presencial' ? horario.turno_oposto : horario.turno;
             } else {
-                const baseTurno = (aula as any).horario?.turno;
-                if (baseTurno) {
-                    turnoFisico = baseTurno;
-                }
+                turnoFisico = (aula as any).horario?.turno;
             }
+
             if (turnoFisico) {
                 turnosMap.set(turnoFisico.id, turnoFisico);
             }
@@ -299,7 +307,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
         });
 
         return Array.from(turnosMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
-    }, [professorId, allTeacherAulas, prof]);
+    }, [professorId, allTeacherAulas, prof, horario]);
 
     return (
         <div className="space-y-8 pt-4 break-after-page print:pt-0">
@@ -316,6 +324,9 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
             {turnosEnvolvidos.length > 0 ? (
                 turnosEnvolvidos.map(turno => {
                     const aulasDesteTurno = allTeacherAulas.filter(a => {
+                        if (a.turno_id) return a.turno_id === turno.id;
+                        
+                        // Fallback legado se a.turno_id não estiver presente:
                         if (a.horario_id === horario.id) {
                             return a.tipo === 'nao_presencial' ? turno.id === horario.turno_oposto?.id : turno.id === horario.turno_id;
                         }
@@ -460,7 +471,8 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
       </div>
 
       <Card className="print:border-none print:shadow-none">
-        <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6 print:hidden">
+        {forceView !== 'teachers' && (
+            <CardHeader className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0 pb-6 border-b mb-6 print:hidden">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="w-auto">
                 <TabsList className="h-10">
                     <TabsTrigger value="single" className="gap-2"><Layout className="h-3.5 w-3.5" /> Turmas</TabsTrigger>
@@ -484,6 +496,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
             )}
           </div>
         </CardHeader>
+        )}
         
         <CardContent className="print:p-0">
           {viewMode === 'single' ? (

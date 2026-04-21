@@ -344,3 +344,85 @@ export async function sendPreferenciasConfirmacaoEmail(data: ConfirmacaoPreferen
     return { error: 'Falha no envio do e-mail de confirmação.' };
   }
 }
+
+// ─── E-mail de Comunicado em Massa ───────────────────────────────────
+
+export type MassCommunicationData = {
+  bcc: string[];
+  subject: string;
+  htmlContent: string;
+};
+
+export async function sendMassCommunicationEmail(data: MassCommunicationData) {
+  const transporter = getTransporter();
+  const emailUser = process.env.GMAIL_EMAIL;
+  
+  if (!transporter || !emailUser) {
+    return { error: 'Serviço de e-mail não configurado.' };
+  }
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'PT Sans', sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f5; margin: 0; padding: 20px 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 8px; border-top: 4px solid #1e3a8a; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .header { text-align: center; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+        .content { margin-bottom: 30px; font-size: 15px; color: #1e293b; }
+        .content p { margin-top: 0; margin-bottom: 15px; }
+        .content strong { color: #0f172a; font-weight: bold; }
+        .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 20px; }
+        .disclaimer { font-size: 11px; color: #64748b; text-align: center; background-color: #f8fafc; padding: 10px; border-radius: 4px; margin-top: 20px; }
+        ul, ol { margin-top: 0; margin-bottom: 15px; padding-left: 20px; color: #1e293b; }
+        li { margin-bottom: 5px; }
+        h1, h2, h3 { color: #0f172a; margin-top: 0; margin-bottom: 15px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h2 style="color: #1e3a8a; margin: 0; font-size: 20px;">Comunicado Institucional</h2>
+          <p style="color: #64748b; margin: 5px 0 0; font-size: 13px;">Sistema de Horário Escolar (SHE) - SEDUC TO</p>
+        </div>
+        
+        <div class="content">
+          ${data.htmlContent}
+        </div>
+
+        <div class="disclaimer">
+          Você está recebendo este e-mail pois é usuário cadastrado no Sistema de Horário Escolar.
+        </div>
+
+        <div class="footer">
+          <p style="margin: 0;">Secretaria da Educação do Estado do Tocantins © ${new Date().getFullYear()}</p>
+          <p style="margin: 4px 0 0;">Não responda a este e-mail.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    const CHUNK_SIZE = 100;
+    const bccChunks = [];
+    for (let i = 0; i < data.bcc.length; i += CHUNK_SIZE) {
+        bccChunks.push(data.bcc.slice(i, i + CHUNK_SIZE));
+    }
+
+    for (const chunk of bccChunks) {
+        await transporter.sendMail({
+          from: `"SHE - Comunicados" <${emailUser}>`,
+          to: emailUser, 
+          bcc: chunk,
+          subject: data.subject,
+          html: html,
+        });
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Erro ao enviar comunicado em massa:', err);
+    return { error: 'Falha no disparo em lote. Verifique o servidor SMTP.' };
+  }
+}

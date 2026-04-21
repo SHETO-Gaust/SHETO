@@ -1,12 +1,15 @@
-
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { getAuditoriaData } from "./actions";
+import { getAuditoriaData, getAuditoriaStats } from "./actions";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ShieldCheck, AlertTriangle } from "lucide-react";
 import { AuditoriaClient } from "./auditoria-client";
 
-export default async function AuditoriaPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function AuditoriaPage(props: PageProps) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -32,14 +35,23 @@ export default async function AuditoriaPage() {
     );
   }
 
-  const { data, error } = await getAuditoriaData();
+  const searchParams = await props.searchParams;
+  const page = Number(searchParams?.page) || 1;
+  const pageSize = Number(searchParams?.limit) || 25;
+  const search = typeof searchParams?.q === 'string' ? searchParams.q : '';
+  const status = typeof searchParams?.status === 'string' ? searchParams.status : 'all';
 
-  if (error) {
+  const [stats, listResponse] = await Promise.all([
+    getAuditoriaStats(),
+    getAuditoriaData({ page, pageSize, search, status })
+  ]);
+
+  if (listResponse.error) {
     return (
         <Card className="border-destructive">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-destructive"><AlertTriangle /> Erro no Carregamento</CardTitle>
-                <CardDescription>{error}</CardDescription>
+                <CardDescription>{listResponse.error}</CardDescription>
             </CardHeader>
         </Card>
     );
@@ -57,7 +69,15 @@ export default async function AuditoriaPage() {
             </p>
         </div>
 
-        <AuditoriaClient initialData={data || []} />
+        <AuditoriaClient 
+            data={listResponse.data || []} 
+            stats={stats}
+            totalItems={listResponse.total || 0}
+            currentPage={page}
+            pageSize={pageSize}
+            searchQuery={search}
+            statusFilter={status}
+        />
     </div>
   );
 }

@@ -40,7 +40,11 @@ export function VisualizadorOperacionalClient({ escolaId }: Props) {
             map.set(aula.professor_id, aula.professor);
         }
     });
-    return Array.from(map.values()).sort((a, b) => a.nome_horario.localeCompare(b.nome_horario));
+    return Array.from(map.values()).sort((a, b) => {
+        const clearNameA = (a.nome_horario || '').replace(/^Prof[ªºa-z.]*\s*/i, '').trim();
+        const clearNameB = (b.nome_horario || '').replace(/^Prof[ªºa-z.]*\s*/i, '').trim();
+        return clearNameA.localeCompare(clearNameB);
+    });
   }, [data]);
 
   const turnosComGrade = useMemo(() => {
@@ -142,6 +146,7 @@ export function VisualizadorOperacionalClient({ escolaId }: Props) {
             selectedProfessorId ? (
                 // Simulamos um objeto HorarioCompleto fake para o visualizador rico usar a lógica de consolidação que já tem
                 <VisualizadorHorarioClient 
+                    key={selectedProfessorId}
                     horario={{
                         ...data!.horariosCompletos[0],
                         aulas: data!.allAulas,

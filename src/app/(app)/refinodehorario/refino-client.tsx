@@ -335,7 +335,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
 
                             return (
                                 <div key={tid} className="border rounded-xl shadow-sm bg-background overflow-hidden">
-                                   <div className="bg-[#1e1e2f] text-white px-4 py-2 font-bold uppercase tracking-wider text-xs flex justify-between items-center">
+                                   <div className="bg-primary text-primary-foreground px-4 py-2 font-bold uppercase tracking-wider text-xs flex justify-between items-center">
                                        <span>TURNO: {turnoObj.nome}</span>
                                        <span className="opacity-70 font-normal">{aulasTurno.length} aulas</span>
                                    </div>
@@ -355,7 +355,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                             {turnoObj.horarios.map((hor, slotIdx) => (
                                                 <tr key={slotIdx} className="hover:bg-muted/50 transition-colors">
                                                     <td className="border-b border-r p-2 bg-muted/50/50">
-                                                        <div className="font-bold text-[#1e1e2f]">{slotIdx + 1}ª Aula</div>
+                                                        <div className="font-bold text-primary">{slotIdx + 1}ª Aula</div>
                                                         <div className="text-[10px] text-muted-foreground">{hor.inicio} - {hor.fim}</div>
                                                     </td>
                                                     {diasTurno.map(dia => {
@@ -394,9 +394,12 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                                                 )}
 
                                                                 {slotAulas.map(a => (
-                                                                    <div key={a.id} className="bg-[#1e1e2f]/5 hover:bg-[#1e1e2f]/10 border border-[#1e1e2f]/10 rounded flex flex-col items-center justify-center p-1 w-full h-full relative">
-                                                                        <span className="text-[11px] font-bold text-[#1e1e2f] leading-tight">{a.componente_sigla || a.componente_nome}</span>
-                                                                        <span className="text-[9px] text-gray-600 line-clamp-1">{a.turma_nome} • {a.tipo === 'nao_presencial' ? 'NP' : 'P'}</span>
+                                                                    <div key={a.id} className={cn(
+                                                                        "border rounded flex flex-col items-center justify-center p-1 w-full h-full relative transition-colors",
+                                                                        a.tipo === 'presencial' ? "bg-primary/10 hover:bg-primary/20 border-primary/20 text-primary" : "bg-orange-500/10 hover:bg-orange-500/20 border-orange-500/20 text-orange-600 dark:text-orange-400"
+                                                                    )}>
+                                                                        <span className="text-[11px] font-bold leading-tight">{a.componente_sigla || a.componente_nome}</span>
+                                                                        <span className="text-[9px] opacity-70 line-clamp-1">{a.turma_nome} • {a.tipo === 'nao_presencial' ? 'NP' : 'P'}</span>
                                                                     </div>
                                                                 ))}
                                                             </td>
@@ -503,7 +506,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
 
                         <div className="p-4 border-t bg-muted/50 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
                              <Button
-                                className="w-full text-white bg-[#1e1e2f] hover:bg-[#2b2b40] disabled:opacity-40"
+                                className="w-full disabled:opacity-40"
                                 size="lg"
                                 disabled={!canApply}
                                 onClick={handleApply}
@@ -552,7 +555,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                             Fechar
                         </Button>
                         <Button
-                            className="flex-1 bg-[#1e1e2f] hover:bg-[#2b2b40] text-white disabled:opacity-40"
+                            className="flex-1 disabled:opacity-40"
                             disabled={!canApply}
                             onClick={async () => {
                                 setModalAberto(false);
