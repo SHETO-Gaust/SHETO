@@ -85,8 +85,41 @@ export async function gerarLoteHorario(
         .in('professor_id', professorIdsGlobais)
         .eq('horarios.status', 'publicado');
 
-    // Filtramos ocupações do próprio turno que está sendo gerado
-    const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => (o.horario as any).turno_id !== turnoId);
+    // ── FILTRO ANTI-FALSO-CONFLITO ──────────────────────────────────────────────
+    // Remove do conjunto de "ocupações externas" qualquer aula cujo horário
+    // pertence ao mesmo turno que está sendo gerado agora.  
+    // Isso evita que versões já publicadas do próprio turno joguem os professores
+    // como "globalmente ocupados" nos mesmos slots, causando falha espúria.
+    const ocupacoesFiltradas = (ocupacoesAtivas || []).filter(o => {
+        const horarioTurnoId = (o.horario as any).turno_id;
+        // Exclui definitivamente aulas do próprio turno sendo gerado
+        return horarioTurnoId !== turnoId;
+    });
+
+    // ── LOG DE DIAGNÓSTICO (removível em produção) ───────────────────────────
+    if (process.env.NODE_ENV !== 'production' || process.env.TIMETABLE_DEBUG === '1') {
+        const totalRaw = (ocupacoesAtivas || []).length;
+        const totalFiltrado = ocupacoesFiltradas.length;
+        const removidos = totalRaw - totalFiltrado;
+        console.log(`[GERADOR DEBUG] turnoId=${turnoId}`);
+        console.log(`[GERADOR DEBUG] ocupações globais brutas: ${totalRaw}`);
+        console.log(`[GERADOR DEBUG] removidas por ser do próprio turno: ${removidos}`);
+        console.log(`[GERADOR DEBUG] ocupações globais passadas ao motor: ${totalFiltrado}`);
+        
+        // Agrupar por professor para identificar quem está "bloqueando"
+        const porProf = new Map<string, number>();
+        ocupacoesFiltradas.forEach(o => {
+            const nome = (o.professor as any)?.nome_horario || o.professor_id;
+            porProf.set(nome, (porProf.get(nome) || 0) + 1);
+        });
+        if (porProf.size > 0) {
+            console.log(`[GERADOR DEBUG] professores com ocupações externas (top 5):`);
+            [...porProf.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .forEach(([nome, count]) => console.log(`  - ${nome}: ${count} slots ocupados em outros turnos`));
+        }
+    }
 
     const result = gerarHorarioAlgoritmico(
         turnoData as any,

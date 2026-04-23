@@ -238,3 +238,23 @@ export type ConfiguracaoGerminacao = {
     geminar: boolean;
     tamanho_bloco: number;
 };
+
+export type PendenciaDetalhada = {
+    turma_nome: string;
+    disciplina_nome: string;
+    professor_nome: string | null;
+    tipo_aula: 'presencial' | 'nao_presencial';
+    motivo_real: string;
+};
+
+export type DiagnosticoFalha = {
+  causasIdentificadas: {
+    tipo: 'excess_ban' | 'excess_folga' | 'choque_turno_oposto' | 'choque_turno_local' | 'falta_slot_turma' | 'geminacao_impossivel' | 'restricao_serie' | 'sem_professor';
+    descricao: string;
+    sugestao: string;
+    professoresAfetados: string[];
+    turmasAfetadas: string[];
+    impacto: number;
+  }[];
+  pendenciasDetalhadas: PendenciaDetalhada[];
+};

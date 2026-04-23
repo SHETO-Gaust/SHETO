@@ -45,44 +45,37 @@ const allLinks = [
 ];
 
 const linkGroups = [
-    { id: 'dados-horario', label: 'Dados do Horário' },
-    { id: 'horarios', label: 'Horários' },
-    { id: 'detalhes', label: 'Detalhes' },
-    { id: 'management', label: 'Gestão' },
+  { id: 'dados-horario', label: 'Dados do Horário' },
+  { id: 'horarios', label: 'Horários' },
+  { id: 'detalhes', label: 'Detalhes' },
+  { id: 'management', label: 'Gestão' },
 ];
 
 export function MainNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
 
   const hasAccess = (module: string) => {
-      if (profile?.role === 'admin') return true;
-      if (module === 'dashboard') return true;
-      
-      const groupModules: {[key: string]: string[]} = {
-        'dados-horario': ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'],
-        'horarios': ['horarios'],
-        'detalhes': ['horarios'],
-        'usuarios': ['usuarios', 'auditoria', 'unidades']
-      };
+    if (profile?.role === 'admin') return true;
+    if (module === 'dashboard') return true;
 
-      for (const group in groupModules) {
-        if (groupModules[group].includes(module)) {
-          return profile?.modules?.includes(group) || false;
-        }
+    const groupModules: { [key: string]: string[] } = {
+      'dados-horario': ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'],
+      'horarios': ['horarios'],
+      'detalhes': ['horarios'],
+      'usuarios': ['usuarios', 'auditoria', 'unidades']
+    };
+
+    for (const group in groupModules) {
+      if (groupModules[group].includes(module)) {
+        return profile?.modules?.includes(group) || false;
       }
+    }
 
-      return profile?.modules?.includes(module) || false;
+    return profile?.modules?.includes(module) || false;
   }
 
   const visibleLinks = allLinks.filter(link => hasAccess(link.module));
   const mainLinks = visibleLinks.filter(l => !l.group);
-  
-  // LOGS TEMPORÁRIOS SOLICITADOS PARA DIAGNÓSTICO
-  console.log('[MAIN_NAV] profile:', profile);
-  console.log('[MAIN_NAV] role:', profile?.role);
-  console.log('[MAIN_NAV] modules:', profile?.modules);
-  console.log('[MAIN_NAV] visibleLinks:', visibleLinks.map(l => ({ title: l.label, href: l.href, module: l.module })));
-  console.log('[MAIN_NAV] gestaoLinks:', visibleLinks.filter(l => l.group === 'management'));
 
   return (
     <nav className="p-2">
@@ -102,39 +95,39 @@ export function MainNav({ profile }: { profile: Profile | null }) {
           </SidebarMenuItem>
         ))}
       </SidebarMenu>
-      
-      {linkGroups.map(group => {
-          const groupLinks = visibleLinks.filter(l => l.group === group.id);
-          if (groupLinks.length === 0) return null;
 
-          return (
-             <div className="pt-5" key={group.id}>
-                <p className="px-3 mb-2 text-xs font-semibold uppercase text-sidebar-foreground/60 tracking-wider">
-                  {group.label}
-                </p>
-                <SidebarMenu>
-                {groupLinks.map((link) => (
-                    <SidebarMenuItem key={link.href}>
-                    <Link href={link.href} passHref>
-                        <SidebarMenuButton
-                        className={cn('justify-start')}
-                        isActive={pathname.startsWith(link.href)}
-                        tooltip={link.label}
-                        >
-                        <link.icon className="h-5 w-5" />
-                        <span className="text-base flex-1">{link.label}</span>
-                        {link.step && (
-                            <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-bold text-sidebar-accent-foreground">
-                                {link.step}
-                            </span>
-                        )}
-                        </SidebarMenuButton>
-                    </Link>
-                    </SidebarMenuItem>
-                ))}
-                </SidebarMenu>
-            </div>
-          )
+      {linkGroups.map(group => {
+        const groupLinks = visibleLinks.filter(l => l.group === group.id);
+        if (groupLinks.length === 0) return null;
+
+        return (
+          <div className="pt-5" key={group.id}>
+            <p className="px-3 mb-2 text-xs font-semibold uppercase text-sidebar-foreground/60 tracking-wider">
+              {group.label}
+            </p>
+            <SidebarMenu>
+              {groupLinks.map((link) => (
+                <SidebarMenuItem key={link.href}>
+                  <Link href={link.href} passHref>
+                    <SidebarMenuButton
+                      className={cn('justify-start')}
+                      isActive={pathname.startsWith(link.href)}
+                      tooltip={link.label}
+                    >
+                      <link.icon className="h-5 w-5" />
+                      <span className="text-base flex-1">{link.label}</span>
+                      {link.step && (
+                        <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-sidebar-accent text-[10px] font-bold text-sidebar-accent-foreground">
+                          {link.step}
+                        </span>
+                      )}
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </div>
+        )
       })}
     </nav>
   );

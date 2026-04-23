@@ -25,6 +25,7 @@ import { EditProfessorSheet } from './edit-professor-sheet';
 import { DisciplinasProfessorSheet } from './disciplinas-professor-sheet';
 import { RestricoesProfessorSheet } from './restricoes-professor-sheet';
 import { DeleteProfessorDialog } from './delete-professor-dialog';
+import { ExportarRestricoes } from './exportar-restricoes';
 import { getProfessores, solicitarRestricoesEmail, processarRespostaRestricao } from './actions';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -223,7 +224,8 @@ export function ProfessoresClient({
 
   return (
     <TooltipProvider>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end items-center gap-2 mb-4">
+        <ExportarRestricoes professores={professores} turnosDaEscola={turnosDaEscola} />
         <Button onClick={() => openSheet(null, 'edit')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Professor

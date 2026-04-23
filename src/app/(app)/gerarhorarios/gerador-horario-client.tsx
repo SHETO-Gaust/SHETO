@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition, useMemo } from 'react';
-import type { Turno, Horario, ConfiguracaoGerminacao } from '@/lib/types';
+import type { Turno, Horario, ConfiguracaoGerminacao, DiagnosticoFalha } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [isReverting, setIsReverting] = useState<string | null>(null);
     const [genError, setGenError] = useState<string | null>(null);
+    const [diagnostico, setDiagnostico] = useState<DiagnosticoFalha | null>(null);
     const [partialAulas, setPartialAulas] = useState<any[] | null>(null);
 
     const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
@@ -76,6 +77,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         setSelectedTurnoId(turnoId);
         setIsLoadingHorarios(true);
         setGenError(null);
+        setDiagnostico(null);
         setPartialAulas(null);
         const { data, error } = await getHorariosSalvos(turnoId);
         if (error) {
@@ -93,6 +95,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         }
 
         setGenError(null);
+        setDiagnostico(null);
         setPartialAulas(null);
         const nextVersion = horarios.length + 1;
         setNomeHorarioInput(`Horário V${nextVersion}`);
@@ -151,6 +154,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         setIsProcessing(true);
         setCurrentAttempt(0);
         setGenError(null);
+        setDiagnostico(null);
         setPartialAulas(null);
 
         let attempts = 0;
@@ -166,10 +170,11 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     configGerminacao,
                     BATCH_SIZE,
                     progress
-                );
+                ) as any;
 
                 if (result.error && !result.aulas) {
                     setGenError(result.error);
+                    if (result.diagnostico) setDiagnostico(result.diagnostico);
                     setIsProcessing(false);
                     return;
                 }
@@ -184,6 +189,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
                 if (attempts + BATCH_SIZE >= MAX_ATTEMPTS) {
                     setGenError(result.error || "Limite de tentativas atingido.");
+                    if (result.diagnostico) setDiagnostico(result.diagnostico);
                     setPartialAulas(result.aulas || []);
                 }
 
@@ -221,6 +227,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 toast({ title: 'Erro ao salvar', description: result.error, variant: 'destructive' });
             } else {
                 setGenError(null);
+                setDiagnostico(null);
                 setPartialAulas(null);
                 toast({ title: 'Grade Salva!', description: 'A grade foi salva mesmo com aulas pendentes. Ajuste manualmente os horários vagos.' });
                 handleTurnoChange(selectedTurnoId);
@@ -287,24 +294,108 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     </CardHeader>
                     <CardContent className="space-y-6">
 
-                        {genError && (
+                        {(genError || diagnostico) && (
                             <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 animate-in fade-in slide-in-from-top-4 duration-500">
                                 <AlertCircle className="h-5 w-5" />
-                                <AlertTitle className="text-xl font-bold">Impossível fechar a grade sem conflitos</AlertTitle>
+                                <AlertTitle className="text-xl font-bold">
+                                    {diagnostico ? 'Geração Incompleta: Diagnóstico Encontrado' : 'Impossível fechar a grade sem conflitos'}
+                                </AlertTitle>
                                 <AlertDescription className="mt-4 space-y-6">
-                                    <div className="text-sm bg-background/90 p-5 rounded-xl border-2 border-destructive/20 shadow-inner whitespace-pre-line leading-relaxed font-mono">
-                                        {genError}
-                                    </div>
+                                    {!diagnostico && (
+                                        <div className="text-sm bg-background/90 p-5 rounded-xl border-2 border-destructive/20 shadow-inner whitespace-pre-line leading-relaxed font-mono">
+                                            {genError}
+                                        </div>
+                                    )}
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {diagnostico && (
+                                        <div className="space-y-6">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-destructive flex items-center gap-2 mb-3">
+                                                    <AlertTriangle className="h-4 w-4" /> Causas Prováveis (Ordenadas por Frequência)
+                                                </h4>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    {diagnostico.causasIdentificadas.map((causa, idx) => (
+                                                        <div key={idx} className="bg-background/80 border border-destructive/20 rounded-xl p-4 shadow-sm space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="bg-destructive/10 text-destructive text-xs font-bold px-2 py-1 rounded-md">
+                                                                    Problema {idx + 1}
+                                                                </span>
+                                                                <span className="font-semibold text-sm">{causa.descricao}</span>
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground flex gap-4 pl-1">
+                                                                {causa.professoresAfetados.length > 0 && (
+                                                                    <div>
+                                                                        <strong className="text-foreground">Professores:</strong> {causa.professoresAfetados.join(', ')}
+                                                                    </div>
+                                                                )}
+                                                                {causa.turmasAfetadas.length > 0 && (
+                                                                    <div>
+                                                                        <strong className="text-foreground">Turmas:</strong> {causa.turmasAfetadas.join(', ')}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="bg-orange-50/50 border border-orange-100 p-2.5 rounded-lg text-xs font-medium text-orange-900 mt-2 flex items-start gap-2">
+                                                                <Settings2 className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                                                                <span>{causa.sugestao}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    {diagnostico.causasIdentificadas.length === 0 && (
+                                                        <div className="text-sm text-muted-foreground italic p-2 border border-dashed rounded-lg text-center">
+                                                            Nenhuma causa predominante clara encontrada além de falta de espaço genérica.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="text-sm font-bold text-destructive flex items-center gap-2 mb-3">
+                                                    <Info className="h-4 w-4" /> Evidências Concretas ({diagnostico.pendenciasDetalhadas.length} aulas não alocadas)
+                                                </h4>
+                                                <div className="max-h-60 overflow-y-auto rounded-xl border bg-background/50 shadow-inner pr-2">
+                                                    <table className="w-full text-xs text-left">
+                                                        <thead className="sticky top-0 bg-secondary/90 backdrop-blur-sm z-10 text-secondary-foreground shadow-sm">
+                                                            <tr>
+                                                                <th className="px-3 py-2.5 font-semibold">Turma</th>
+                                                                <th className="px-3 py-2.5 font-semibold">Componente</th>
+                                                                <th className="px-3 py-2.5 font-semibold">Professor</th>
+                                                                <th className="px-3 py-2.5 font-semibold">Tipo</th>
+                                                                <th className="px-3 py-2.5 font-semibold w-1/3">Motivo Real</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-border/50">
+                                                            {diagnostico.pendenciasDetalhadas.map((pend, idx) => (
+                                                                <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                                                                    <td className="px-3 py-2 font-medium">{pend.turma_nome}</td>
+                                                                    <td className="px-3 py-2">{pend.disciplina_nome}</td>
+                                                                    <td className="px-3 py-2 text-muted-foreground">{pend.professor_nome || 'Sem Professor'}</td>
+                                                                    <td className="px-3 py-2">
+                                                                        <span className={cn(
+                                                                            "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                                                                            pend.tipo_aula === 'presencial' ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"
+                                                                        )}>
+                                                                            {pend.tipo_aula === 'presencial' ? 'Pres.' : 'NP'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-3 py-2 text-destructive font-medium">{pend.motivo_real}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                                         <div className="p-4 border rounded-xl bg-orange-50 border-orange-200 space-y-3">
                                             <p className="text-sm font-bold text-orange-900 flex items-center gap-2">
                                                 <AlertTriangle className="h-4 w-4" /> Opção: Salvar com Pendências
                                             </p>
-                                            <p className="text-xs text-orange-800">
-                                                Você pode salvar a grade incompleta e depois realizar ajustes manuais para as aulas que o sistema não conseguiu encaixar. Elas aparecerão como "Vagas" na cor vermelha.
+                                            <p className="text-xs text-orange-800 leading-relaxed">
+                                                Você pode salvar a grade incompleta e depois realizar ajustes manuais para as aulas não alocadas. Elas aparecerão como "Vagas" na grade em vermelho.
                                             </p>
-                                            <Button onClick={handleForcarSalvamento} variant="default" className="w-full bg-orange-600 hover:bg-orange-700" disabled={isPending}>
+                                            <Button onClick={handleForcarSalvamento} variant="default" className="w-full bg-orange-600 hover:bg-orange-700 h-10" disabled={isPending}>
                                                 {isPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
                                                 Salvar Grade Incompleta
                                             </Button>
@@ -312,16 +403,18 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
                                         <div className="p-4 border rounded-xl bg-background space-y-3">
                                             <p className="text-sm font-bold flex items-center gap-2">
-                                                <Settings2 className="h-4 w-4" /> Como Resolver?
+                                                <Settings2 className="h-4 w-4" /> Ações Rápidas
                                             </p>
-                                            <ul className="text-[11px] space-y-1 text-muted-foreground list-disc pl-4">
-                                                <li>Verifique se os professores já possuem aulas em outros turnos publicados.</li>
-                                                <li>Reduza a quantidade de restrições manuais (Ban) nos professores conflitantes.</li>
-                                                <li>Tente desativar a "Geminação" para as matérias do professor problemático.</li>
-                                            </ul>
-                                            <div className="flex gap-2">
-                                                <Link href="/professores" className="flex-1"><Button variant="outline" size="sm" className="w-full text-[10px]">Ajustar Professores</Button></Link>
-                                                <Link href="/serie" className="flex-1"><Button variant="outline" size="sm" className="w-full text-[10px]">Revisar Cargas</Button></Link>
+                                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                                Acesse as áreas do sistema recomendadas para corrigir os bloqueios antes de tentar gerar novamente.
+                                            </p>
+                                            <div className="flex flex-col sm:flex-row gap-2 mt-auto">
+                                                <Link href="/professores" className="flex-1">
+                                                    <Button variant="outline" size="sm" className="w-full h-9 text-xs">Menu Professores</Button>
+                                                </Link>
+                                                <Link href="/serie" className="flex-1">
+                                                    <Button variant="outline" size="sm" className="w-full h-9 text-xs">Cargas / Séries</Button>
+                                                </Link>
                                             </div>
                                         </div>
                                     </div>
