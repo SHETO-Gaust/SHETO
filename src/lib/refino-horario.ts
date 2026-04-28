@@ -15,6 +15,10 @@ export type AulaRefino = {
   aula_index: number;
   tipo: 'presencial' | 'nao_presencial';
   turno_id: string;
+  // Rastreamento de aulas fixas/compartilhadas
+  aula_fixa_id?: string | null;
+  compartilhada?: boolean;
+  aula_compartilhada_id?: string | null;
 };
 
 export type Move = {
@@ -197,6 +201,9 @@ export function analisarMovimento(
 
   // Helper para checar validade de um estado em tempo constante relativo ao map
   function isSlotValid(aula: AulaRefino, dia: string, slot: number, turnoId: string, state: SolverState): boolean {
+      // Aulas fixas são imóveis: nunca podem ser deslocadas pelo DFS
+      if (aula.aula_fixa_id) return false;
+
       const [iniT, fimT] = getSlotMinutes(turnosById.get(turnoId), slot);
       const prfKey = getProfessorKey(aula.professor_id, aula.professor_cpf);
 
@@ -224,7 +231,16 @@ export function analisarMovimento(
 
           // Se sobrepõe no tempo, checa professor e turma
           if (tAula.turma_id === aula.turma_id) return false;
-          if (prfKey && tAula.professor_id && getProfessorKey(tAula.professor_id, tAula.professor_cpf) === prfKey) return false;
+
+          if (prfKey && tAula.professor_id && getProfessorKey(tAula.professor_id, tAula.professor_cpf) === prfKey) {
+              // Não é conflito real se as duas aulas pertencem à mesma aula coletiva
+              if (
+                aula.aula_compartilhada_id &&
+                tAula.aula_compartilhada_id &&
+                aula.aula_compartilhada_id === tAula.aula_compartilhada_id
+              ) continue;
+              return false;
+          }
       }
       return true;
   }

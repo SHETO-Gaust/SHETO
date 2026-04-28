@@ -60,6 +60,8 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     const [nomeHorarioInput, setNomeHorarioInput] = useState('');
     const [disciplinasParaConfig, setDisciplinasParaConfig] = useState<{ id: string, nome: string, sigla: string, maxAulas: number }[]>([]);
     const [configGerminacao, setConfigGerminacao] = useState<ConfiguracaoGerminacao[]>([]);
+    const [permitirMesmoProfDisciplinasMesmoDia, setPermitirMesmoProfDisciplinasMesmoDia] = useState(false);
+
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [currentAttempt, setCurrentAttempt] = useState(0);
@@ -169,7 +171,8 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     selectedTurnoId,
                     configGerminacao,
                     BATCH_SIZE,
-                    progress
+                    progress,
+                    permitirMesmoProfDisciplinasMesmoDia
                 ) as any;
 
                 if (result.error && !result.aulas) {
@@ -548,6 +551,24 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                         className="h-12 text-lg"
                                         autoFocus
                                     />
+                                </div>
+
+                                <div className="flex items-start gap-4 p-4 border rounded-xl bg-muted/30">
+                                    <Switch
+                                        id="mesmo-prof-mesmo-dia"
+                                        checked={permitirMesmoProfDisciplinasMesmoDia}
+                                        onCheckedChange={setPermitirMesmoProfDisciplinasMesmoDia}
+                                        className="mt-0.5 shrink-0"
+                                    />
+                                    <div className="space-y-1">
+                                        <Label htmlFor="mesmo-prof-mesmo-dia" className="text-sm font-semibold cursor-pointer">
+                                            Permitir mesmo professor em disciplinas diferentes no mesmo dia
+                                        </Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Quando ativado, o motor não penaliza dias onde o professor já ministra outra disciplina para a mesma turma.
+                                            Choques reais de horário e indisponibilidades continuam bloqueados normalmente.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         ) : (

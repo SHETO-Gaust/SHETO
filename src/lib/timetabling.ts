@@ -7,7 +7,8 @@ import {
   type ConfiguracaoGerminacao,
   type LivreDocenciaPeriodo,
   type DiagnosticoFalha,
-  type PendenciaDetalhada
+  type PendenciaDetalhada,
+  type SerieAulaFixa
 } from './types';
 
 export type SugestaoRealocacao = {
@@ -24,6 +25,10 @@ export type SugestaoRealocacao = {
 
 type HorarioAulaGeradaAlgoritmo = Omit<HorarioAulaGerada, 'id' | 'horario_id'> & {
   turno_id: string;
+  // Tracking de aulas fixas/compartilhadas (espelha colunas do DB)
+  aula_fixa_id?: string | null;
+  compartilhada?: boolean;
+  aula_compartilhada_id?: string | null;
 };
 
 /** Slot já ocupado por um professor — armazena minutos reais para evitar re-lookup de turno */
@@ -259,6 +264,9 @@ function ordenarDiasComPreferenciaProgressiva(
   ocupacoesExistentesPorProfessorDia: Map<string, SlotOcupado[]>,
   ignorarDiasPreferidos: boolean,
   curProgLocal: number,
+  // Quando true, não penaliza dias onde o professor já tem aulas:
+  // isso permite que o mesmo prof ministre disciplinas diferentes na mesma turma/dia.
+  ignorarCargaProfessorNoDia: boolean = false,
 ): string[] {
   const dias = [...diasDisponiveis];
 
@@ -269,7 +277,7 @@ function ordenarDiasComPreferenciaProgressiva(
   const preferidos = new Set(prof.dias_preferidos || []);
 
   const getDiaLoad = (dia: string): number => {
-    if (!profKey) return 0;
+    if (!profKey || ignorarCargaProfessorNoDia) return 0; // flag ativa: ignora carga
     const local = (ocupacaoProfessoresPorDia.get(`${profKey}|${dia}`) || []).length;
     const global = (ocupacoesExistentesPorProfessorDia.get(`${profKey}|${dia}`) || []).length;
     return local + global;
@@ -302,7 +310,9 @@ export function gerarHorarioAlgoritmico(
   force: boolean = false,
   ocupacoesExistentes: any[] = [],
   maxAttempts: number = 100000,
-  globalProgress: number = 0
+  globalProgress: number = 0,
+  aulasFixas: SerieAulaFixa[] = [],
+  permitirMesmoProfDisciplinasMesmoDia: boolean = false
 ): {
   success: boolean;
   aulas: HorarioAulaGeradaAlgoritmo[];
@@ -427,6 +437,16 @@ export function gerarHorarioAlgoritmico(
    * BAN (indisponivel) e FOLGA (livre docência) são SEMPRE hard constraints
    * e NUNCA são afetados por relaxamento progressivo.
    */
+  // Conjunto de slots de professor que são compartilhados intencionalmente:
+  // chave = `${professorKey}|${dia}|${aula_index}` — usada para não rejeitar
+  // o professor por já estar ocupado quando a ocupação é uma aula coletiva
+  // da mesma série/componente.
+  const slotsCompartilhadosProfessor = new Set<string>();
+
+  // ── IDs de blocos que foram pré-alocados (fixos) ─────────────────────────────
+  // Chave: `${serie_id}|${componente_id}|${tipo_aula}|${turma_id}`
+  const blocosFixosIds = new Set<string>();
+
   const executarTentativa = (
     permitirUsoPlanejamento: boolean,
     forcarIndividuais: boolean,
@@ -434,17 +454,132 @@ export function gerarHorarioAlgoritmico(
     curProgLocal: number = 0
   ) => {
     const aulasGeradas: HorarioAulaGeradaAlgoritmo[] = [];
-
-    /**
-     * Mapa de ocupação de professores nesta tentativa.
-     * Chave: `${professor_key}|${dia}` → lista de SlotOcupado com minutos reais
-     */
     const ocupacaoProfessoresPorDia = new Map<string, SlotOcupado[]>();
-
-    /** Conjuntos de slots de turma já ocupados: `turmaId|turnoId|dia|idx` */
     const ocupacaoTurmas = new Set<string>();
+    slotsCompartilhadosProfessor.clear();
+    blocosFixosIds.clear();
 
     const todosOsBlocos = construirTodosOsBlocos(forcarIndividuais);
+
+    // ╔═══════════════════════════════════════════════════════════════════
+    // FASE 0 — Pré-alocação de aulas fixas
+    // As fixas entram ANTES do loop aleatório e marcam seus slots como
+    // ocupados, de modo que o loop não tenta reocupá-los.
+    // ╚═══════════════════════════════════════════════════════════════════
+    for (const aulaFixa of aulasFixas) {
+      // Turmas do turno atual que pertencem a esta série
+      const turmasDaSerie = turmas.filter(t => t.serie.id === aulaFixa.serie_id);
+      if (turmasDaSerie.length === 0) continue;
+
+      const { dia_semana: dia, aula_index: idx, tipo_aula, compartilhada } = aulaFixa;
+      const targetTurno = tipo_aula === 'presencial' ? turno : (resolverTurnoNP(turno, todosTurnos));
+      const [ini, fim] = getSlotMinutes(targetTurno, idx);
+
+      // UUID único para esta instância de aula coletiva
+      const aulaCompartilhadaId = compartilhada
+        ? `shared-${aulaFixa.id}-${dia}-${idx}`
+        : null;
+
+      // Resolver professor para aula compartilhada
+      let professorCompartilhadoId: string | null = null;
+      let professorCompartilhadoKey: string | null = null;
+      if (compartilhada) {
+        if (aulaFixa.professor_responsavel_id) {
+          professorCompartilhadoId = aulaFixa.professor_responsavel_id;
+          const p = professoresById.get(professorCompartilhadoId);
+          professorCompartilhadoKey = p ? getTeacherKey(p) : `id:${professorCompartilhadoId}`;
+        } else {
+          // Tentar inferir professor único
+          const profIds = new Set(
+            turmasDaSerie
+              .map(t => t.professores.find(p => p.componente_id === aulaFixa.componente_id)?.professor_id)
+              .filter(Boolean) as string[]
+          );
+          if (profIds.size === 1) {
+            professorCompartilhadoId = [...profIds][0];
+            const p = professoresById.get(professorCompartilhadoId);
+            professorCompartilhadoKey = p ? getTeacherKey(p) : `id:${professorCompartilhadoId}`;
+          }
+          // Se profIds.size > 1, não registramos professor (já deve ter sido bloqueado na validation)
+        }
+      }
+
+      // Pré-alocar para cada turma da série
+      for (const turma of turmasDaSerie) {
+        const slotKey = `${turma.id}|${targetTurno.id}|${dia}|${idx}`;
+
+        // Verificar conflito de turma
+        if (ocupacaoTurmas.has(slotKey)) {
+          console.warn(`[FIXAS] Conflito de turma na pré-alocação: ${turma.nome} | ${dia}-${idx}`);
+          continue; // Não interrompe a tentativa; o diagnosótico pegará
+        }
+
+        // Resolver professor para aula individual
+        let profId: string | null = null;
+        let profKey: string | null = null;
+        if (compartilhada) {
+          profId = professorCompartilhadoId;
+          profKey = professorCompartilhadoKey;
+        } else {
+          const profInfo = turma.professores.find(p => p.componente_id === aulaFixa.componente_id);
+          profId = profInfo?.professor_id || null;
+          const profObj = profId ? professoresById.get(profId) : undefined;
+          profKey = profObj ? getTeacherKey(profObj) : (profId ? `id:${profId}` : null);
+        }
+
+        // Registrar aula
+        aulasGeradas.push({
+          turma_id: turma.id,
+          componente_id: aulaFixa.componente_id,
+          professor_id: profId,
+          dia_semana: dia,
+          aula_index: idx,
+          tipo: tipo_aula,
+          turno_id: targetTurno.id,
+          aula_fixa_id: aulaFixa.id,
+          compartilhada,
+          aula_compartilhada_id: aulaCompartilhadaId,
+        });
+
+        ocupacaoTurmas.add(slotKey);
+
+        // Para aula compartilhada: professor entra UMA única vez (não por turma)
+        if (!compartilhada && profKey) {
+          pushMapArray(ocupacaoProfessoresPorDia, `${profKey}|${dia}`, {
+            turno_id: targetTurno.id,
+            aula_index: idx,
+            inicio_min: ini,
+            fim_min: fim,
+          });
+        }
+
+        // Marcar o bloco correspondente como placed
+        blocosFixosIds.add(`${aulaFixa.serie_id}|${aulaFixa.componente_id}|${tipo_aula}|${turma.id}`);
+      }
+
+      // Professor da aula compartilhada: registrar UMA única vez
+      if (compartilhada && professorCompartilhadoKey) {
+        const mapKey = `${professorCompartilhadoKey}|${dia}`;
+        if (!(ocupacaoProfessoresPorDia.get(mapKey) || []).some(o => o.aula_index === idx && o.turno_id === targetTurno.id)) {
+          pushMapArray(ocupacaoProfessoresPorDia, mapKey, {
+            turno_id: targetTurno.id,
+            aula_index: idx,
+            inicio_min: ini,
+            fim_min: fim,
+          });
+        }
+        // Marcar slot como compartilhado para não rejeitar outras turmas da mesma aula
+        slotsCompartilhadosProfessor.add(`${professorCompartilhadoKey}|${dia}|${idx}`);
+      }
+    }
+
+    // Marcar blocos fixos como placed antes do loop principal
+    for (const bloco of todosOsBlocos) {
+      const fixoKey = `${(turmasById.get(bloco.turma_id) as any)?.serie?.id}|${bloco.componente_id}|${bloco.tipo}|${bloco.turma_id}`;
+      if (blocosFixosIds.has(fixoKey)) bloco.placed = true;
+    }
+    // ── FIM da Fase 0 ─────────────────────────────────────────────────────────────
+
 
     const slotKeyOf = (turmaId: string, turnoId: string, dia: string, idx: number) =>
       `${turmaId}|${turnoId}|${dia}|${idx}`;
@@ -535,14 +670,18 @@ export function gerarHorarioAlgoritmico(
         const [iniCand, fimCand] = getSlotMinutes(targetTurno, idx);
 
         const localOcc = ocupacaoProfessoresPorDia.get(profDiaKey) || [];
-        if (localOcc.some(occ =>
-          minutesConflitam(
+        if (localOcc.some(occ => {
+          // Ignorar falso conflito se o slot ocupado é uma aula coletiva compartilhada
+          // da qual este professor é o responsável (ele só aparece UMA vez no mapa).
+          const sharedKey = `${meta.professor_key}|${dia}|${occ.aula_index}`;
+          if (slotsCompartilhadosProfessor.has(sharedKey)) return false;
+          return minutesConflitam(
             iniCand, fimCand,
             occ.inicio_min, occ.fim_min,
             targetTurno.id === occ.turno_id,
             idx, occ.aula_index,
-          )
-        )) return false;
+          );
+        })) return false;
 
         const globalOcc = ocupacoesExistentesPorProfessorDia.get(profDiaKey) || [];
         if (globalOcc.some(occ =>
@@ -728,7 +867,8 @@ export function gerarHorarioAlgoritmico(
           ocupacaoProfessoresPorDia,
           ocupacoesExistentesPorProfessorDia,
           ignorarDiasPreferidos,
-          curProgLocal
+          curProgLocal,
+          permitirMesmoProfDisciplinasMesmoDia, // repassa a flag
         );
 
         for (const d of dias) {
@@ -842,7 +982,34 @@ export function gerarHorarioAlgoritmico(
         }
       }
 
-      if (alocado) b.placed = true;
+      if (alocado) {
+        b.placed = true;
+        if (
+          permitirMesmoProfDisciplinasMesmoDia &&
+          b.professor_key &&
+          typeof process !== 'undefined' &&
+          (process.env.NODE_ENV !== 'production' || process.env.TIMETABLE_DEBUG === '1')
+        ) {
+          // Encontra a aula recém-alocada para este bloco (a última do array para esta turma/componente)
+          const recentAula = [...aulasGeradas].reverse().find(
+            a => a.turma_id === b.turma_id && a.componente_id === b.componente_id && a.professor_id === b.professor_id
+          );
+          if (recentAula) {
+            const aulasMesmaTurmaMesmoDia = aulasGeradas.filter(
+              a => a.turma_id === b.turma_id &&
+                   a.professor_id === b.professor_id &&
+                   a.dia_semana === recentAula.dia_semana &&
+                   a.componente_id !== b.componente_id
+            );
+            if (aulasMesmaTurmaMesmoDia.length > 0) {
+              console.log(
+                `[FLAG:permitirMesmoProfDia] ${b.professor_nome} | ${b.turma_nome} | ${b.componente_nome} ` +
+                `alocado em ${recentAula.dia_semana} (mesmo dia que outras disciplinas deste prof na turma)`
+              );
+            }
+          }
+        }
+      }
     }
 
     tentarRepairPendencias();

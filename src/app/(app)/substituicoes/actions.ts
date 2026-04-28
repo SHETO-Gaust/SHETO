@@ -37,7 +37,7 @@ export async function getProfessorAulasNoDia(turnoId: string, professorId: strin
     return { data: aulas };
 }
 
-export async function buscarSubstitutosDisponiveis(escolaId: string, turnoId: string, dia: string, aulaIndex: number) {
+export async function buscarSubstitutosDisponiveis(escolaId: string, turnoId: string, dia: string, aulaIndex: number, turmaId: string) {
     const supabase = await createClient();
     const { data: professores } = await getProfessores(escolaId);
     const { data: turno } = await supabase.from('turnos').select('*').eq('id', turnoId).single();
@@ -55,7 +55,15 @@ export async function buscarSubstitutosDisponiveis(escolaId: string, turnoId: st
 
     const ocupadosIds = new Set(ocupados?.map(o => o.professor_id) || []);
 
-    // 2. Filtrar professores disponíveis
+    // 1.5. Buscar professores que já ensinam nesta turma
+    const { data: turmaProfessores } = await supabase
+        .from('turmas_professores')
+        .select('professor_id')
+        .eq('turma_id', turmaId);
+        
+    const professoresDaTurmaIds = new Set(turmaProfessores?.map(tp => tp.professor_id) || []);
+
+    // 2. Filtrar professores disponíveis e adicionar flag
     const disponiveis = professores.filter(p => {
         // Regra 1: Deve atuar neste turno
         if (!p.turnos_ids.includes(turnoId)) return false;
@@ -68,7 +76,10 @@ export async function buscarSubstitutosDisponiveis(escolaId: string, turnoId: st
         if (r === 'indisponivel' || r === 'planejamento') return false;
 
         return true;
-    });
+    }).map(p => ({
+        ...p,
+        ja_ensina_na_turma: professoresDaTurmaIds.has(p.id)
+    }));
 
     return { data: disponiveis };
 }

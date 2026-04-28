@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, BookOpen, Users2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Edit, Trash2, Copy, BookOpen, Users2, CheckCircle2, AlertCircle, Lock } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -88,7 +88,24 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
             const aulasPresenciaisRestantes = serie.total_aulas_presenciais_semanais - serie.total_aulas_presenciais_distribuidas;
             const progressoPresencial = serie.total_aulas_presenciais_semanais > 0 ? (serie.total_aulas_presenciais_distribuidas / serie.total_aulas_presenciais_semanais) * 100 : 0;
             const aulasNPRestantes = serie.aulas_nao_presenciais_semanais - serie.total_aulas_nao_presenciais_distribuidas;
-            
+            const totalFixas = serie.aulas_fixas?.length ?? 0;
+
+            // Agrupa por componente_id para listar cada disciplina uma única vez no tooltip
+            const fixasPorComponente = new Map<string, { sigla: string; temColetiva: boolean }>();
+            for (const f of (serie.aulas_fixas || [])) {
+              const comp = dependencies.componentes.find(c => c.id === f.componente_id);
+              const sigla = comp?.sigla || comp?.nome || '?';
+              const existing = fixasPorComponente.get(f.componente_id);
+              fixasPorComponente.set(f.componente_id, {
+                sigla,
+                temColetiva: (existing?.temColetiva ?? false) || f.compartilhada,
+              });
+            }
+
+            const fixasTooltip = Array.from(fixasPorComponente.values())
+              .map(({ sigla, temColetiva }) => temColetiva ? `${sigla} (coletiva)` : sigla)
+              .join(', ');
+
             return (
               <Card key={serie.id} className="flex flex-col">
                 <CardHeader>
@@ -136,6 +153,16 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
                         <Users2 className="h-3 w-3"/>
                         {serie.turmas_count} {serie.turmas_count === 1 ? 'turma' : 'turmas'}
                      </Badge>
+                     {totalFixas > 0 && (
+                       <Badge
+                         variant="outline"
+                         className="flex items-center gap-1 border-primary/40 text-primary bg-primary/5"
+                         title={fixasTooltip}
+                       >
+                         <Lock className="h-3 w-3" />
+                         {totalFixas} {totalFixas === 1 ? 'aula fixa' : 'aulas fixas'}
+                       </Badge>
+                     )}
                   </div>
                 </CardContent>
               </Card>

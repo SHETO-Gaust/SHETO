@@ -42,7 +42,8 @@ export async function gerarLoteHorario(
     turnoId: string, 
     configGerminacao: ConfiguracaoGerminacao[],
     loteSize: number = 500,
-    progress: number = 0
+    progress: number = 0,
+    permitirMesmoProfDisciplinasMesmoDia: boolean = false
 ) {
     const supabase = await createClient();
 
@@ -105,6 +106,7 @@ export async function gerarLoteHorario(
         console.log(`[GERADOR DEBUG] ocupações globais brutas: ${totalRaw}`);
         console.log(`[GERADOR DEBUG] removidas por ser do próprio turno: ${removidos}`);
         console.log(`[GERADOR DEBUG] ocupações globais passadas ao motor: ${totalFiltrado}`);
+        console.log(`[GERADOR DEBUG] permitirMesmoProfDisciplinasMesmoDia: ${permitirMesmoProfDisciplinasMesmoDia ? 'RELAXADA (mesmo prof pode dar disciplinas diferentes na mesma turma/dia)' : 'ATIVA (padrão: disciplinas diferentes em dias diferentes)'}`);
         
         // Agrupar por professor para identificar quem está "bloqueando"
         const porProf = new Map<string, number>();
@@ -121,6 +123,17 @@ export async function gerarLoteHorario(
         }
     }
 
+    // Buscar aulas fixas das séries presentes neste turno
+    const serieIds = [...new Set(turmasDoTurno.map((t: any) => t.serie?.id).filter(Boolean))];
+    let aulasFixas: any[] = [];
+    if (serieIds.length > 0) {
+        const { data: fixas } = await supabase
+            .from('series_aulas_fixas')
+            .select('*')
+            .in('serie_id', serieIds);
+        aulasFixas = fixas || [];
+    }
+
     const result = gerarHorarioAlgoritmico(
         turnoData as any,
         turmasDoTurno as any[],
@@ -130,7 +143,9 @@ export async function gerarLoteHorario(
         false,
         ocupacoesFiltradas || [],
         loteSize,
-        progress
+        progress,
+        aulasFixas,
+        permitirMesmoProfDisciplinasMesmoDia
     );
 
     return result;
@@ -168,7 +183,11 @@ export async function salvarGradeFinal(escolaId: string, turnoId: string, nome: 
                     dia_semana: a.dia_semana,
                     aula_index: a.aula_index,
                     tipo: a.tipo,
-                    turno_id: a.turno_id // Turno físico onde a aula realmente ocorre
+                    turno_id: a.turno_id,
+                    // Campos de rastreamento de aulas fixas/compartilhadas
+                    aula_fixa_id: a.aula_fixa_id || null,
+                    compartilhada: a.compartilhada || false,
+                    aula_compartilhada_id: a.aula_compartilhada_id || null,
                 });
             }
         }

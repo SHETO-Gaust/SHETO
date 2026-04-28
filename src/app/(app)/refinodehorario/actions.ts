@@ -28,6 +28,7 @@ export async function getDadosRefinoHorario(escolaId: string, horarioSelecionado
         .from('horario_aulas')
         .select(`
             id, horario_id, turma_id, componente_id, professor_id, dia_semana, aula_index, tipo, turno_id,
+            aula_fixa_id, compartilhada, aula_compartilhada_id,
             turma:turmas(nome),
             componente:componentes_curriculares(nome, sigla),
             professor:professores(nome_horario, cpf),
@@ -53,6 +54,9 @@ export async function getDadosRefinoHorario(escolaId: string, horarioSelecionado
         aula_index: a.aula_index,
         tipo: a.tipo,
         turno_id: a.turno_id,
+        aula_fixa_id: a.aula_fixa_id || null,
+        compartilhada: a.compartilhada || false,
+        aula_compartilhada_id: a.aula_compartilhada_id || null,
     }));
 
     const aulasDesteHorario = todasAulas.filter(a => a.horario_id === horarioSelecionadoId);
@@ -110,7 +114,18 @@ export async function aplicarMudancasRefino(mudancas: Move[]) {
     const supabase = await createClient();
     const aulaIds = mudancas.map(m => m.aulaId);
 
-    // ── Phase 1: Snapshot current DB state of all affected rows ──────────────
+    // ── Phase 0: Guard — aulas fixas não podem ser movidas ────────────────────
+    const { data: aulasParaMover } = await supabase
+        .from('horario_aulas')
+        .select('id, aula_fixa_id')
+        .in('id', aulaIds);
+
+    const fixasBloqueadas = (aulasParaMover || []).filter(a => a.aula_fixa_id);
+    if (fixasBloqueadas.length > 0) {
+        return {
+            error: 'Aula fixa não pode ser movida pelo refinamento. Para alterar o horário desta aula, edite a fixação no modelo da série e regenere o horário.'
+        };
+    }
     const { data: aulasAtuais, error: fetchError } = await supabase
         .from('horario_aulas')
         .select('id, horario_id, turma_id, componente_id, professor_id, dia_semana, aula_index, tipo, turno_id')

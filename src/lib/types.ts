@@ -102,6 +102,19 @@ export type ProfessorComDados = Professor & {
     solicitacao_pendente?: SolicitacaoRestricao | null;
 };
 
+export type SerieAulaFixa = {
+  id: string;
+  serie_id: string;
+  componente_id: string;
+  tipo_aula: 'presencial' | 'nao_presencial';
+  dia_semana: string;
+  aula_index: number;
+  compartilhada: boolean;
+  professor_responsavel_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Serie = {
   id: string;
   escola_id: string;
@@ -131,6 +144,7 @@ export type SerieComDados = Serie & {
   total_aulas_presenciais_distribuidas: number;
   total_aulas_nao_presenciais_distribuidas: number;
   turmas_count: number;
+  aulas_fixas: SerieAulaFixa[];
 };
 
 
@@ -195,6 +209,10 @@ export type HorarioAulaGerada = {
   dia_semana: string;
   aula_index: number;
   tipo: 'presencial' | 'nao_presencial';
+  // Fixed/shared class tracking (mirrors DB columns added in aulas_fixas migration)
+  aula_fixa_id?: string | null;
+  compartilhada?: boolean;
+  aula_compartilhada_id?: string | null;
 };
 
 export type TurmaConfigHorario = {
@@ -249,7 +267,7 @@ export type PendenciaDetalhada = {
 
 export type DiagnosticoFalha = {
   causasIdentificadas: {
-    tipo: 'excess_ban' | 'excess_folga' | 'choque_turno_oposto' | 'choque_turno_local' | 'falta_slot_turma' | 'geminacao_impossivel' | 'restricao_serie' | 'sem_professor';
+    tipo: 'excess_ban' | 'excess_folga' | 'choque_turno_oposto' | 'choque_turno_local' | 'falta_slot_turma' | 'geminacao_impossivel' | 'restricao_serie' | 'sem_professor' | 'heuristica_busca';
     descricao: string;
     sugestao: string;
     professoresAfetados: string[];

@@ -42,6 +42,7 @@ export async function getHorariosEscolaCompletos(escolaId: string) {
             .from('horario_aulas')
             .select(`
                 *, 
+                aula_fixa_id, compartilhada, aula_compartilhada_id,
                 componente:componentes_curriculares(id, nome, sigla), 
                 professor:professores(id, nome_horario, restricoes, livre_docencia, sem_preferencia_livre_docencia), 
                 turma:turmas(id, nome),
