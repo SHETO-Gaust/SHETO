@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mail, Lock } from 'lucide-react';
 import { signIn } from '@/app/login/actions';
 import { useSearchParams } from 'next/navigation';
 
@@ -17,11 +16,9 @@ export function AuthForm() {
     event.preventDefault();
     setLoading(true);
     const formData = new FormData(event.currentTarget);
-    
     try {
       await signIn(formData);
     } catch (e) {
-    } finally {
       setLoading(false);
     }
   };
@@ -34,21 +31,33 @@ export function AuthForm() {
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="email-signin">Email</Label>
+        <div className="relative">
+          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
           <Input
             id="email-signin"
             name="email"
             type="email"
-            placeholder="escola@ue.seduc.to.gov.br"
+            placeholder="Usuário"
             required
+            className="pl-10 bg-gray-100 border-0 rounded-xl h-12 text-gray-700 placeholder:text-gray-400 focus-visible:ring-sky-400"
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="password-signin">Senha</Label>
-          <Input id="password-signin" name="password" type="password" required placeholder="••••••••"/>
+        <div className="relative">
+          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <Input
+            id="password-signin"
+            name="password"
+            type="password"
+            required
+            placeholder="Senha"
+            className="pl-10 bg-gray-100 border-0 rounded-xl h-12 text-gray-700 placeholder:text-gray-400 focus-visible:ring-sky-400"
+          />
         </div>
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button
+          type="submit"
+          className="w-full h-12 rounded-full bg-sky-500 hover:bg-sky-600 text-white font-semibold text-base"
+          disabled={loading}
+        >
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Entrar
         </Button>

@@ -33,6 +33,31 @@ export async function signIn(formData: FormData) {
   return redirect('/dashboard');
 }
 
+export async function signInGetResult(formData: FormData): Promise<{ url: string }> {
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    return { url: `/login?error=${encodeURIComponent(error.message)}` };
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('active')
+    .eq('id', data.user.id)
+    .single();
+
+  if (profile && profile.active === false) {
+    await supabase.auth.signOut();
+    return { url: `/login?error=${encodeURIComponent('Este usuário está desativado. Entre em contato com o administrador.')}` };
+  }
+
+  return { url: '/dashboard' };
+}
+
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();

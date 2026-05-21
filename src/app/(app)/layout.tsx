@@ -14,7 +14,8 @@ import { MainNav } from '@/components/main-nav';
 import { UserNav } from '@/components/user-nav';
 import type { Profile, Escola } from '@/lib/types';
 import { AccessDenied } from '@/components/access-denied';
-import { Clock, UserX, LogOut } from 'lucide-react';
+import { UserX, LogOut } from 'lucide-react';
+import Image from 'next/image';
 import { SchoolSelector } from '@/components/school-selector';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -140,11 +141,15 @@ export default async function AppLayout({
     <SidebarProvider>
       <Sidebar>
         <SidebarHeader>
-          <div className="flex items-center justify-center p-2">
-            <div className="flex items-center gap-2 text-xl font-bold text-sidebar-foreground">
-                <Clock className="h-6 w-6 text-primary" />
-                <span>SHE</span>
-            </div>
+          <div className="flex items-center justify-center p-3">
+            <Image
+              src="/img/elements/01.png"
+              alt="SHE - Sistema de Horário Escolar"
+              width={180}
+              height={50}
+              className="object-contain"
+              priority
+            />
           </div>
         </SidebarHeader>
         <SidebarContent>
@@ -163,8 +168,16 @@ export default async function AppLayout({
             <UserNav user={user} profile={userProfile as any} />
           </div>
         </header>
-        <div className="flex-1 bg-background p-4 sm:p-6 overflow-auto">
+        <div className="flex-1 relative overflow-auto">
+          <Image
+            src="/img/elements/10.png"
+            alt=""
+            fill
+            className="object-cover object-center pointer-events-none select-none opacity-[0.3]"
+          />
+          <div className="relative z-10 p-4 sm:p-6">
             {hasPermission ? children : <AccessDenied />}
+          </div>
         </div>
         <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">
           Desenvolvido pela Secretaria da Educação do Tocantins - Todos os direitos reservados © 2026

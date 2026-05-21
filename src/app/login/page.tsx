@@ -3,7 +3,7 @@ import { AuthForm } from '@/components/auth-form';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
-import { Clock } from 'lucide-react';
+import { LoginVideoOverlay } from '@/components/login-video-overlay';
 
 export default async function LoginPage() {
   const supabase = await createClient();
@@ -11,38 +11,52 @@ export default async function LoginPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Se o usuário já está logado, manda para o dashboard.
-  // O dashboard cuidará de mostrar a tela de "Suspenso" se necessário.
   if (user) {
     redirect('/dashboard');
   }
 
   return (
     <div className="grid min-h-screen grid-cols-1 md:grid-cols-2">
-      <div className="flex flex-col items-center justify-center p-8 bg-background">
-        <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-          <div className="flex flex-col space-y-2 text-center">
-             <div className="flex justify-center mb-4">
-                <Image 
-                  src="/img/seduc.png" 
-                  alt="SEDUC Logo" 
-                  width={220} 
-                  height={80} 
-                  className="object-contain"
-                  priority
-                />
-             </div>
-             <div className="flex items-center justify-center gap-2 text-2xl font-bold">
-                <Clock className="h-6 w-6 text-primary" />
-                <h1 className="font-bold">SHE</h1>
-            </div>
-            <p className="text-muted-foreground text-sm">
-              Entre com o email de sua Unidade Escolar para acessar o Sistema de Horário Escolar.
-            </p>
+      <div className="relative flex flex-col items-center justify-between py-10 px-8 overflow-hidden">
+        <Image
+          src="/img/elements/03.png"
+          alt=""
+          fill
+          className="object-cover object-center pointer-events-none select-none"
+          priority
+        />
+
+        <div className="relative z-10 flex justify-center w-full">
+          <Image
+            src="/img/elements/01.png"
+            alt="Sistema de Horário Escolar do Tocantins"
+            width={520}
+            height={90}
+            className="object-contain"
+            priority
+          />
+        </div>
+
+        <div className="relative z-10 w-full max-w-sm">
+          <div className="bg-white rounded-3xl shadow-2xl px-8 py-10">
+            <AuthForm />
           </div>
-          <AuthForm />
+        </div>
+
+        <div className="relative z-10 flex flex-col items-center gap-3">
+          <span className="text-white/80 text-sm cursor-pointer hover:text-white underline underline-offset-2">
+            Política de Privacidade
+          </span>
+          <Image
+            src="/img/seduc.png"
+            alt="SEDUC Tocantins"
+            width={180}
+            height={40}
+            className="object-contain brightness-0 invert opacity-70"
+          />
         </div>
       </div>
+
       <div className="relative hidden bg-muted md:block">
         <Image
           src="/img/ALFPC.png"
@@ -52,7 +66,8 @@ export default async function LoginPage() {
           data-ai-hint="school building"
         />
         <div className="absolute inset-0 bg-blue-950/60" />
-        <div className="absolute bottom-10 left-10 text-white bg-black/30 p-6 rounded-lg backdrop-blur-sm max-w-md">
+        <LoginVideoOverlay />
+        <div className="absolute bottom-10 left-10 z-30 text-white bg-black/30 p-6 rounded-lg backdrop-blur-sm max-w-md">
           <h2 className="text-3xl font-bold">SHE - Sistema de Horário Escolar</h2>
           <p className="mt-2 text-white/90">
             Inovando a gestão educacional no Tocantins com tecnologia e inteligência.
