@@ -15,7 +15,7 @@ export default async function PublicRestrictionPage({ params }: { params: { toke
       <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
         <Card className="max-w-md w-full text-center py-8">
           <CardHeader>
-            <div className={cn("mx-auto h-16 w-16 rounded-full flex items-center justify-center mb-4", isAlreadyResponded ? "bg-green-100" : "bg-destructive/10")}>
+            <div className={cn("mx-auto h-16 w-16 rounded-full flex items-center justify-center mb-4", isAlreadyResponded ? "bg-green-100 dark:bg-green-900/50" : "bg-destructive/10")}>
                 {isAlreadyResponded ? (
                     <CheckCircle2 className="h-8 w-8 text-green-600" />
                 ) : (

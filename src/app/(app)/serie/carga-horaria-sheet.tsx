@@ -236,7 +236,7 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
               </div>
 
               {!hasContraturno && (
-                <p className="text-xs text-center text-orange-600 bg-orange-50 p-2 rounded-md">
+                <p className="text-xs text-center text-orange-600 bg-orange-50 p-2 rounded-md dark:text-orange-400 dark:bg-orange-950/30">
                   Para habilitar aulas não presenciais (contraturno), o turno oposto precisa estar ativo na tela de Turnos.
                 </p>
               )}

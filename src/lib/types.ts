@@ -196,7 +196,7 @@ export type Horario = {
   escola_id: string;
   turno_id: string;
   nome: string;
-  status: 'em_rascunho' | 'publicado';
+  status: 'em_rascunho' | 'publicado' | 'pre_producao';
   created_at: string;
 };
 

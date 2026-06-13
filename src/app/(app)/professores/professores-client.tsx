@@ -247,22 +247,35 @@ export function ProfessoresClient({
               const sol = prof.solicitacao_pendente;
               const hasResponse = sol?.status === 'respondido';
               const isWaiting = sol?.status === 'pendente';
+              const isPendente = !prof.sem_preferencia_livre_docencia && (!prof.livre_docencia || prof.livre_docencia.length === 0);
 
               return (
                 <TableRow key={prof.id}>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <div>
                             <div className="font-medium">{prof.nome_completo}</div>
                             <div className="text-xs text-muted-foreground">{prof.nome_horario} | {prof.email || 'Sem e-mail'}</div>
                         </div>
+                        {isPendente && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Badge className="bg-orange-500 hover:bg-orange-500 text-white text-[10px] gap-1 cursor-default animate-pulse border-0 select-none">
+                                        <AlertCircle className="h-2.5 w-2.5" /> Pendente
+                                    </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Aguardando restrições e livre docência do professor</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        )}
                         {hasResponse && (
                             <Badge className="bg-blue-600 hover:bg-blue-700 animate-pulse cursor-pointer gap-1" onClick={() => openReview(prof)}>
                                 <AlertCircle className="h-3 w-3" /> Resposta Disponível
                             </Badge>
                         )}
                         {isWaiting && (
-                            <Badge variant="outline" className="text-[10px] text-orange-600 border-orange-200">
+                            <Badge variant="outline" className="text-[10px] text-orange-600 border-orange-200 dark:text-orange-400 dark:border-orange-800">
                                 Aguardando Professor
                             </Badge>
                         )}
@@ -312,11 +325,16 @@ export function ProfessoresClient({
 
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={() => openSheet(prof, 'restricoes')}>
-                                    <CalendarX className="h-4 w-4" />
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className={cn(isPendente && "hover:bg-orange-50 dark:hover:bg-orange-950/30")}
+                                    onClick={() => openSheet(prof, 'restricoes')}
+                                >
+                                    <CalendarX className={cn("h-4 w-4", isPendente && "animate-pendente")} />
                                 </Button>
                             </TooltipTrigger>
-                            <TooltipContent><p>Restrições Manuais</p></TooltipContent>
+                            <TooltipContent><p>Restrições Manuais{isPendente ? ' (Pendente)' : ''}</p></TooltipContent>
                         </Tooltip>
 
                         <Tooltip>
@@ -349,9 +367,9 @@ export function ProfessoresClient({
                   </AlertDialogDescription>
               </AlertDialogHeader>
               
-              <ScrollArea className="flex-1 px-6">
+              <div className="flex-1 min-h-0 overflow-y-auto px-6">
                 <div className="space-y-8 pb-6 pt-2">
-                    <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
+                    <div className="bg-primary/10 dark:bg-primary/20 border border-primary/20 dark:border-primary/40 p-4 rounded-xl flex items-start gap-3">
                         <Info className="h-5 w-5 text-primary shrink-0" />
                         <div className="space-y-1">
                             <p className="text-xs font-bold text-primary uppercase tracking-tight">Legenda de Edição:</p>
@@ -365,21 +383,21 @@ export function ProfessoresClient({
 
                     {/* SEÇÃO JUSTIFICATIVA REVISÃO */}
                     {reviewJustificativa && (
-                        <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl space-y-2">
-                            <p className="text-xs font-bold text-orange-800 uppercase flex items-center gap-2">
+                        <div className="bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800 p-4 rounded-xl space-y-2">
+                            <p className="text-xs font-bold text-orange-800 dark:text-orange-200 uppercase flex items-center gap-2">
                                 <MessageSquare className="h-4 w-4" /> Justificativa do Docente:
                             </p>
-                            <p className="text-sm italic text-orange-900 leading-relaxed">
+                            <p className="text-sm italic text-orange-900 dark:text-orange-100 leading-relaxed">
                                 "{reviewJustificativa}"
                             </p>
                         </div>
                     )}
 
                     {/* DIAS PREFERIDOS (editável pelo coordenador) */}
-                    <div className="rounded-xl border border-violet-200/60 bg-violet-50/40 p-4">
+                    <div className="rounded-xl border border-violet-200/60 dark:border-violet-800/60 bg-violet-50/40 dark:bg-violet-950/30 p-4">
                         <div className="flex items-center gap-2 mb-3">
-                            <CalendarDays className="h-4 w-4 text-violet-600" />
-                            <p className="text-xs font-bold text-violet-900 uppercase tracking-widest">Dias Preferidos para Concentração de Aulas</p>
+                            <CalendarDays className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                            <p className="text-xs font-bold text-violet-900 dark:text-violet-100 uppercase tracking-widest">Dias Preferidos para Concentração de Aulas</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {DIAS_SEMANA_MAP.map(dia => {
@@ -404,7 +422,7 @@ export function ProfessoresClient({
                             })}
                         </div>
                         {reviewDiasPreferidos.length === 0 && (
-                            <p className="text-[10px] text-violet-700/60 mt-2 italic">Nenhum dia selecionado — o motor usará qualquer dia disponível.</p>
+                            <p className="text-[10px] text-violet-700/60 dark:text-violet-400 mt-2 italic">Nenhum dia selecionado — o motor usará qualquer dia disponível.</p>
                         )}
                     </div>
 
@@ -503,14 +521,14 @@ export function ProfessoresClient({
                                                                         className={cn(
                                                                             "p-1 border-r last:border-r-0 transition-colors group",
                                                                             !isPlanejamento && "cursor-pointer hover:bg-muted/50",
-                                                                            isIndisponivel ? "bg-red-50" : isPlanejamento ? "bg-blue-50" : ""
+                                                                            isIndisponivel ? "bg-red-50 dark:bg-red-950/50" : isPlanejamento ? "bg-blue-50 dark:bg-blue-950/50" : ""
                                                                         )}
                                                                         onClick={() => handleReviewCellClick(turno.id, dia.id, aulaIdx)}
                                                                     >
                                                                         <div className="flex items-center justify-center h-full relative">
                                                                             {isIndisponivel && <Ban className="h-5 w-5 text-red-500" />}
                                                                             {isPlanejamento && <PenSquare className="h-5 w-5 text-blue-500" />}
-                                                                            {!val && <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />}
+                                                                            {!val && <div className="h-1.5 w-1.5 rounded-full bg-slate-200 dark:bg-slate-600" />}
                                                                             
                                                                             {!isPlanejamento && (
                                                                                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/5 rounded">
@@ -532,7 +550,7 @@ export function ProfessoresClient({
                         )}
                     </div>
                 </div>
-              </ScrollArea>
+              </div>
 
               <AlertDialogFooter className="p-6 border-t bg-muted/50 flex-row items-center justify-between sm:justify-between gap-4">
                   <div className="flex gap-2">
@@ -548,9 +566,9 @@ export function ProfessoresClient({
                   </div>
 
                   {/* Checkbox: enviar cópia ao professor */}
-                  <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer select-none" onClick={() => setReviewEnviarEmail(v => !v)}>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer select-none dark:bg-blue-950/30 dark:border-blue-900" onClick={() => setReviewEnviarEmail(v => !v)}>
                       <Checkbox id="enviar-email-prof" checked={reviewEnviarEmail} onCheckedChange={(c) => setReviewEnviarEmail(!!c)} />
-                      <label htmlFor="enviar-email-prof" className="text-xs font-bold text-blue-800 cursor-pointer whitespace-nowrap">
+                      <label htmlFor="enviar-email-prof" className="text-xs font-bold text-blue-800 dark:text-blue-300 cursor-pointer whitespace-nowrap">
                           Enviar cópia ao professor
                       </label>
                   </div>
@@ -575,6 +593,16 @@ export function ProfessoresClient({
           turnosDaEscola={turnosDaEscola}
           componentesDaEscola={componentesDaEscola}
           onProfessorUpdated={fetchAndUpdateProfessores}
+          onCadastrarRestricoes={async (professorId: string) => {
+              const { data } = await getProfessores(escolaId);
+              if (data) {
+                  setProfessores(data);
+                  setTimeout(() => {
+                      const prof = data.find(p => p.id === professorId);
+                      if (prof) openSheet(prof, 'restricoes');
+                  }, 450);
+              }
+          }}
       />
       
       {selectedProfessor && (
@@ -599,7 +627,7 @@ export function ProfessoresClient({
                 setIsOpen={setIsDialogOpen}
                 professor={selectedProfessor}
                 onProfessorDeleted={() => {
-                    onProfessorDeleted();
+                    fetchAndUpdateProfessores();
                     closeModals();
                 }}
             />

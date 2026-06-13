@@ -163,7 +163,7 @@ export function FormacaoCard({ formacao }: FormacaoCardProps) {
       : [];
     
     return (
-        <Card className={cn('shadow-lg rounded-xl flex flex-col', { 'border-2 border-blue-300 bg-blue-50/50': status === 'Em andamento' })}>
+        <Card className={cn('shadow-lg rounded-xl flex flex-col', { 'border-2 border-blue-300 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20': status === 'Em andamento' })}>
             <CardHeader>
             <div className="flex justify-between items-start">
                 <div>
@@ -182,7 +182,7 @@ export function FormacaoCard({ formacao }: FormacaoCardProps) {
                         </Badge>
                     )}
                     {status === 'Em andamento' && (
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300">EM ANDAMENTO</Badge>
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700">EM ANDAMENTO</Badge>
                     )}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">

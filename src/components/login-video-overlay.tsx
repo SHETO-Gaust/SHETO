@@ -7,26 +7,17 @@ export function LoginVideoOverlay() {
   const [gone, setGone] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const handleEnd = () => setFading(true);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    video.muted = true;
     video.playbackRate = 2;
-
-    const playPromise = video.play();
-    if (playPromise) {
-      playPromise
-        .then(() => {
-          video.muted = false;
-          video.volume = 1;
-        })
-        .catch(() => {
-          // autoplay bloqueado pelo browser — mantém mudo e tenta de novo
-          video.muted = true;
-          video.play().catch(() => {});
-        });
-    }
+    video.play().catch(() => {
+      // autoplay bloqueado — pula direto para a imagem
+      setFading(true);
+    });
   }, []);
 
   if (gone) return null;
@@ -42,10 +33,13 @@ export function LoginVideoOverlay() {
     >
       <video
         ref={videoRef}
+        muted
+        autoPlay
         playsInline
         preload="auto"
         className="w-full h-full object-cover"
-        onEnded={() => setFading(true)}
+        onEnded={handleEnd}
+        onError={handleEnd}
       >
         <source src="/videos/profe.mp4" type="video/mp4" />
       </video>

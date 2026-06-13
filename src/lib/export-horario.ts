@@ -4,6 +4,7 @@
  */
 
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import type { HorarioCompleto, Turno } from '@/lib/types';
 
 /** Remove caracteres proibidos em nomes de aba do Excel: : \ / ? * [ ] */
@@ -105,7 +106,11 @@ function buildPorDiaSheet(horario: HorarioCompleto): XLSX.WorkSheet {
   return ws;
 }
 
-export function exportarHorarioXLSX(horario: HorarioCompleto): void {
+/**
+ * Gera o workbook de um horário e retorna os bytes sem acionar download.
+ * Usado internamente pela exportação em lote.
+ */
+function buildWorkbook(horario: HorarioCompleto): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
   const turno = horario.turno;
   const isIntegral = turno.nome.toLowerCase().includes('integral');
@@ -116,13 +121,11 @@ export function exportarHorarioXLSX(horario: HorarioCompleto): void {
   });
   const turmas = Array.from(turmasMap.entries()).sort((a, b) => a[1].localeCompare(b[1]));
 
-  // Aba por turma — presencial
   for (const [turmaId, turmaLabel] of turmas) {
     const ws = buildGradeSheet(turmaId, horario, turno, 'presencial');
     XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(`T-${turmaLabel}`));
   }
 
-  // Aba por turma — contraturno (não presencial)
   if (!isIntegral && horario.turno_oposto) {
     for (const [turmaId, turmaLabel] of turmas) {
       const ws = buildGradeSheet(turmaId, horario, horario.turno_oposto, 'nao_presencial');
@@ -130,9 +133,41 @@ export function exportarHorarioXLSX(horario: HorarioCompleto): void {
     }
   }
 
-  // Aba visão por dia
   XLSX.utils.book_append_sheet(wb, buildPorDiaSheet(horario), 'Por Dia');
+  return wb;
+}
 
+/**
+ * Baixa um .zip contendo um .xlsx por horário.
+ * onProgress(idx, total) é chamado a cada arquivo processado.
+ */
+export async function exportarTodosHorariosZIP(
+  horarios: HorarioCompleto[],
+  onProgress?: (idx: number, total: number) => void
+): Promise<void> {
+  const zip = new JSZip();
+
+  horarios.forEach((horario, idx) => {
+    const wb = buildWorkbook(horario);
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+    const nomeArquivo = `Horario-${(horario.nome ?? 'Grade').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+    zip.file(nomeArquivo, buffer);
+    onProgress?.(idx + 1, horarios.length);
+  });
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Horarios_${new Date().toISOString().slice(0, 10)}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function exportarHorarioXLSX(horario: HorarioCompleto): void {
+  const wb = buildWorkbook(horario);
   const nomeArquivo = `Horario-${(horario.nome ?? 'Grade').replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
   XLSX.writeFile(wb, nomeArquivo);
 }

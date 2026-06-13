@@ -93,7 +93,7 @@ export function UsersClient({ initialUsers, allEscolas }: { initialUsers: Profil
                                 </TableCell>
                                 <TableCell className="text-xs uppercase font-medium">{user.escolas?.escolar || 'N/A'}</TableCell>
                                 <TableCell>
-                                    <Badge variant={user.active ? 'outline' : 'destructive'} className={user.active ? 'text-green-600 border-green-200 bg-green-50' : ''}>
+                                    <Badge variant={user.active ? 'outline' : 'destructive'} className={user.active ? 'text-green-600 border-green-200 bg-green-50 dark:text-green-400 dark:border-green-800 dark:bg-green-950/30' : ''}>
                                         {user.active ? 'Ativo' : 'Suspenso'}
                                     </Badge>
                                 </TableCell>

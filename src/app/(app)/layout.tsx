@@ -16,6 +16,7 @@ import type { Profile, Escola } from '@/lib/types';
 import { AccessDenied } from '@/components/access-denied';
 import { UserX, LogOut } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { SchoolSelector } from '@/components/school-selector';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -181,6 +182,10 @@ export default async function AppLayout({
         </div>
         <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">
           Desenvolvido pela Secretaria da Educação do Tocantins - Todos os direitos reservados © 2026
+          {' · '}
+          <Link href="/politica-de-privacidade" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+            Política de Privacidade
+          </Link>
         </footer>
       </SidebarInset>
     </SidebarProvider>

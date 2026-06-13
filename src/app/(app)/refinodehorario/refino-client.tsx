@@ -39,7 +39,7 @@ function PassoCard({ passo, turnosById }: { passo: PassoDetalhado; turnosById: M
         <div className={cn(
             'rounded-lg border p-3 text-xs space-y-2',
             passo.isPrincipal
-                ? 'bg-indigo-50 border-indigo-200'
+                ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-900'
                 : 'bg-muted/50 border-border'
         )}>
             <div className="flex items-center justify-between gap-2">
@@ -47,7 +47,7 @@ function PassoCard({ passo, turnosById }: { passo: PassoDetalhado; turnosById: M
                     {passo.isPrincipal && <Star className="w-3 h-3 text-indigo-500 fill-indigo-400" />}
                     <span className={cn(
                         'font-bold text-[11px] uppercase tracking-wide',
-                        passo.isPrincipal ? 'text-indigo-700' : 'text-slate-600'
+                        passo.isPrincipal ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-400'
                     )}>
                         {passo.isPrincipal ? 'Aula principal' : 'Movimento de apoio'}
                     </span>
@@ -57,8 +57,8 @@ function PassoCard({ passo, turnosById }: { passo: PassoDetalhado; turnosById: M
                     className={cn(
                         'text-[9px] py-0',
                         passo.tipo === 'nao_presencial'
-                            ? 'border-orange-300 text-orange-700 bg-orange-50'
-                            : 'border-slate-300 text-slate-600'
+                            ? 'border-orange-300 text-orange-700 bg-orange-50 dark:border-orange-800 dark:text-orange-400 dark:bg-orange-950/30'
+                            : 'border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-400'
                     )}
                 >
                     {passo.tipo === 'nao_presencial' ? 'Não presencial' : 'Presencial'}
@@ -85,19 +85,19 @@ function PassoCard({ passo, turnosById }: { passo: PassoDetalhado; turnosById: M
 
             {/* Origin → Destination row */}
             <div className="flex items-center gap-2 pt-1 border-t border-current/10">
-                <div className="flex-1 bg-red-50 border border-red-100 rounded px-2 py-1 text-center">
-                    <div className="text-[9px] text-red-400 uppercase font-bold mb-0.5">Origem</div>
-                    <div className="font-bold text-red-700">{DIA_SHORT[passo.origemDia]} {ordinal(passo.origemSlot + 1)}</div>
+                <div className="flex-1 bg-red-50 border border-red-100 rounded px-2 py-1 text-center dark:bg-red-950/40 dark:border-red-900">
+                    <div className="text-[9px] text-red-400 dark:text-red-500 uppercase font-bold mb-0.5">Origem</div>
+                    <div className="font-bold text-red-700 dark:text-red-400">{DIA_SHORT[passo.origemDia]} {ordinal(passo.origemSlot + 1)}</div>
                     {origemHor && (
-                        <div className="text-[9px] text-red-500">{origemHor.inicio}–{origemHor.fim}</div>
+                        <div className="text-[9px] text-red-500 dark:text-red-400">{origemHor.inicio}–{origemHor.fim}</div>
                     )}
                 </div>
                 <MoveRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 bg-emerald-50 border border-emerald-100 rounded px-2 py-1 text-center">
-                    <div className="text-[9px] text-emerald-400 uppercase font-bold mb-0.5">Destino</div>
-                    <div className="font-bold text-emerald-700">{DIA_SHORT[passo.destinoDia]} {ordinal(passo.destinoSlot + 1)}</div>
+                <div className="flex-1 bg-emerald-50 border border-emerald-100 rounded px-2 py-1 text-center dark:bg-emerald-950/40 dark:border-emerald-900">
+                    <div className="text-[9px] text-emerald-400 dark:text-emerald-500 uppercase font-bold mb-0.5">Destino</div>
+                    <div className="font-bold text-emerald-700 dark:text-emerald-400">{DIA_SHORT[passo.destinoDia]} {ordinal(passo.destinoSlot + 1)}</div>
                     {destHor && (
-                        <div className="text-[9px] text-emerald-500">{destHor.inicio}–{destHor.fim}</div>
+                        <div className="text-[9px] text-emerald-500 dark:text-emerald-400">{destHor.inicio}–{destHor.fim}</div>
                     )}
                 </div>
             </div>
@@ -141,7 +141,7 @@ function OpcaoCard({
                         ? <CheckCircle2 className="w-4 h-4 text-white" />
                         : <div className="w-4 h-4 rounded-full border-2 border-slate-400" />
                     }
-                    <span className={cn('font-bold text-sm', isSelected ? 'text-white' : 'text-slate-700')}>
+                    <span className={cn('font-bold text-sm', isSelected ? 'text-white' : 'text-slate-700 dark:text-slate-300')}>
                         Opção {index + 1}
                     </span>
                     {principal && (
@@ -155,7 +155,7 @@ function OpcaoCard({
                         'text-[10px] font-bold',
                         isSelected
                             ? 'bg-indigo-500 text-white border-indigo-400'
-                            : 'bg-slate-200 text-slate-600 border-slate-300'
+                            : 'bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600'
                     )}
                     variant="outline"
                 >
@@ -369,9 +369,9 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                                                 key={`${dia}-${slotIdx}`}
                                                                 className={cn(
                                                                     'border-b border-r p-1 cursor-pointer transition-all min-w-[120px] h-[60px]',
-                                                                    isSelected && 'ring-2 ring-indigo-500 ring-inset bg-indigo-50/50',
-                                                                    isDestino && 'ring-2 ring-amber-500 ring-inset border-dashed bg-amber-50/30',
-                                                                    !isSelected && !isDestino && 'hover:bg-indigo-50/30'
+                                                                    isSelected && 'ring-2 ring-indigo-500 ring-inset bg-indigo-50/50 dark:bg-indigo-950/20',
+                                                                    isDestino && 'ring-2 ring-amber-500 ring-inset border-dashed bg-amber-50/30 dark:bg-amber-950/20',
+                                                                    !isSelected && !isDestino && 'hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20'
                                                                 )}
                                                                 onClick={() => {
                                                                     if (slotAulas.length > 0) {
@@ -423,13 +423,13 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
 
                     {/* Right: Painel Impacto */}
                     <div className="w-full md:w-[380px] shrink-0 border rounded-xl shadow-sm bg-background flex flex-col overflow-hidden max-h-[800px]">
-                        <div className="bg-[#f8fafc] text-foreground px-4 py-3 font-semibold text-sm border-b uppercase tracking-wide flex items-center justify-between">
+                        <div className="bg-[#f8fafc] dark:bg-muted/30 text-foreground px-4 py-3 font-semibold text-sm border-b uppercase tracking-wide flex items-center justify-between">
                             <span>Painel de Impacto</span>
                             {impacto?.status === 'possibilidades' && (
                                 <button
                                     title="Expandir opções"
                                     onClick={() => setModalAberto(true)}
-                                    className="ml-2 p-1.5 rounded-md text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                    className="ml-2 p-1.5 rounded-md text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 dark:hover:text-indigo-400 dark:hover:bg-indigo-950/30 transition-colors"
                                 >
                                     <Maximize2 className="w-4 h-4" />
                                 </button>
@@ -444,7 +444,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                     <p>Clique sobre uma aula na grade para selecioná-la. Em seguida, clique sobre um slot vazio para testar o efeito de movê-la.</p>
                                 </div>
                             ) : !slotDestino ? (
-                                <div className="text-sm text-amber-700 bg-amber-50 p-4 rounded-lg border border-amber-100 flex flex-col gap-2">
+                                <div className="text-sm text-amber-700 bg-amber-50 p-4 rounded-lg border border-amber-100 flex flex-col gap-2 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-900">
                                     <span className="font-bold flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> Aula selecionada</span>
                                     <span>Agora clique em um slot vazio na grade para testar a realocação.</span>
                                 </div>
@@ -453,11 +453,11 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                    {/* Status banner */}
                                    <div className={cn(
                                         'p-4 rounded-xl border-l-4',
-                                        impacto.status === 'livre' && 'bg-emerald-50 border-emerald-500 text-emerald-800',
-                                        impacto.status === 'sugestao' && 'bg-blue-50 border-blue-500 text-blue-800',
-                                        impacto.status === 'atencao' && 'bg-amber-50 border-amber-500 text-amber-800',
-                                        impacto.status === 'possibilidades' && 'bg-indigo-50 border-indigo-500 text-indigo-800',
-                                        impacto.status === 'bloqueado' && 'bg-red-50 border-red-500 text-red-800',
+                                        impacto.status === 'livre' && 'bg-emerald-50 border-emerald-500 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
+                                        impacto.status === 'sugestao' && 'bg-blue-50 border-blue-500 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300',
+                                        impacto.status === 'atencao' && 'bg-amber-50 border-amber-500 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+                                        impacto.status === 'possibilidades' && 'bg-indigo-50 border-indigo-500 text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300',
+                                        impacto.status === 'bloqueado' && 'bg-red-50 border-red-500 text-red-800 dark:bg-red-950/30 dark:text-red-300',
                                    )}>
                                       <div className="flex gap-2 font-bold items-center mb-1">
                                          {(impacto.status === 'livre' || impacto.status === 'possibilidades') && <CheckCircle2 className="w-5 h-5" />}

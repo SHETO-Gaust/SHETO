@@ -197,15 +197,15 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                                         key={dia.id} 
                                         className={cn(
                                             "p-1 text-center border-r last:border-r-0 print:border-black", 
-                                            isPlan && !aula && "bg-blue-50/50",
-                                            isLD && !aula && "bg-amber-50/50"
+                                            isPlan && !aula && "bg-blue-50/50 dark:bg-blue-950/20",
+                                            isLD && !aula && "bg-amber-50/50 dark:bg-amber-950/20"
                                         )}
                                     >
                                         {aula ? (
                                         <div className="flex flex-col items-center justify-center gap-0.5">
                                             <div className={cn(
                                                 "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm border",
-                                                aula.tipo === 'presencial' ? "bg-primary/10 text-primary border-primary/20" : "bg-orange-100 text-orange-700 border-orange-200"
+                                                aula.tipo === 'presencial' ? "bg-primary/10 text-primary border-primary/20" : "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800"
                                             )}>
                                             {aula.componente.sigla || aula.componente.nome}
                                             </div>
@@ -214,13 +214,13 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                                             </div>
                                         </div>
                                         ) : isLD ? (
-                                            <div className="flex flex-col items-center justify-center gap-0.5 text-amber-600">
-                                                <Star className="h-3 w-3 fill-amber-500" />
+                                            <div className="flex flex-col items-center justify-center gap-0.5 text-amber-600 dark:text-amber-400">
+                                                <Star className="h-3 w-3 fill-amber-500 dark:fill-amber-400" />
                                                 <span className="text-[8px] font-black uppercase">Livre Docência</span>
                                             </div>
                                         ) : isPlan ? (
-                                            <div className="flex flex-col items-center justify-center gap-0.5 text-blue-600">
-                                                <PenSquare className="h-3 w-3 text-blue-500" />
+                                            <div className="flex flex-col items-center justify-center gap-0.5 text-blue-600 dark:text-blue-400">
+                                                <PenSquare className="h-3 w-3 text-blue-500 dark:text-blue-400" />
                                                 <span className="text-[8px] font-black uppercase">Planejamento</span>
                                             </div>
                                         ) : <span className="text-muted-foreground/10">-</span>}
@@ -232,11 +232,11 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
 
                         if (hConfig?.tem_intervalo_depois && aulaIndex < turnoInfo.aulas_por_dia - 1) {
                             rows.push(
-                                <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 h-10 border-b print:border-black">
-                                    <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r flex items-center justify-center gap-1">
-                                        <Coffee className="h-3 w-3 text-orange-500" /> Intervalo
+                                <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 dark:bg-orange-950/10 h-10 border-b print:border-black">
+                                    <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 dark:bg-orange-900/20 border-r flex items-center justify-center gap-1">
+                                        <Coffee className="h-3 w-3 text-orange-500 dark:text-orange-400" /> Intervalo
                                     </td>
-                                    <td colSpan={diasAtivosLocal.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest">
+                                    <td colSpan={diasAtivosLocal.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 dark:text-orange-400/70 uppercase tracking-widest">
                                         {hConfig.fim} às {turnoInfo.horarios?.[aulaIndex + 1]?.inicio || '--:--'}
                                     </td>
                                 </tr>
@@ -312,7 +312,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
     return (
         <div className="space-y-8 pt-4 break-after-page print:pt-0">
             <div className="flex items-center gap-3 border-b pb-4">
-                <div className="h-12 w-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center print:hidden">
+                <div className="h-12 w-12 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 flex items-center justify-center print:hidden">
                     <User className="h-6 w-6" />
                 </div>
                 <div>
@@ -454,7 +454,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                   </div>
               ) : (
                   <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">Rascunho (Privado)</Badge>
+                      <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-950/30">Rascunho (Privado)</Badge>
                       <Button size="sm" onClick={handleConsolidar} disabled={isActionPending} className="h-7 text-[10px] font-bold bg-green-600 hover:bg-green-700">
                           {isActionPending ? <Loader2 className="animate-spin h-3 w-3"/> : <Save className="h-3 w-3 mr-1"/>}
                           Publicar Grade Oficial
@@ -463,7 +463,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
               )}
           </div>
           <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => exportarHorarioXLSX(horario)} className="gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800">
+              <Button variant="outline" size="sm" onClick={() => exportarHorarioXLSX(horario)} className="gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300">
                   <FileDown className="h-4 w-4" /> Exportar .xlsx
               </Button>
               <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>

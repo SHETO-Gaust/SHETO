@@ -240,9 +240,9 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
                                     </span>
                                 </div>
                                 {horario.tem_intervalo_depois && index < turno.aulas_por_dia - 1 && (
-                                    <div className="bg-orange-50/80 p-2 flex items-center justify-center gap-2 border-y border-orange-100">
-                                        <Coffee className="h-3 w-3 text-orange-500" />
-                                        <span className="text-[9px] font-black uppercase text-orange-700 tracking-widest">
+                                    <div className="bg-orange-50/80 dark:bg-orange-950/30 p-2 flex items-center justify-center gap-2 border-y border-orange-100 dark:border-orange-900/50">
+                                        <Coffee className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+                                        <span className="text-[9px] font-black uppercase text-orange-700 dark:text-orange-400 tracking-widest">
                                             Intervalo: {horario.fim} - {turno.horarios[index+1]?.inicio}
                                         </span>
                                     </div>

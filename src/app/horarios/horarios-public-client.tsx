@@ -139,7 +139,7 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
                                                 "font-bold text-[11px] leading-tight uppercase px-3 py-2 rounded-lg w-full shadow-sm border",
                                                 tipo === 'presencial' 
                                                     ? "bg-primary/5 text-primary border-primary/20" 
-                                                    : "bg-orange-50 text-orange-700 border-orange-200"
+                                                    : "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800"
                                             )}>
                                             {aula.componente.nome}
                                             </div>
@@ -158,12 +158,12 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
 
                         if (horarioConfig?.tem_intervalo_depois && aulaIndex < turnoInfo.aulas_por_dia - 1) {
                             rows.push(
-                                <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 h-10 border-b">
-                                    <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 border-r flex items-center justify-center gap-1">
-                                        <Coffee className="h-3 w-3 text-orange-500" />
+                                <tr key={`intervalo-${aulaIndex}`} className="bg-orange-50/20 dark:bg-orange-950/10 h-10 border-b">
+                                    <td className="p-2 text-center font-bold text-[9px] uppercase bg-orange-100/30 dark:bg-orange-900/20 border-r flex items-center justify-center gap-1">
+                                        <Coffee className="h-3 w-3 text-orange-500 dark:text-orange-400" />
                                         Intervalo
                                     </td>
-                                    <td colSpan={dias.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 uppercase tracking-widest">
+                                    <td colSpan={dias.length} className="p-2 text-center text-[10px] font-bold text-orange-700/60 dark:text-orange-400/70 uppercase tracking-widest">
                                         {horarioConfig.fim} às {turnoInfo.horarios?.[aulaIndex + 1]?.inicio || '--:--'}
                                     </td>
                                 </tr>
@@ -284,13 +284,13 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
 
               {profData ? (
                   <div className="space-y-12 animate-in slide-in-from-bottom-4 duration-500">
-                      <div className="flex items-center gap-4 bg-orange-50 border border-orange-100 p-6 rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-4 bg-orange-50 border border-orange-100 dark:bg-orange-950/30 dark:border-orange-900 p-6 rounded-2xl shadow-sm">
                           <div className="h-16 w-16 bg-orange-500 text-white rounded-full flex items-center justify-center shadow-lg">
                               <User className="h-8 w-8" />
                           </div>
                           <div>
-                              <h2 className="text-2xl font-black text-orange-900 uppercase">{profData.professor.nome_horario}</h2>
-                              <p className="text-sm text-orange-700 font-medium">Visualizando grade individual do docente nesta unidade escolar.</p>
+                              <h2 className="text-2xl font-black text-orange-900 dark:text-orange-300 uppercase">{profData.professor.nome_horario}</h2>
+                              <p className="text-sm text-orange-700 dark:text-orange-400 font-medium">Visualizando grade individual do docente nesta unidade escolar.</p>
                           </div>
                       </div>
 

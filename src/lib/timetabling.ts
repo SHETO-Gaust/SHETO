@@ -193,6 +193,19 @@ function resolverTurnoNP(turno: Turno, todosTurnos: Turno[]): Turno {
   return oposto || outros[0] || turno;
 }
 
+// ─── PRNG por tentativa ──────────────────────────────────────────────────────
+
+function makeRng(seed: number): () => number {
+  let s = (seed ^ 0xDEADBEEF) >>> 0;
+  if (s === 0) s = 1; // xorshift não pode partir do zero
+  return () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    return (s >>> 0) / 0xFFFFFFFF;
+  };
+}
+
 // ─── Helpers de constraint por slot ─────────────────────────────────────────
 
 /**
@@ -206,7 +219,8 @@ function isBanHardBlocked(
   dia: string,
   idx: number,
 ): boolean {
-  return prof?.restricoes?.[turnoId]?.[dia]?.[idx] === 'indisponivel';
+  const status = prof?.restricoes?.[turnoId]?.[dia]?.[idx];
+  return status === 'indisponivel';
 }
 
 /**
@@ -226,8 +240,26 @@ function isFolgaHardBlocked(
 ): boolean {
   // Se o professor marcou "sem preferência" (checkbox de dispensa), não bloquear
   if (!prof || prof.sem_preferencia_livre_docencia !== false) return false;
+  // Modo personalizado: célula individual marcada como livre_docencia
+  if (prof?.restricoes?.[turno.id]?.[dia]?.[idx] === 'livre_docencia') return true;
+  // Modo padrão: período inteiro bloqueado
   const periodo = getPeriodoDaAula(turno, idx);
   return prof.livre_docencia?.some(ld => ld.dia === dia && ld.periodo === periodo) ?? false;
+}
+
+/**
+ * HARD CONSTRAINT — REUNIÃO DE FLUXO (reuniao_fluxo)
+ * Retorna true se o slot está marcado como reunião de fluxo.
+ * Tratado como indisponível: jamais pode receber aula.
+ * Não afetado por nenhum relaxamento progressivo.
+ */
+function isReuniaoFluxoHardBlocked(
+  prof: ProfessorComDados | undefined,
+  turnoId: string,
+  dia: string,
+  idx: number,
+): boolean {
+  return prof?.restricoes?.[turnoId]?.[dia]?.[idx] === 'reuniao_fluxo';
 }
 
 /**
@@ -242,6 +274,21 @@ function isPlanejamentoSoftBlocked(
   idx: number,
 ): boolean {
   return prof?.restricoes?.[turnoId]?.[dia]?.[idx] === 'planejamento';
+}
+
+/**
+ * SOFT CONSTRAINT — PERSONALIZADO
+ * Retorna true se o slot está marcado com valor "personalizado*".
+ * Pode ser usado como último recurso quando permitirUsoPersonalizado = true (após 15% das tentativas).
+ */
+function isPersonalizadoSoftBlocked(
+  prof: ProfessorComDados | undefined,
+  turnoId: string,
+  dia: string,
+  idx: number,
+): boolean {
+  const status = prof?.restricoes?.[turnoId]?.[dia]?.[idx];
+  return typeof status === 'string' && status.startsWith('personalizado');
 }
 
 
@@ -267,11 +314,12 @@ function ordenarDiasComPreferenciaProgressiva(
   // Quando true, não penaliza dias onde o professor já tem aulas:
   // isso permite que o mesmo prof ministre disciplinas diferentes na mesma turma/dia.
   ignorarCargaProfessorNoDia: boolean = false,
+  rng: () => number = Math.random,
 ): string[] {
   const dias = [...diasDisponiveis];
 
   if (ignorarDiasPreferidos || !prof) {
-    return dias.sort(() => Math.random() - 0.5);
+    return dias.sort(() => rng() - 0.5);
   }
 
   const preferidos = new Set(prof.dias_preferidos || []);
@@ -292,7 +340,7 @@ function ordenarDiasComPreferenciaProgressiva(
       const score =
         (ehPreferido * 10 * intensidadePreferencia) +
         (carga * 0.8) +
-        (Math.random() * 4);
+        (rng() * 4);
       return { dia, score };
     })
     .sort((a, b) => b.score - a.score)
@@ -355,7 +403,7 @@ export function gerarHorarioAlgoritmico(
   }
 
   // ── Construção dos blocos ────────────────────────────────────────────────
-  const construirTodosOsBlocos = (forcarIndividuais: boolean): BlocoGeracao[] => {
+  const construirTodosOsBlocos = (forcarIndividuais: boolean, rng: () => number = Math.random): BlocoGeracao[] => {
     const blocos: BlocoGeracao[] = [];
 
     for (const t of turmas) {
@@ -365,8 +413,17 @@ export function gerarHorarioAlgoritmico(
         const profKey = profId ? teacherKeyMap.get(profId) || null : null;
         const profNome = (profInfo as any)?.professor?.nome_horario || 'Sem Professor';
 
+        // Subtrair aulas fixas: Fase 0 pré-aloca esses slots, então o loop
+        // principal não deve criar blocos duplicados para os mesmos slots.
+        const nFixaPresencial = aulasFixas.filter(af =>
+          af.serie_id === t.serie.id && af.componente_id === c.componente_id && af.tipo_aula === 'presencial'
+        ).length;
+        const nFixaNP = aulasFixas.filter(af =>
+          af.serie_id === t.serie.id && af.componente_id === c.componente_id && af.tipo_aula === 'nao_presencial'
+        ).length;
+
         // Presenciais — no turno principal
-        const nPresenciais = c.aulas_presenciais || 0;
+        const nPresenciais = Math.max(0, (c.aulas_presenciais || 0) - nFixaPresencial);
         if (nPresenciais > 0) {
           const presenciais = criarBlocos(nPresenciais, c.componente_id, configGerminacao, forcarIndividuais);
           for (const size of presenciais) {
@@ -388,7 +445,7 @@ export function gerarHorarioAlgoritmico(
         }
 
         // NP — no turno oposto determinístico
-        const nNP = c.aulas_nao_presenciais || 0;
+        const nNP = Math.max(0, (c.aulas_nao_presenciais || 0) - nFixaNP);
         if (nNP > 0) {
           const naoPresenciais = criarBlocos(nNP, c.componente_id, configGerminacao, forcarIndividuais);
           for (const size of naoPresenciais) {
@@ -417,6 +474,21 @@ export function gerarHorarioAlgoritmico(
       return b.size - a.size;
     });
 
+    // Shuffle Fisher-Yates dentro de cada grupo de prioridade.
+    // Preserva a ordenação inter-grupos (NP antes de presencial) mas varia
+    // qual bloco chega primeiro aos slots — crítico em grades restritas.
+    const grupos = new Map<number, number[]>();
+    blocos.forEach((b, i) => {
+      if (!grupos.has(b.priority)) grupos.set(b.priority, []);
+      grupos.get(b.priority)!.push(i);
+    });
+    for (const indices of grupos.values()) {
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [blocos[indices[i]], blocos[indices[j]]] = [blocos[indices[j]], blocos[indices[i]]];
+      }
+    }
+
     return blocos;
   };
 
@@ -443,23 +515,20 @@ export function gerarHorarioAlgoritmico(
   // da mesma série/componente.
   const slotsCompartilhadosProfessor = new Set<string>();
 
-  // ── IDs de blocos que foram pré-alocados (fixos) ─────────────────────────────
-  // Chave: `${serie_id}|${componente_id}|${tipo_aula}|${turma_id}`
-  const blocosFixosIds = new Set<string>();
-
   const executarTentativa = (
     permitirUsoPlanejamento: boolean,
     forcarIndividuais: boolean,
     ignorarDiasPreferidos: boolean = false,
-    curProgLocal: number = 0
+    curProgLocal: number = 0,
+    permitirUsoPersonalizado: boolean = false,
+    rng: () => number = Math.random
   ) => {
     const aulasGeradas: HorarioAulaGeradaAlgoritmo[] = [];
     const ocupacaoProfessoresPorDia = new Map<string, SlotOcupado[]>();
     const ocupacaoTurmas = new Set<string>();
     slotsCompartilhadosProfessor.clear();
-    blocosFixosIds.clear();
 
-    const todosOsBlocos = construirTodosOsBlocos(forcarIndividuais);
+    const todosOsBlocos = construirTodosOsBlocos(forcarIndividuais, rng);
 
     // ╔═══════════════════════════════════════════════════════════════════
     // FASE 0 — Pré-alocação de aulas fixas
@@ -475,10 +544,8 @@ export function gerarHorarioAlgoritmico(
       const targetTurno = tipo_aula === 'presencial' ? turno : (resolverTurnoNP(turno, todosTurnos));
       const [ini, fim] = getSlotMinutes(targetTurno, idx);
 
-      // UUID único para esta instância de aula coletiva
-      const aulaCompartilhadaId = compartilhada
-        ? `shared-${aulaFixa.id}-${dia}-${idx}`
-        : null;
+      // Usa o próprio id da aula fixa como agrupador das turmas — já é UUID válido.
+      const aulaCompartilhadaId = compartilhada ? aulaFixa.id : null;
 
       // Resolver professor para aula compartilhada
       let professorCompartilhadoId: string | null = null;
@@ -553,8 +620,6 @@ export function gerarHorarioAlgoritmico(
           });
         }
 
-        // Marcar o bloco correspondente como placed
-        blocosFixosIds.add(`${aulaFixa.serie_id}|${aulaFixa.componente_id}|${tipo_aula}|${turma.id}`);
       }
 
       // Professor da aula compartilhada: registrar UMA única vez
@@ -573,13 +638,90 @@ export function gerarHorarioAlgoritmico(
       }
     }
 
-    // Marcar blocos fixos como placed antes do loop principal
-    for (const bloco of todosOsBlocos) {
-      const fixoKey = `${(turmasById.get(bloco.turma_id) as any)?.serie?.id}|${bloco.componente_id}|${bloco.tipo}|${bloco.turma_id}`;
-      if (blocosFixosIds.has(fixoKey)) bloco.placed = true;
-    }
     // ── FIM da Fase 0 ─────────────────────────────────────────────────────────────
 
+    // ── GARANTIA PÓS-FASE-0 ──────────────────────────────────────────────────────
+    // A Fase 0 tem uma saída silenciosa: se ocupacaoTurmas.has(slotKey) for true
+    // ao processar uma fixação, ela faz `continue` sem registrar a aula nem proteger
+    // o slot. Este passo force-registra qualquer fixação que tenha sido ignorada.
+    for (const aulaFixa of aulasFixas) {
+      const turmasDaSerieGarantia = turmas.filter(t => t.serie.id === aulaFixa.serie_id);
+      if (turmasDaSerieGarantia.length === 0) continue;
+
+      const targetTurnoGarantia = aulaFixa.tipo_aula === 'presencial'
+        ? turno
+        : (resolverTurnoNP(turno, todosTurnos));
+      const [iniG, fimG] = getSlotMinutes(targetTurnoGarantia, aulaFixa.aula_index);
+
+      for (const turma of turmasDaSerieGarantia) {
+        const jaRegistrada = aulasGeradas.some(
+          a => a.aula_fixa_id === aulaFixa.id && a.turma_id === turma.id
+        );
+        if (jaRegistrada) continue;
+
+        const slotKeyG = `${turma.id}|${targetTurnoGarantia.id}|${aulaFixa.dia_semana}|${aulaFixa.aula_index}`;
+        console.warn(
+          `[FIXAS] Garantia ativada — fixação não registrada pela Fase 0:`,
+          `turma=${turma.nome} | dia=${aulaFixa.dia_semana} | idx=${aulaFixa.aula_index} | slotKey=${slotKeyG}`
+        );
+
+        // Remover qualquer aula não-fixa que ocupe ilegitimamente este slot
+        if (ocupacaoTurmas.has(slotKeyG)) {
+          const intruso = aulasGeradas.find(
+            a => a.turma_id === turma.id
+              && a.turno_id === targetTurnoGarantia.id
+              && a.dia_semana === aulaFixa.dia_semana
+              && a.aula_index === aulaFixa.aula_index
+              && !a.aula_fixa_id
+          );
+          if (intruso) {
+            const idxArr = aulasGeradas.indexOf(intruso);
+            if (idxArr >= 0) aulasGeradas.splice(idxArr, 1);
+            ocupacaoTurmas.delete(slotKeyG);
+            if (intruso.professor_id) {
+              const pKey = teacherKeyMap.get(intruso.professor_id);
+              if (pKey) {
+                const mapKey = `${pKey}|${intruso.dia_semana}`;
+                const arr = ocupacaoProfessoresPorDia.get(mapKey) || [];
+                const filtered = arr.filter(o => !(o.aula_index === intruso.aula_index && o.turno_id === intruso.turno_id));
+                if (filtered.length > 0) ocupacaoProfessoresPorDia.set(mapKey, filtered);
+                else ocupacaoProfessoresPorDia.delete(mapKey);
+              }
+            }
+          }
+        }
+
+        const profInfoG = turma.professores.find(p => p.componente_id === aulaFixa.componente_id);
+        const profIdG = profInfoG?.professor_id || null;
+        const profObjG = profIdG ? professoresById.get(profIdG) : undefined;
+        const profKeyG = profObjG ? getTeacherKey(profObjG) : (profIdG ? `id:${profIdG}` : null);
+
+        aulasGeradas.push({
+          turma_id: turma.id,
+          componente_id: aulaFixa.componente_id,
+          professor_id: profIdG,
+          dia_semana: aulaFixa.dia_semana,
+          aula_index: aulaFixa.aula_index,
+          tipo: aulaFixa.tipo_aula,
+          turno_id: targetTurnoGarantia.id,
+          aula_fixa_id: aulaFixa.id,
+          compartilhada: aulaFixa.compartilhada,
+          aula_compartilhada_id: aulaFixa.compartilhada ? aulaFixa.id : null,
+        });
+
+        ocupacaoTurmas.add(slotKeyG);
+
+        if (!aulaFixa.compartilhada && profKeyG) {
+          pushMapArray(ocupacaoProfessoresPorDia, `${profKeyG}|${aulaFixa.dia_semana}`, {
+            turno_id: targetTurnoGarantia.id,
+            aula_index: aulaFixa.aula_index,
+            inicio_min: iniG,
+            fim_min: fimG,
+          });
+        }
+      }
+    }
+    // ── FIM DA GARANTIA ──────────────────────────────────────────────────────────
 
     const slotKeyOf = (turmaId: string, turnoId: string, dia: string, idx: number) =>
       `${turmaId}|${turnoId}|${dia}|${idx}`;
@@ -695,8 +837,10 @@ export function gerarHorarioAlgoritmico(
 
         const prof = meta.professor_id ? professoresById.get(meta.professor_id) : undefined;
         if (isBanHardBlocked(prof, targetTurno.id, dia, idx)) return false;
+        if (isReuniaoFluxoHardBlocked(prof, targetTurno.id, dia, idx)) return false;
         if (isFolgaHardBlocked(prof, targetTurno, dia, idx)) return false;
         if (isPlanejamentoSoftBlocked(prof, targetTurno.id, dia, idx) && !permitirUsoPlanejamento) return false;
+        if (isPersonalizadoSoftBlocked(prof, targetTurno.id, dia, idx) && !permitirUsoPersonalizado) return false;
       }
 
       return true;
@@ -709,11 +853,12 @@ export function gerarHorarioAlgoritmico(
       const meta = getMetaFromAula(aula);
       const currentTurno = turnosById.get(aula.turno_id);
       if (!meta || !currentTurno) return { moved: false };
+      if (aula.aula_fixa_id) return { moved: false };
 
-      const dias = [...(currentTurno.dias_semana || [])].sort(() => Math.random() - 0.5);
+      const dias = [...(currentTurno.dias_semana || [])].sort(() => rng() - 0.5);
       for (const d of dias) {
         const maxStart = currentTurno.aulas_por_dia - 1;
-        const slots = Array.from({ length: maxStart + 1 }, (_, k) => k).sort(() => Math.random() - 0.5);
+        const slots = Array.from({ length: maxStart + 1 }, (_, k) => k).sort(() => rng() - 0.5);
         for (const idx of slots) {
           if (d === aula.dia_semana && idx === aula.aula_index) continue;
           if (opts?.excluirTurnoId === currentTurno.id && opts?.excluirDia === d && opts?.excluirIdx === idx) continue;
@@ -736,8 +881,8 @@ export function gerarHorarioAlgoritmico(
 
         // Estratégia A: mover uma aula da mesma turma para liberar um slot melhor para a pendência.
         const aulasMesmaTurma = aulasGeradas
-          .filter(a => a.turma_id === b.turma_id && a.turno_id === targetTurno.id && a.tipo === b.tipo)
-          .sort(() => Math.random() - 0.5);
+          .filter(a => a.turma_id === b.turma_id && a.turno_id === targetTurno.id && a.tipo === b.tipo && !a.aula_fixa_id)
+          .sort(() => rng() - 0.5);
 
         let resolveu = false;
         for (const aulaOcupante of aulasMesmaTurma) {
@@ -778,10 +923,10 @@ export function gerarHorarioAlgoritmico(
         if (resolveu) continue;
 
         // Estratégia B: usar um slot vazio da turma e deslocar a aula conflitante do professor.
-        const dias = [...(targetTurno.dias_semana || [])].sort(() => Math.random() - 0.5);
+        const dias = [...(targetTurno.dias_semana || [])].sort(() => rng() - 0.5);
         for (const d of dias) {
           if (resolveu) break;
-          const slots = Array.from({ length: targetTurno.aulas_por_dia }, (_, k) => k).sort(() => Math.random() - 0.5);
+          const slots = Array.from({ length: targetTurno.aulas_por_dia }, (_, k) => k).sort(() => rng() - 0.5);
           for (const idx of slots) {
             if (resolveu) break;
             const slotKey = slotKeyOf(b.turma_id, targetTurno.id, d, idx);
@@ -790,8 +935,10 @@ export function gerarHorarioAlgoritmico(
 
             const prof = b.professor_id ? professoresById.get(b.professor_id) : undefined;
             if (isBanHardBlocked(prof, targetTurno.id, d, idx)) continue;
+            if (isReuniaoFluxoHardBlocked(prof, targetTurno.id, d, idx)) continue;
             if (isFolgaHardBlocked(prof, targetTurno, d, idx)) continue;
             if (isPlanejamentoSoftBlocked(prof, targetTurno.id, d, idx) && !permitirUsoPlanejamento) continue;
+            if (isPersonalizadoSoftBlocked(prof, targetTurno.id, d, idx) && !permitirUsoPersonalizado) continue;
 
             if (!b.professor_key) {
               addAulaState(b, targetTurno, d, idx);
@@ -803,7 +950,9 @@ export function gerarHorarioAlgoritmico(
             const profDiaKey = `${b.professor_key}|${d}`;
             const [iniCand, fimCand] = getSlotMinutes(targetTurno, idx);
             const conflitosLocais = aulasGeradas.filter(a => {
-              if (a.professor_id !== b.professor_id || a.dia_semana !== d) return false;
+              if (!a.professor_id) return false;
+              const profKeyA = teacherKeyMap.get(a.professor_id);
+              if (profKeyA !== b.professor_key || a.dia_semana !== d) return false;
               const turnoA = turnosById.get(a.turno_id);
               if (!turnoA) return false;
               const [iniA, fimA] = getSlotMinutes(turnoA, a.aula_index);
@@ -815,9 +964,26 @@ export function gerarHorarioAlgoritmico(
               );
             });
 
-            if (conflitosLocais.length === 0) continue;
+            if (conflitosLocais.length === 0) {
+              // Sem conflito local — verificar conflito global e alocar diretamente se possível.
+              // Isso ocorre quando Strategy A liberou um slot de turma que o loop principal
+              // não conseguiu usar porque a ordem de busca já havia passado por aqui.
+              const globalOcc = ocupacoesExistentesPorProfessorDia.get(profDiaKey) || [];
+              const conflitaGlobal = globalOcc.some(occ =>
+                minutesConflitam(iniCand, fimCand, occ.inicio_min, occ.fim_min,
+                  targetTurno.id === occ.turno_id, idx, occ.aula_index)
+              );
+              if (!conflitaGlobal) {
+                addAulaState(b, targetTurno, d, idx);
+                b.placed = true;
+                resolveu = true;
+                break;
+              }
+              continue;
+            }
 
             for (const conflito of conflitosLocais) {
+              if (conflito.aula_fixa_id) continue;
               const metaConflito = getMetaFromAula(conflito);
               if (!metaConflito) continue;
 
@@ -846,6 +1012,7 @@ export function gerarHorarioAlgoritmico(
     };
 
     for (const b of todosOsBlocos) {
+      if (b.placed) continue; // já alocado pela Fase 0 (aulas fixas)
       let alocado = false;
 
       // Determinar turnos a testar para este bloco
@@ -868,14 +1035,15 @@ export function gerarHorarioAlgoritmico(
           ocupacoesExistentesPorProfessorDia,
           ignorarDiasPreferidos,
           curProgLocal,
-          permitirMesmoProfDisciplinasMesmoDia, // repassa a flag
+          permitirMesmoProfDisciplinasMesmoDia,
+          rng,
         );
 
         for (const d of dias) {
           if (alocado) break;
 
           const maxStart = targetTurno.aulas_por_dia - b.size;
-          const startSlots = Array.from({ length: maxStart + 1 }, (_, k) => k).sort(() => Math.random() - 0.5);
+          const startSlots = Array.from({ length: maxStart + 1 }, (_, k) => k).sort(() => rng() - 0.5);
 
           for (const i of startSlots) {
             let livre = true;
@@ -933,6 +1101,13 @@ export function gerarHorarioAlgoritmico(
                   livre = false; break;
                 }
 
+                // ── HARD CONSTRAINT 3c2: REUNIÃO DE FLUXO ───────────────────
+                // Bloqueio absoluto. Tratado como indisponível.
+                // Não afetado por nenhum parâmetro de relaxamento.
+                if (isReuniaoFluxoHardBlocked(prof, targetTurno.id, d, idx)) {
+                  livre = false; break;
+                }
+
                 // ── HARD CONSTRAINT 3d: FOLGA (livre docência) ──────────────
                 // Bloqueio absoluto. Jamais pode receber aula.
                 // Não afetado por nenhum parâmetro de relaxamento.
@@ -944,6 +1119,13 @@ export function gerarHorarioAlgoritmico(
                 // Bloqueio suave. Pode ser usado como último recurso
                 // quando permitirUsoPlanejamento = true (após 15% das tentativas).
                 if (isPlanejamentoSoftBlocked(prof, targetTurno.id, d, idx) && !permitirUsoPlanejamento) {
+                  livre = false; break;
+                }
+
+                // ── SOFT CONSTRAINT 3f: PERSONALIZADO ──────────────────────
+                // Bloqueio suave. Pode ser usado como último recurso
+                // quando permitirUsoPersonalizado = true (após 15% das tentativas).
+                if (isPersonalizadoSoftBlocked(prof, targetTurno.id, d, idx) && !permitirUsoPersonalizado) {
                   livre = false; break;
                 }
               }
@@ -1021,29 +1203,38 @@ export function gerarHorarioAlgoritmico(
   // ── Loop de tentativas ───────────────────────────────────────────────────
   //
   // Relaxamento progressivo:
-  //   • permitirUsoPlanejamento: relaxa após 15% (SOFT — planejamento pode ser usado)
-  //   • forcarIndividuais:       relaxa após 75% (desfaz geminação)
-  //   • ignorarDiasPreferidos:   relaxa após 70% (ignora preferência de concentração de dias)
+  //   • permitirUsoPlanejamento:  relaxa após 15% (SOFT — planejamento pode ser usado)
+  //   • permitirUsoPersonalizado: relaxa após 15% (SOFT — personalizado pode ser usado)
+  //   • forcarIndividuais:        relaxa após 25% (desfaz geminação)
+  //   • ignorarDiasPreferidos:    relaxa após 70% (ignora preferência de concentração de dias)
   //
   // O que NUNCA é relaxado:
   //   • BAN (indisponivel)     → hard constraint permanente
   //   • FOLGA (livre docência) → hard constraint permanente
+  //   • REUNIÃO DE FLUXO      → hard constraint permanente
   //   • conflitos de professor → hard constraint permanente
   //   • conflitos de turma     → hard constraint permanente
   //   • restrições de série    → hard constraint permanente
   //
+  const baseAttempt = Math.round(globalProgress * 100000);
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const curProg = globalProgress + (attempt / maxAttempts);
     const permitirPlan = force || curProg > 0.15;
-    const forcarIndiv = force || curProg > 0.75;
+    const permitirPersonalizado = force || curProg > 0.15;
+    const forcarIndiv = force || curProg > 0.25;
     const ignorarDiasPref = force || curProg > 0.70;
 
-    const res = executarTentativa(permitirPlan, forcarIndiv, ignorarDiasPref, curProg);
+    const seed = baseAttempt + attempt; // inteiro único 0–99.999 por tentativa global
+    const rng = makeRng(seed);
+
+    const res = executarTentativa(permitirPlan, forcarIndiv, ignorarDiasPref, curProg, permitirPersonalizado, rng);
     if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
   }
 
-  // Tentativa final de fallback — relaxa tudo que é SOFT, mas mantém HARD constraints
-  const finalFail = executarTentativa(true, true, true, 1);
+  // Tentativa final de fallback — semente 100.000 (fora do range do loop)
+  const fallbackRng = makeRng(100000);
+  const finalFail = executarTentativa(true, true, true, 1, true, fallbackRng);
 
   /**
    * ── MOTOR DE DIAGNÓSTICO ────────────────────────────────────────────────────
@@ -1158,6 +1349,9 @@ export function gerarHorarioAlgoritmico(
               const prof = professoresById.get(b.professor_id!);
 
               if (isBanHardBlocked(prof, targetTurno.id, d, idx)) {
+                primeiraMotivoRejeicao = 'excess_ban'; break;
+              }
+              if (isReuniaoFluxoHardBlocked(prof, targetTurno.id, d, idx)) {
                 primeiraMotivoRejeicao = 'excess_ban'; break;
               }
               if (isFolgaHardBlocked(prof, targetTurno, d, idx)) {
