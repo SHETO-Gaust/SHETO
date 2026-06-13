@@ -233,20 +233,20 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             
             {/* ESTADO DE SUGESTÃO DE REALOCAÇÃO */}
             {sugestao && (
-                <Alert className="bg-blue-50 border-blue-200 animate-in zoom-in-95 duration-300">
-                    <RefreshCw className="h-5 w-5 text-blue-600" />
-                    <AlertTitle className="text-xl font-bold text-blue-900">Sugestão de Ajuste entre Turnos</AlertTitle>
+                <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-900 animate-in zoom-in-95 duration-300">
+                    <RefreshCw className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <AlertTitle className="text-xl font-bold text-blue-900 dark:text-blue-300">Sugestão de Ajuste entre Turnos</AlertTitle>
                     <AlertDescription className="mt-4 space-y-6">
-                        <p className="text-blue-800 font-medium">
+                        <p className="text-blue-800 dark:text-blue-300 font-medium">
                             Encontramos uma solução completa, mas ela exige mover algumas aulas de **Contraturno (NP)** de horários que já estão publicados em outros turnos.
                         </p>
-                        
-                        <div className="bg-background/80 p-4 rounded-xl border border-blue-100 shadow-inner">
-                            <p className="text-xs uppercase font-bold text-blue-600 mb-3 tracking-widest">Alterações Necessárias:</p>
+
+                        <div className="bg-background/80 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50 shadow-inner">
+                            <p className="text-xs uppercase font-bold text-blue-600 dark:text-blue-400 mb-3 tracking-widest">Alterações Necessárias:</p>
                             <div className="space-y-3">
                                 {sugestao.map((s, i) => (
-                                    <div key={i} className="flex items-center gap-3 text-sm text-blue-900 bg-blue-100/50 p-2 rounded-lg border border-blue-200/50">
-                                        <div className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                                    <div key={i} className="flex items-center gap-3 text-sm text-blue-900 dark:text-blue-300 bg-blue-100/50 dark:bg-blue-900/30 p-2 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
+                                        <div className="h-2 w-2 rounded-full bg-blue-500 dark:bg-blue-400 shrink-0" />
                                         <span>
                                             **{s.professor_nome}**: Mover **{s.disciplina_nome}** (Turma {s.turma_nome}) da {s.dia_antigo} para a **{s.dia_novo}**.
                                         </span>
@@ -264,7 +264,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                 {isGenerating ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}
                                 Aceitar e Gerar Grade Completa
                             </Button>
-                            <Button variant="outline" onClick={() => setSugestao(null)} className="h-12 border-blue-200 text-blue-700 hover:bg-blue-100">
+                            <Button variant="outline" onClick={() => setSugestao(null)} className="h-12 border-blue-200 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/50">
                                 Cancelar
                             </Button>
                         </div>
@@ -282,12 +282,12 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                         </div>
                         
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                            <div className="rounded-xl bg-orange-100/50 p-5 border border-orange-200 space-y-4">
-                                <p className="text-sm font-bold text-orange-900 flex items-center gap-2">
-                                    <AlertTriangle className="h-5 w-5 text-orange-600" />
+                            <div className="rounded-xl bg-orange-100/50 p-5 border border-orange-200 dark:bg-orange-950/30 dark:border-orange-900 space-y-4">
+                                <p className="text-sm font-bold text-orange-900 dark:text-orange-300 flex items-center gap-2">
+                                    <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                                     Opção: Gerar com Pendências
                                 </p>
-                                <p className="text-xs text-orange-800 leading-relaxed">
+                                <p className="text-xs text-orange-800 dark:text-orange-400 leading-relaxed">
                                     Se você não conseguir resolver os conflitos agora, pode salvar o horário assim mesmo. As aulas não alocadas ficarão destacadas em **vermelho ("Vago")**.
                                 </p>
                                 <Button 

@@ -23,10 +23,10 @@ export default async function VisualizarHorarioPage() {
   if (!escolaId) {
     return (
       <div className="p-6">
-        <Card className="border-orange-200 bg-orange-50">
+        <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-orange-800"><AlertTriangle /> Nenhuma Escola Selecionada</CardTitle>
-            <CardDescription className="text-orange-700">
+            <CardTitle className="flex items-center gap-2 text-orange-800 dark:text-orange-300"><AlertTriangle /> Nenhuma Escola Selecionada</CardTitle>
+            <CardDescription className="text-orange-700 dark:text-orange-400">
               Selecione uma unidade escolar no menu superior para visualizar os horários oficiais.
             </CardDescription>
           </CardHeader>

@@ -114,16 +114,16 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
 
   if (submitted) {
       return (
-          <Card className="border-green-200 bg-green-50/50 py-12">
+          <Card className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/30 py-12">
               <CardContent className="flex flex-col items-center justify-center text-center space-y-4">
-                  <div className="bg-green-100 p-4 rounded-full">
-                      <CheckCircle2 className="h-12 w-12 text-green-600" />
+                  <div className="bg-green-100 dark:bg-green-900/50 p-4 rounded-full">
+                      <CheckCircle2 className="h-12 w-12 text-green-600 dark:text-green-400" />
                   </div>
                   <div className="space-y-2">
-                      <h2 className="text-2xl font-bold text-green-900">Tudo pronto!</h2>
-                      <p className="text-green-700">Suas preferências de horário e livre docência foram enviadas para a coordenação.</p>
+                      <h2 className="text-2xl font-bold text-green-900 dark:text-green-300">Tudo pronto!</h2>
+                      <p className="text-green-700 dark:text-green-400">Suas preferências de horário e livre docência foram enviadas para a coordenação.</p>
                   </div>
-                  <p className="text-xs text-green-600/60 pt-4 uppercase font-bold">Você já pode fechar esta aba.</p>
+                  <p className="text-xs text-green-600/60 dark:text-green-400/60 pt-4 uppercase font-bold">Você já pode fechar esta aba.</p>
               </CardContent>
           </Card>
       );
@@ -131,11 +131,11 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl flex items-start gap-4 shadow-sm">
-          <Info className="h-6 w-6 text-blue-600 shrink-0 mt-1" />
+      <div className="bg-blue-50 border border-blue-100 p-6 rounded-2xl flex items-start gap-4 shadow-sm dark:bg-blue-950/30 dark:border-blue-900">
+          <Info className="h-6 w-6 text-blue-600 dark:text-blue-400 shrink-0 mt-1" />
           <div className="space-y-2">
-              <p className="font-bold text-blue-900 text-lg">Preferências e Regras</p>
-              <ul className="text-blue-800 text-sm space-y-2 opacity-90">
+              <p className="font-bold text-blue-900 dark:text-blue-300 text-lg">Preferências e Regras</p>
+              <ul className="text-blue-800 dark:text-blue-300 text-sm space-y-2 opacity-90">
                   <li>• <strong>Livre Docência:</strong> Escolha obrigatoriamente <strong>2 meios períodos</strong> livres ou opte por <strong>Sem Preferência</strong>.</li>
                   <li>• <strong>Dias Preferidos:</strong> Informe em quais dias você prefere concentrar suas aulas (opcional).</li>
                   <li>• <strong>Indisponibilidade:</strong> Clique na grade para marcar horários com outros vínculos ou restrições totais.</li>
@@ -216,10 +216,10 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
       </Card>
 
       {/* ── Dias Preferidos ── */}
-      <Card className="shadow-lg border-violet-200/60 overflow-hidden">
-          <CardHeader className="bg-violet-50 border-b">
+      <Card className="shadow-lg border-violet-200/60 dark:border-violet-800/60 overflow-hidden">
+          <CardHeader className="bg-violet-50 dark:bg-violet-950/30 border-b">
               <CardTitle className="text-lg flex items-center gap-2">
-                  <CalendarDays className="h-5 w-5 text-violet-600" />
+                  <CalendarDays className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                   2. Dias Preferidos para Concentração de Aulas
               </CardTitle>
               <CardDescription>Selecione os dias em que prefere ter suas aulas concentradas. Esta informação é opcional e tratada como preferência.</CardDescription>
@@ -303,7 +303,7 @@ export function RestricoesProfessorPublicClient({ token, professor, turnos }: Pr
                                                             className={cn(
                                                                 "h-full w-full rounded-lg flex flex-col items-center justify-center transition-all",
                                                                 status === 'indisponivel' ? 'bg-red-500 text-white shadow-lg cursor-pointer hover:scale-95' : 
-                                                                isCoordinationSet ? 'bg-blue-100 text-blue-700 border-2 border-blue-200 cursor-not-allowed opacity-80' : 
+                                                                isCoordinationSet ? 'bg-blue-100 text-blue-700 border-2 border-blue-200 cursor-not-allowed opacity-80 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800' :
                                                                 'bg-background border-2 border-dashed border-border hover:border-slate-400 text-muted-foreground/60 cursor-pointer hover:scale-95'
                                                             )}
                                                         >

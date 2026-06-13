@@ -10,27 +10,20 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Users, ArrowRight, ArrowLeft, CalendarX, Ban, PenSquare, CreditCard, Star, MessageSquare, CalendarDays } from 'lucide-react';
+import { Loader2, Users, Save, CreditCard, CheckCircle2, Clock } from 'lucide-react';
 import { upsertProfessor } from './actions';
-import type { ProfessorComDados, Turno, ComponenteCurricular, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
+import type { ProfessorComDados, Turno, ComponenteCurricular } from '@/lib/types';
+
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, validateCPF } from '@/lib/utils';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
-
-const DIAS_SEMANA_MAP = [
-  { id: 'segunda', label: 'Seg' }, { id: 'terca', label: 'Ter' },
-  { id: 'quarta', label: 'Qua' }, { id: 'quinta', label: 'Qui' },
-  { id: 'sexta', label: 'Sex' }, { id: 'sabado', label: 'Sáb' },
-];
-
-const PERIODOS_LABELS: Record<LivreDocenciaPeriodo, string> = {
-    matutino: 'Manhã',
-    vespertino: 'Tarde',
-    noturno: 'Noite'
-};
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+} from '@/components/ui/alert-dialog';
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -47,7 +40,7 @@ const formSchema = z.object({
   livre_docencia: z.array(z.object({
       dia: z.string(),
       periodo: z.enum(['matutino', 'vespertino', 'noturno'])
-  })).max(2, 'No máximo 2 períodos de livre docência.'),
+  })).max(2).default([]),
   sem_preferencia_livre_docencia: z.boolean().default(false),
   justificativa: z.string().nullable().optional(),
   dias_preferidos: z.array(z.string()).default([]),
@@ -63,20 +56,23 @@ type Props = {
   turnosDaEscola: Turno[];
   componentesDaEscola: ComponenteCurricular[];
   onProfessorUpdated: () => void;
+  onCadastrarRestricoes?: (professorId: string) => void;
 };
 
-export function EditProfessorSheet({ 
-  isOpen, 
-  setIsOpen, 
-  professor, 
-  escolaId, 
-  turnosDaEscola, 
+export function EditProfessorSheet({
+  isOpen,
+  setIsOpen,
+  professor,
+  escolaId,
+  turnosDaEscola,
   componentesDaEscola,
-  onProfessorUpdated 
+  onProfessorUpdated,
+  onCadastrarRestricoes,
 }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'info' | 'restricoes'>('info');
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [savedProfessorId, setSavedProfessorId] = useState<string | null>(null);
   const isEdit = !!professor;
 
   const form = useForm<FormValues>({
@@ -102,7 +98,8 @@ export function EditProfessorSheet({
   useEffect(() => {
     if (isOpen) {
       document.body.style.pointerEvents = 'auto';
-      setStep('info');
+      setIsSuccessModalOpen(false);
+      setSavedProfessorId(null);
       form.reset({
         id: professor?.id,
         escola_id: String(escolaId),
@@ -123,23 +120,6 @@ export function EditProfessorSheet({
     }
   }, [isOpen, professor, escolaId, form]);
 
-  const selectedTurnosIds = form.watch('turnos_ids');
-  const selectedTurnos = useMemo(() => 
-    turnosDaEscola.filter(t => selectedTurnosIds.includes(t.id)),
-    [turnosDaEscola, selectedTurnosIds]
-  );
-
-  const availablePeriods = useMemo(() => {
-      const periods = new Set<LivreDocenciaPeriodo>();
-      turnosDaEscola.forEach(t => {
-          const n = t.nome.toLowerCase();
-          if (n.includes('matutino') || n.includes('integral')) periods.add('matutino');
-          if (n.includes('vespertino') || n.includes('integral')) periods.add('vespertino');
-          if (n.includes('noturno')) periods.add('noturno');
-      });
-      return Array.from(periods);
-  }, [turnosDaEscola]);
-
   const formatCPF = (value: string) => {
     return value
       .replace(/\D/g, '')
@@ -149,50 +129,7 @@ export function EditProfessorSheet({
       .slice(0, 14);
   };
 
-  const handleCellClick = (turnoId: string, dia: string, aulaIndex: number) => {
-    const currentRestricoes = form.getValues('restricoes') || {};
-    const newRestricoes = JSON.parse(JSON.stringify(currentRestricoes));
-    
-    if (!newRestricoes[turnoId]) newRestricoes[turnoId] = {};
-    if (!newRestricoes[turnoId][dia]) newRestricoes[turnoId][dia] = {};
-
-    const currentStatus = newRestricoes[turnoId][dia][aulaIndex];
-
-    if (currentStatus === 'indisponivel') {
-        newRestricoes[turnoId][dia][aulaIndex] = 'planejamento';
-    } else if (currentStatus === 'planejamento') {
-        delete newRestricoes[turnoId][dia][aulaIndex];
-    } else {
-        newRestricoes[turnoId][dia][aulaIndex] = 'indisponivel';
-    }
-    
-    form.setValue('restricoes', newRestricoes, { shouldDirty: true });
-  };
-
-  const toggleLivreDocencia = (periodo: LivreDocenciaPeriodo, diaId: string) => {
-      if (form.watch('sem_preferencia_livre_docencia')) return;
-
-      const current = form.getValues('livre_docencia') || [];
-      const isSelected = current.some(item => item.periodo === periodo && item.dia === diaId);
-      
-      if (isSelected) {
-          form.setValue('livre_docencia', current.filter(item => !(item.periodo === periodo && item.dia === diaId)), { shouldDirty: true });
-      } else {
-          if (current.length >= 2) {
-              toast({ title: 'Limite Atingido', description: 'O máximo são 2 períodos de livre docência.', variant: 'destructive' });
-              return;
-          }
-          form.setValue('livre_docencia', [...current, { periodo, dia: diaId }], { shouldDirty: true });
-      }
-  };
-
   const onSubmit = async (data: FormValues) => {
-    if (step === 'info') {
-      const isValid = await form.trigger(['cpf', 'nome_completo', 'nome_horario', 'turnos_ids', 'aulas_disponiveis']);
-      if (isValid) setStep('restricoes');
-      return;
-    }
-
     setLoading(true);
     try {
       const result = await upsertProfessor(data);
@@ -200,64 +137,74 @@ export function EditProfessorSheet({
         toast({ title: 'Erro', description: result.error, variant: 'destructive' });
         return;
       }
-      
-      if (result.alerta) {
-          toast({ title: 'Importante', description: result.alerta, variant: 'default' });
+
+      if (isEdit) {
+        if (result.alerta) {
+          toast({ title: 'Importante', description: result.alerta });
+        } else {
+          toast({ title: 'Professor Atualizado', description: `Os dados de "${data.nome_completo}" foram salvos.` });
+        }
+        setIsOpen(false);
+        onProfessorUpdated();
       } else {
-          toast({
-            title: isEdit ? 'Professor Atualizado' : 'Professor Criado',
-            description: `Os dados de "${data.nome_completo}" foram salvos.`,
-          });
+        // Novo professor: mostra modal de confirmação
+        setSavedProfessorId(result.data?.id ?? null);
+        setIsSuccessModalOpen(true);
       }
-      
-      setIsOpen(false);
-      onProfessorUpdated();
-    } catch (error) {
+    } catch {
       toast({ title: 'Erro', description: 'Erro interno ao processar.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
-  const semPreferencia = form.watch('sem_preferencia_livre_docencia');
-  const livreDocenciaCount = form.watch('livre_docencia')?.length || 0;
+  const handleDeixarParaDepois = () => {
+    setIsSuccessModalOpen(false);
+    setIsOpen(false);
+    onProfessorUpdated();
+  };
+
+  const handleCadastrarRestricoes = () => {
+    setIsSuccessModalOpen(false);
+    setIsOpen(false);
+    if (savedProfessorId) {
+      onCadastrarRestricoes?.(savedProfessorId);
+    } else {
+      onProfessorUpdated();
+    }
+  };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className={cn("flex flex-col h-full pointer-events-auto transition-all duration-300", step === 'info' ? "sm:max-w-2xl" : "sm:max-w-4xl")}>
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            {step === 'info' ? <Users className="h-5 w-5" /> : <CalendarX className="h-5 w-5" />}
-            {isEdit ? 'Editar Professor' : 'Novo Professor'} 
-            <span className="text-muted-foreground font-normal ml-2">
-                ({step === 'info' ? '1/2' : '2/2'})
-            </span>
-          </SheetTitle>
-          <SheetDescription>
-            {step === 'info' 
-                ? 'Preencha os dados básicos e atribuições do docente.' 
-                : 'Defina a Livre Docência (obrigatório 2) e outras restrições.'}
-          </SheetDescription>
-        </SheetHeader>
+    <>
+      <Sheet open={isOpen} onOpenChange={setIsOpen}>
+        <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="flex flex-col h-full pointer-events-auto sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              {isEdit ? 'Editar Professor' : 'Novo Professor'}
+            </SheetTitle>
+            <SheetDescription>
+              Preencha os dados básicos e atribuições do docente.
+            </SheetDescription>
+          </SheetHeader>
 
-        <Form {...form}>
-          <form id="professor-form" onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 space-y-6 py-6 overflow-y-auto pr-2">
-              {step === 'info' ? (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 space-y-6 py-6 overflow-y-auto pr-2">
                 <div className="space-y-6">
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Identificação e Contato</h4>
-                    
+
                     <FormField control={form.control} name="cpf" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-2"><CreditCard className="h-3.5 w-3.5" /> CPF (Obrigatório)</FormLabel>
                         <FormControl>
-                            <Input 
-                                placeholder="000.000.000-00" 
-                                {...field} 
-                                onChange={(e) => field.onChange(formatCPF(e.target.value))}
-                                maxLength={14}
-                            />
+                          <Input
+                            placeholder="000.000.000-00"
+                            {...field}
+                            onChange={(e) => field.onChange(formatCPF(e.target.value))}
+                            maxLength={14}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -378,225 +325,53 @@ export function EditProfessorSheet({
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-8">
-                    <Card className="border-primary/20 shadow-sm overflow-hidden">
-                        <CardHeader className="bg-primary/5 py-4 flex flex-row items-center justify-between">
-                            <CardTitle className="text-sm flex items-center gap-2">
-                                <Star className="h-4 w-4 text-primary fill-primary" />
-                                Livre Docência (2 meios períodos)
-                            </CardTitle>
-                            
-                            <FormField control={form.control} name="sem_preferencia_livre_docencia" render={({ field }) => (
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormLabel className="text-[10px] font-black uppercase text-primary">Sem Preferência</FormLabel>
-                                    <FormControl>
-                                        <Switch 
-                                            checked={field.value} 
-                                            onCheckedChange={(checked) => {
-                                                field.onChange(checked);
-                                                if (checked) form.setValue('livre_docencia', [], { shouldDirty: true });
-                                            }} 
-                                        />
-                                    </FormControl>
-                                </FormItem>
-                            )} />
-                        </CardHeader>
-                        <CardContent className="p-6">
-                            {!semPreferencia ? (
-                                <>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {availablePeriods.map(periodo => (
-                                            <div key={periodo} className="space-y-3">
-                                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest border-b pb-1">{PERIODOS_LABELS[periodo]}</p>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {DIAS_SEMANA_MAP.map(dia => {
-                                                        const livreDocs = form.watch('livre_docencia') || [];
-                                                        const isSelected = livreDocs.some(item => item.periodo === periodo && item.dia === dia.id);
-                                                        return (
-                                                            <Button 
-                                                                key={dia.id}
-                                                                type="button"
-                                                                variant={isSelected ? "default" : "outline"}
-                                                                className={cn("h-10 text-[10px] font-bold uppercase", isSelected && "bg-primary")}
-                                                                onClick={() => toggleLivreDocencia(periodo, dia.id)}
-                                                            >
-                                                                {dia.label}
-                                                            </Button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className={cn("mt-4 p-2 rounded text-[10px] font-bold text-center uppercase tracking-tighter", livreDocenciaCount === 2 ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")}>
-                                        {livreDocenciaCount}/2 Períodos Selecionados
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="p-8 text-center border-2 border-dashed rounded-xl bg-muted/5">
-                                    <p className="text-sm font-medium text-muted-foreground">O sistema escolherá os melhores períodos livres automaticamente.</p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+              </div>
 
-                    <Separator />
+              <SheetFooter className="mt-auto border-t pt-4 bg-background">
+                <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={loading} className="min-w-[180px] font-bold">
+                  {loading
+                    ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Salvando...</>
+                    : <><Save className="mr-2 h-4 w-4" /> Salvar Informações</>
+                  }
+                </Button>
+              </SheetFooter>
+            </form>
+          </Form>
+        </SheetContent>
+      </Sheet>
 
-                    {/* Dias Preferidos */}
-                    <Card className="border-violet-200/60 shadow-sm overflow-hidden">
-                        <CardHeader className="bg-violet-50/50 py-4 flex flex-row items-center gap-3">
-                            <CalendarDays className="h-4 w-4 text-violet-600" />
-                            <div>
-                                <CardTitle className="text-sm text-violet-900">Dias Preferidos para Concentração de Aulas</CardTitle>
-                                <p className="text-[10px] text-violet-700/70 mt-0.5">O motor priorizará estes dias ao alocar aulas. Soft constraint — relaxada se necessário.</p>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-4">
-                            <FormField control={form.control} name="dias_preferidos" render={({ field }) => (
-                                <FormItem>
-                                    <div className="flex flex-wrap gap-2">
-                                        {DIAS_SEMANA_MAP.map(dia => {
-                                            const isSelected = (field.value || []).includes(dia.id);
-                                            return (
-                                                <Button
-                                                    key={dia.id}
-                                                    type="button"
-                                                    variant={isSelected ? 'default' : 'outline'}
-                                                    className={cn(
-                                                        'h-10 px-5 text-[11px] font-bold uppercase tracking-wider transition-all',
-                                                        isSelected && 'bg-violet-600 hover:bg-violet-700 border-violet-600'
-                                                    )}
-                                                    onClick={() => {
-                                                        const current = field.value || [];
-                                                        field.onChange(
-                                                            isSelected
-                                                                ? current.filter(d => d !== dia.id)
-                                                                : [...current, dia.id]
-                                                        );
-                                                    }}
-                                                >
-                                                    {dia.label}
-                                                </Button>
-                                            );
-                                        })}
-                                    </div>
-                                    {(field.value || []).length === 0 && (
-                                        <p className="text-[10px] text-muted-foreground mt-2 italic">Nenhum dia selecionado — o motor usará qualquer dia disponível.</p>
-                                    )}
-                                </FormItem>
-                            )} />
-                        </CardContent>
-                    </Card>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 px-1">
-                            <CalendarX className="h-4 w-4" /> Outras Indisponibilidades
-                        </h4>
-                        {selectedTurnos.length > 0 ? (
-                            <Tabs defaultValue={selectedTurnos[0].id} className="w-full">
-                                <TabsList className="bg-muted/50">
-                                    {selectedTurnos.map(turno => (
-                                        <TabsTrigger key={turno.id} value={turno.id} className="text-xs uppercase font-bold">{turno.nome}</TabsTrigger>
-                                    ))}
-                                </TabsList>
-                                {selectedTurnos.map(turno => (
-                                    <TabsContent key={turno.id} value={turno.id} className="pt-4 animate-in fade-in zoom-in-95 duration-300">
-                                        <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
-                                            <table className="w-full text-sm text-center">
-                                                <thead>
-                                                    <tr className="bg-muted/50 border-b">
-                                                        <th className="p-3 font-bold border-r w-24 bg-muted/30">Aula</th>
-                                                        {DIAS_SEMANA_MAP.map(dia => (
-                                                            <th key={dia.id} className="p-3 font-bold">{dia.label}</th>
-                                                        ))}
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {Array.from({ length: turno.aulas_por_dia }).map((_, aulaIndex) => (
-                                                        <tr key={aulaIndex} className="border-b last:border-0 h-16">
-                                                            <td className="p-2 font-medium bg-muted/20 border-r text-xs">
-                                                                <div className="font-bold text-primary">{aulaIndex + 1}ª</div>
-                                                                <div className="opacity-60">
-                                                                    {turno.horarios?.[aulaIndex]?.inicio || '--:--'}
-                                                                </div>
-                                                            </td>
-                                                            {DIAS_SEMANA_MAP.map(dia => {
-                                                                const restricoes = form.watch('restricoes') || {};
-                                                                const status = restricoes[turno.id]?.[dia.id]?.[aulaIndex];
-                                                                return (
-                                                                    <td key={dia.id} className="p-0 border-r last:border-r-0">
-                                                                        <div onClick={() => handleCellClick(turno.id, dia.id, aulaIndex)}
-                                                                            className={cn("h-full w-full flex items-center justify-center cursor-pointer transition-all hover:bg-accent/50",
-                                                                                status === 'indisponivel' ? 'bg-red-50 text-red-600' : 
-                                                                                status === 'planejamento' ? 'bg-blue-50 text-blue-600' : ''
-                                                                            )}>
-                                                                            {status === 'indisponivel' && <Ban className="h-6 w-6" />}
-                                                                            {status === 'planejamento' && <PenSquare className="h-6 w-6" />}
-                                                                            {!status && <div className="h-1.5 w-1.5 rounded-full bg-slate-200" />}
-                                                                        </div>
-                                                                    </td>
-                                                                )
-                                                            })}
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </TabsContent>
-                                ))}
-                            </Tabs>
-                        ) : (
-                            <div className="text-center text-muted-foreground p-12 border-2 border-dashed rounded-xl bg-muted/5">
-                                <p>Associe o professor a um turno primeiro.</p>
-                            </div>
-                        )}
-                    </div>
-
-                    <Separator />
-
-                    <FormField control={form.control} name="justificativa" render={({ field }) => (
-                        <FormItem>
-                            <FormLabel className="flex items-center gap-2">
-                                <MessageSquare className="h-4 w-4" /> Justificativa / Observações Internas
-                            </FormLabel>
-                            <FormControl>
-                                <Textarea 
-                                    placeholder="Motivo das restrições ou observações sobre a Livre Docência..." 
-                                    className="min-h-[100px] resize-none"
-                                    {...field}
-                                    value={field.value ?? ''}
-                                />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )} />
-                </div>
-              )}
-            </div>
-
-            <SheetFooter className="mt-auto border-t pt-4 bg-background">
-              {step === 'info' ? (
-                <>
-                    <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-                    <Button type="submit" form="professor-form" className="min-w-[160px] font-bold">
-                        Restrições e Livre Docência <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                </>
-              ) : (
-                <>
-                    <Button type="button" variant="outline" onClick={() => setStep('info')}><ArrowLeft className="mr-2 h-4 w-4" />Voltar</Button>
-                    <Button type="submit" form="professor-form" disabled={loading || (!semPreferencia && livreDocenciaCount !== 2)} className="min-w-[160px] font-bold shadow-lg">
-                        {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />} Finalizar e Salvar
-                    </Button>
-                </>
-              )}
-            </SheetFooter>
-          </form>
-        </Form>
-      </SheetContent>
-    </Sheet>
+      {/* Modal de confirmação pós-cadastro (apenas para novos professores) */}
+      <AlertDialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-green-600 dark:text-green-400">
+              <CheckCircle2 className="h-5 w-5" />
+              Informações de professor salvas com Sucesso!
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base pt-1">
+              Deseja cadastrar as restrições de horário e a livre docência agora?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex items-center gap-2 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+              onClick={handleDeixarParaDepois}
+            >
+              <Clock className="h-4 w-4" /> Deixar para depois
+            </Button>
+            <Button
+              type="button"
+              className="font-bold"
+              onClick={handleCadastrarRestricoes}
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" /> Cadastrar
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -194,7 +194,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                                 <div className="flex flex-col items-center justify-center gap-1">
                                     <div className={cn(
                                         "font-bold text-xs leading-tight uppercase px-2 py-1 rounded w-full line-clamp-2 shadow-sm",
-                                        tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20" : "bg-orange-100 text-orange-700 border border-orange-200"
+                                        tipo === 'presencial' ? "bg-primary/10 text-primary border border-primary/20" : "bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800"
                                     )}>
                                     {aula.componente.sigla || aula.componente.nome}
                                     </div>
@@ -230,7 +230,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
     return (
         <div className="space-y-8 pt-4">
             <div className="flex items-center gap-3 border-b pb-4">
-                <div className="h-12 w-12 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                <div className="h-12 w-12 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 flex items-center justify-center">
                     <User className="h-6 w-6" />
                 </div>
                 <div>
@@ -270,7 +270,7 @@ export function VisualizadorHorarioClient({ horario }: Props) {
                         <CheckCircle2 className="h-3 w-3" /> Consolidado
                     </Badge>
                 ) : (
-                    <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50">
+                    <Badge variant="outline" className="text-orange-500 border-orange-200 bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-950/30">
                         Rascunho
                     </Badge>
                 )}

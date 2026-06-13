@@ -158,15 +158,15 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
                                 <div className="flex flex-wrap gap-2">
                                     {substitutos[aula.aula_index]?.length > 0 ? (
                                         substitutos[aula.aula_index].map((sub: any) => (
-                                            <div key={sub.id} className="bg-green-50 border border-green-100 px-3 py-2 rounded-lg flex items-center gap-3">
+                                            <div key={sub.id} className="bg-green-50 border border-green-100 px-3 py-2 rounded-lg flex items-center gap-3 dark:bg-green-950/30 dark:border-green-900">
                                                 <div className="h-2 w-2 rounded-full bg-green-500 flex-shrink-0" />
                                                 <div className="flex flex-col">
-                                                    <span className="text-sm font-semibold text-green-900 leading-none">{sub.nome_horario}</span>
+                                                    <span className="text-sm font-semibold text-green-900 dark:text-green-300 leading-none">{sub.nome_horario}</span>
                                                     <div className="mt-1">
                                                         {sub.ja_ensina_na_turma ? (
-                                                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-200/50 px-1.5 py-0.5 rounded uppercase tracking-wider">Prof. da Turma</span>
+                                                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-200/50 px-1.5 py-0.5 rounded uppercase tracking-wider dark:text-emerald-400 dark:bg-emerald-900/40">Prof. da Turma</span>
                                                         ) : (
-                                                            <span className="text-[9px] font-bold text-slate-500 bg-slate-200/50 px-1.5 py-0.5 rounded uppercase tracking-wider">Não ensina na turma</span>
+                                                            <span className="text-[9px] font-bold text-slate-500 bg-slate-200/50 px-1.5 py-0.5 rounded uppercase tracking-wider dark:text-slate-400 dark:bg-slate-700/50">Não ensina na turma</span>
                                                         )}
                                                     </div>
                                                 </div>

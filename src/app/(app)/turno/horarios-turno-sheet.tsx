@@ -171,7 +171,7 @@ export function HorariosTurnoSheet({ isOpen, setIsOpen, turno, onHorariosUpdated
                                             name={`horarios.${index}.tem_intervalo_depois`}
                                             render={({ field }) => (
                                                 <FormItem className="flex flex-col items-center gap-1.5 space-y-0 pt-2">
-                                                    <Label className="text-[9px] uppercase font-black text-orange-600">Intervalo</Label>
+                                                    <Label className="text-[9px] uppercase font-black text-orange-600 dark:text-orange-400">Intervalo</Label>
                                                     <FormControl>
                                                         <Switch 
                                                             checked={field.value} 
@@ -185,9 +185,9 @@ export function HorariosTurnoSheet({ isOpen, setIsOpen, turno, onHorariosUpdated
                                     )}
                                 </div>
                                 {form.watch(`horarios.${index}.tem_intervalo_depois`) && index < fields.length - 1 && (
-                                    <div className="flex items-center justify-center gap-2 py-1 px-4 bg-orange-50/50 border border-dashed border-orange-200 rounded-lg mx-auto w-fit animate-in fade-in zoom-in-95">
-                                        <Coffee className="h-3 w-3 text-orange-500" />
-                                        <span className="text-[10px] font-black uppercase text-orange-700 tracking-widest">
+                                    <div className="flex items-center justify-center gap-2 py-1 px-4 bg-orange-50/50 dark:bg-orange-950/20 border border-dashed border-orange-200 dark:border-orange-800 rounded-lg mx-auto w-fit animate-in fade-in zoom-in-95">
+                                        <Coffee className="h-3 w-3 text-orange-500 dark:text-orange-400" />
+                                        <span className="text-[10px] font-black uppercase text-orange-700 dark:text-orange-400 tracking-widest">
                                             Recesso após a {index + 1}ª aula
                                         </span>
                                     </div>

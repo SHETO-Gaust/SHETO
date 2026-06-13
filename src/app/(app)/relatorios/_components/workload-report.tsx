@@ -56,11 +56,11 @@ export function WorkloadReport({ data }: { data: any[] }) {
                                 <AlertCircle className="h-3 w-3" /> Sobrecarga (+{Math.abs(prof.saldo)})
                             </Badge>
                         ) : isUnderloaded ? (
-                            <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 gap-1">
+                            <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 gap-1 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-950/30">
                                 <AlertCircle className="h-3 w-3" /> Subutilizado (-{prof.saldo})
                             </Badge>
                         ) : (
-                            <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 gap-1">
+                            <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 gap-1 dark:text-green-400 dark:border-green-800 dark:bg-green-950/30">
                                 <CheckCircle2 className="h-3 w-3" /> Carga Exata
                             </Badge>
                         )}

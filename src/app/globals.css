@@ -85,6 +85,14 @@
   }
 }
 
+@keyframes pendente-color {
+  0%, 100% { color: rgb(249 115 22); } /* orange-500 */
+  50%       { color: rgb(234 179 8);  } /* yellow-500 */
+}
+.animate-pendente {
+  animation: pendente-color 1.4s ease-in-out infinite;
+}
+
 @media print {
   @page {
     size: A4 landscape;

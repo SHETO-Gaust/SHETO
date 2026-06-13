@@ -250,26 +250,26 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                     </CardContent>
                 </Card>
 
-                <Card className="bg-orange-50 border-orange-200">
+                <Card className="bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-900">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2">
                             <Database className="h-4 w-4" /> Rascunhos (Global)
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-3xl font-black text-orange-600">{stats.totalRascunhos}</p>
+                        <p className="text-3xl font-black text-orange-600 dark:text-orange-400">{stats.totalRascunhos}</p>
                         <p className="text-[10px] text-muted-foreground">Grades em processamento global.</p>
                     </CardContent>
                 </Card>
 
-                <Card className="bg-red-50 border-red-200">
+                <Card className="bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-2">
                             <XCircle className="h-4 w-4" /> Sem Movimentação
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-3xl font-black text-red-600">{stats.semDados}</p>
+                        <p className="text-3xl font-black text-red-600 dark:text-red-400">{stats.semDados}</p>
                         <p className="text-[10px] text-muted-foreground">Escolas que nunca geraram grade.</p>
                     </CardContent>
                 </Card>
@@ -457,7 +457,7 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                                         {row.status_global === 'publicado' ? (
                                             <Badge className="bg-green-500 hover:bg-green-600 text-white font-black text-[9px] uppercase tracking-tighter">Oficializado</Badge>
                                         ) : row.status_global === 'em_rascunho' ? (
-                                            <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100 font-black text-[9px] uppercase tracking-tighter">Em Rascunho</Badge>
+                                            <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-950/30 dark:hover:bg-orange-950/50 font-black text-[9px] uppercase tracking-tighter">Em Rascunho</Badge>
                                         ) : (
                                             <Badge variant="ghost" className="text-muted-foreground/40 font-black text-[9px] uppercase tracking-tighter">Sem Dados</Badge>
                                         )}
@@ -467,7 +467,7 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                                             {row.turnos.map(t => (
                                                 <Badge key={t.id} variant="outline" className={cn(
                                                     "text-[9px] uppercase font-bold px-2 py-0.5 h-6",
-                                                    t.publicado ? "bg-green-50 border-green-500 text-green-700" : t.rascunhos_count > maxDrafts ? "bg-red-50 border-red-500 text-red-700" : ""
+                                                    t.publicado ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-950/30 dark:border-green-700 dark:text-green-400" : t.rascunhos_count > maxDrafts ? "bg-red-50 border-red-500 text-red-700 dark:bg-red-950/30 dark:border-red-700 dark:text-red-400" : ""
                                                 )}>
                                                     {t.nome} <span className="ml-1 opacity-70">({t.rascunhos_count})</span>
                                                 </Badge>
@@ -589,7 +589,7 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                         </div>
                     ) : bulkState.resumo && bulkState.resumo.length > 0 ? (
                         <>
-                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800 font-medium mb-2">
+                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800 font-medium mb-2 dark:bg-orange-950/30 dark:border-orange-900 dark:text-orange-300">
                                 Atenção: <strong>{totalEmMassa} horários-rascunho</strong> em <strong>{bulkState.resumo.length} escolas</strong> serão excluídos.
                             </div>
                             <div className="max-h-[350px] overflow-y-auto border rounded-md">
@@ -617,7 +617,7 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                                                         ))}
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-right font-black text-rose-600">
+                                                <TableCell className="text-right font-black text-rose-600 dark:text-rose-400">
                                                     -{e.total_rascunhos}
                                                 </TableCell>
                                             </TableRow>

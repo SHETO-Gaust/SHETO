@@ -3,8 +3,7 @@ import { AuthForm } from '@/components/auth-form';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
-import { LoginVideoOverlay } from '@/components/login-video-overlay';
-
+import Link from 'next/link';
 export default async function LoginPage() {
   const supabase = await createClient();
   const {
@@ -44,9 +43,9 @@ export default async function LoginPage() {
         </div>
 
         <div className="relative z-10 flex flex-col items-center gap-3">
-          <span className="text-white/80 text-sm cursor-pointer hover:text-white underline underline-offset-2">
+          <Link href="/politica-de-privacidade" target="_blank" rel="noopener noreferrer" className="text-white/80 text-sm hover:text-white underline underline-offset-2">
             Política de Privacidade
-          </span>
+          </Link>
           <Image
             src="/img/seduc.png"
             alt="SEDUC Tocantins"
@@ -66,8 +65,7 @@ export default async function LoginPage() {
           data-ai-hint="school building"
         />
         <div className="absolute inset-0 bg-blue-950/60" />
-        <LoginVideoOverlay />
-        <div className="absolute bottom-10 left-10 z-30 text-white bg-black/30 p-6 rounded-lg backdrop-blur-sm max-w-md">
+<div className="absolute bottom-10 left-10 z-30 text-white bg-black/30 p-6 rounded-lg backdrop-blur-sm max-w-md">
           <h2 className="text-3xl font-bold">SHE - Sistema de Horário Escolar</h2>
           <p className="mt-2 text-white/90">
             Inovando a gestão educacional no Tocantins com tecnologia e inteligência.

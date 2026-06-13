@@ -53,7 +53,7 @@ export function ChecklistReport({ data }: { data: ChecklistReportData }) {
                     <div className="mt-2 text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded-md">
                       {item.details}
                       {item.link && (
-                         <Link href={item.link} className="inline-flex items-center gap-1 text-blue-600 hover:underline font-semibold ml-2">
+                         <Link href={item.link} className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-semibold ml-2">
                              Clique aqui <ExternalLink className="h-3 w-3" />
                          </Link>
                       )}

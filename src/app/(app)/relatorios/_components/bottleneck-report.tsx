@@ -51,12 +51,12 @@ export function BottleneckReport({ data }: { data: any }) {
                         const isCritical = slot.disponiveis < numTurmas;
                         
                         return (
-                          <td key={d.dia} className={cn("p-2 text-center transition-colors", isCritical ? "bg-destructive/10" : "bg-green-50/30")}>
+                          <td key={d.dia} className={cn("p-2 text-center transition-colors", isCritical ? "bg-destructive/10" : "bg-green-50/30 dark:bg-green-950/10")}>
                             <div className={cn(
                                 "flex flex-col items-center justify-center p-2 rounded-lg border shadow-sm h-full",
-                                isCritical ? "border-destructive/30 bg-background" : "border-green-200 bg-background"
+                                isCritical ? "border-destructive/30 bg-background" : "border-green-200 bg-background dark:border-green-900"
                             )}>
-                                <span className={cn("text-lg font-black", isCritical ? "text-destructive" : "text-green-700")}>
+                                <span className={cn("text-lg font-black", isCritical ? "text-destructive" : "text-green-700 dark:text-green-400")}>
                                     {slot.disponiveis}
                                 </span>
                                 <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-tighter">
