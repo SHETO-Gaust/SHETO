@@ -243,22 +243,13 @@ export function EditProfessorSheet({
 
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Carga e Turnos</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField control={form.control} name="aulas_disponiveis" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Aulas Semanais (C.H.)</FormLabel>
-                          <FormControl><Input type="number" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="aulas_planejamento" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Aulas de Planejamento</FormLabel>
-                          <FormControl><Input type="number" {...field} /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
+                    <FormField control={form.control} name="aulas_disponiveis" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Aulas Semanais (C.H.)</FormLabel>
+                        <FormControl><Input type="number" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
 
                     <div className="space-y-3">
                       <FormLabel>Turnos de Atuação</FormLabel>
