@@ -7,9 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, AlertTriangle, Info, Sparkles, FolderDown, ChevronDown } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, AlertTriangle, Info, FolderDown, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getHorariosSalvos, getHorariosSalvosTodasTurnos, deleteHorario, gerarLoteHorario, gerarSuperHorarioLote, salvarGradeFinal, converterPreProducaoParaRascunho, getHorarioDetalhado } from './actions';
+import { getHorariosSalvos, getHorariosSalvosTodasTurnos, deleteHorario, gerarLoteHorario, salvarGradeFinal, converterPreProducaoParaRascunho, getHorarioDetalhado } from './actions';
 import { exportarTodosHorariosZIP } from '@/lib/export-horario';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -87,7 +87,6 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     const [disciplinasParaConfig, setDisciplinasParaConfig] = useState<{ id: string, nome: string, sigla: string, maxAulas: number }[]>([]);
     const [configGerminacao, setConfigGerminacao] = useState<ConfiguracaoGerminacao[]>([]);
     const [permitirMesmoProfDisciplinasMesmoDia, setPermitirMesmoProfDisciplinasMesmoDia] = useState(false);
-    const [superHorario, setSuperHorario] = useState(false);
     const [processingTurnoLabel, setProcessingTurnoLabel] = useState('');
 
     const activeTurnoIdForSaveRef = useRef<string>('');
@@ -223,8 +222,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
                 while (attempts < MAX_ATTEMPTS && !foundSolution) {
                     const progress = attempts / MAX_ATTEMPTS;
-                    const gerarFn = superHorario ? gerarSuperHorarioLote : gerarLoteHorario;
-                    const result = await gerarFn(
+                    const result = await gerarLoteHorario(
                         escolaId,
                         turno.id,
                         configGerminacao,
@@ -752,31 +750,6 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                     </div>
                                 </div>
 
-                                <div className={cn(
-                                    "flex items-start gap-4 p-4 border-2 rounded-xl transition-colors",
-                                    superHorario
-                                        ? "border-violet-400 bg-violet-50/60 dark:bg-violet-950/20 dark:border-violet-700"
-                                        : "border-dashed border-muted-foreground/30 bg-muted/10"
-                                )}>
-                                    <Switch
-                                        id="super-horario"
-                                        checked={superHorario}
-                                        onCheckedChange={setSuperHorario}
-                                        className="mt-0.5 shrink-0"
-                                    />
-                                    <div className="space-y-1.5">
-                                        <Label htmlFor="super-horario" className="text-sm font-semibold cursor-pointer flex items-center gap-2">
-                                            <Sparkles className="h-3.5 w-3.5 text-violet-500" />
-                                            Super Horário
-                                            <span className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
-                                                Beta
-                                            </span>
-                                        </Label>
-                                        <p className="text-xs text-muted-foreground leading-relaxed">
-                                            Funcionalidade mais complexa que ao gerar um novo horário analisa todos os já criados, sendo os rascunhos e os em produção, para a criação de horários sem nenhum conflito.
-                                        </p>
-                                    </div>
-                                </div>
                             </div>
                         ) : (
                             <div className="space-y-4">
