@@ -65,6 +65,22 @@ const PERIODOS_LABELS: Record<LivreDocenciaPeriodo, string> = {
     noturno: 'Noite'
 };
 
+// Quando a Livre Docência Personalizada está ativa, os períodos não ficam no array
+// `livre_docencia` do professor, e sim como células marcadas dentro de `restricoes`.
+function temLivreDocenciaPersonalizadaPreenchida(restricoes: any): boolean {
+  if (!restricoes?._livre_docencia_personalizada) return false;
+  for (const turno of Object.values(restricoes)) {
+    if (!turno || typeof turno !== 'object') continue;
+    for (const dia of Object.values(turno as any)) {
+      if (!dia || typeof dia !== 'object') continue;
+      for (const status of Object.values(dia as any)) {
+        if (status === 'livre_docencia') return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function ProfessoresClient({
   initialProfessores,
   escolaId,
@@ -247,7 +263,9 @@ export function ProfessoresClient({
               const sol = prof.solicitacao_pendente;
               const hasResponse = sol?.status === 'respondido';
               const isWaiting = sol?.status === 'pendente';
-              const isPendente = !prof.sem_preferencia_livre_docencia && (!prof.livre_docencia || prof.livre_docencia.length === 0);
+              const isPendente = !prof.sem_preferencia_livre_docencia
+                && (!prof.livre_docencia || prof.livre_docencia.length === 0)
+                && !temLivreDocenciaPersonalizadaPreenchida(prof.restricoes);
 
               return (
                 <TableRow key={prof.id}>
