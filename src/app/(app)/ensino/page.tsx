@@ -1,6 +1,5 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
 import type { Profile } from "@/lib/types";
 import { getNiveisEnsino } from "./actions";
 import { AlertTriangle } from "lucide-react";
@@ -8,8 +7,7 @@ import { EnsinoClient } from "./ensino-client";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function EnsinoPage() {
-  const cookieStore = cookies();
-  const supabase = await createClient(cookieStore);
+  const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
 

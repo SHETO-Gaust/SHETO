@@ -1,6 +1,5 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
 import type { Profile } from "@/lib/types";
 import { getComponentes } from "./actions";
 import { AlertTriangle } from "lucide-react";
@@ -8,8 +7,7 @@ import { ComponentesClient } from "./componentes-client";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function ComponentesPage() {
-  const cookieStore = cookies();
-  const supabase = await createClient(cookieStore);
+  const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
 
