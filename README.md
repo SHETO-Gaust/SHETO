@@ -1,5 +1,3 @@
-# Firebase Studio
+# SHE — Sistema de Horário Escolar
 
-This is a NextJS starter in Firebase Studio.
-
-To get started, take a look at src/app/page.tsx.
+Aplicação Next.js 15 + Supabase para gestão acadêmica e geração automática de quadros de horários escolares.
