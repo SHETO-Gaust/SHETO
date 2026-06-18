@@ -2,14 +2,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getUsers } from './actions';
 import { UsersClient } from './users-client';
 import { createClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
 import type { Escola } from "@/lib/types";
 
 export default async function UsuariosPage() {
     const users = await getUsers();
     
-    const cookieStore = cookies();
-    const supabase = await createClient(cookieStore);
+    const supabase = await createClient();
     const { data: allEscolasData } = await supabase
         .from('escolas')
         .select('*')
