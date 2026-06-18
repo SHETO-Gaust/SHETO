@@ -12,7 +12,7 @@ A aplicação adota uma arquitetura Serverless/Edge utilizando os paradigmas mai
 - **Ícones:** Lucide React.
 - **Banco de Dados e Backend as a Service (BaaS):** Supabase (PostgreSQL).
 - **Autenticação:** Supabase Auth (Integrado com Server Actions do Next.js).
-- **Hospedagem/Deploy:** Projetado para ambientes modernos como Firebase App Hosting ou Vercel.
+- **Hospedagem/Deploy:** Projetado para ambientes modernos como Vercel.
 
 ## 2. Estrutura de Diretórios (Destaques)
 
