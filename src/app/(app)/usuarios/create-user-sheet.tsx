@@ -75,7 +75,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
     const isAdmin = role === 'admin';
 
     const [selectedRegional, setSelectedRegional] = useState('');
-    const [selectedEscola, setSelectedEscola] = useState<{ id: string; nome: string } | null>(null);
+    const [selectedEscola, setSelectedEscola] = useState<string | null>(null);
     const regionais = useMemo(() => [...new Set(allEscolas.map(e => e.regional).filter(Boolean).sort((a,b) => (a || '').localeCompare(b || '')))], [allEscolas]);
 
     // Sem regional selecionada mostra todas; com regional filtra
@@ -96,7 +96,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
 
     const onSubmit = async (data: CreateUserFormValues) => {
         setLoading(true);
-        const result = await createUser({ ...data, ue: selectedEscola?.id ?? null } as any);
+        const result = await createUser({ ...data, ue: selectedEscola } as any);
         setLoading(false);
 
         if (result.error) {
@@ -205,9 +205,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                                 disabled={isAdmin}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Todas as regionais">
-                                        {selectedRegional || 'Todas as regionais'}
-                                    </SelectValue>
+                                    <SelectValue placeholder="Todas as regionais" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="_todas">Todas as regionais</SelectItem>
@@ -221,21 +219,12 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                         <div className="space-y-2">
                             <Label>Escola Vinculada</Label>
                             <Select
-                                onValueChange={(value) => {
-                                    if (value === 'none') {
-                                        setSelectedEscola(null);
-                                    } else {
-                                        const e = escolasFiltradas.find(x => x.id === value);
-                                        setSelectedEscola(e ? { id: e.id, nome: e.escolar } : null);
-                                    }
-                                }}
-                                value={selectedEscola?.id ?? 'none'}
+                                onValueChange={(value) => setSelectedEscola(value === 'none' ? null : value)}
+                                value={selectedEscola ?? 'none'}
                                 disabled={isAdmin}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Selecione uma escola">
-                                        {selectedEscola ? selectedEscola.nome : 'Nenhuma'}
-                                    </SelectValue>
+                                    <SelectValue placeholder="Selecione uma escola" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">Nenhuma</SelectItem>
