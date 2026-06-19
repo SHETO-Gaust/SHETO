@@ -75,6 +75,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
     const isAdmin = role === 'admin';
 
     const [selectedRegional, setSelectedRegional] = useState('');
+    const [selectedEscola, setSelectedEscola] = useState<string | null>(null);
     const regionais = useMemo(() => [...new Set(allEscolas.map(e => e.regional).filter(Boolean).sort((a,b) => (a || '').localeCompare(b || '')))], [allEscolas]);
 
     // Sem regional selecionada mostra todas; com regional filtra
@@ -95,7 +96,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
 
     const onSubmit = async (data: CreateUserFormValues) => {
         setLoading(true);
-        const result = await createUser(data as any);
+        const result = await createUser({ ...data, ue: selectedEscola } as any);
         setLoading(false);
 
         if (result.error) {
@@ -110,6 +111,8 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                 description: `O usuário ${data.email} foi criado com sucesso e o email enviado.`,
             });
             form.reset();
+            setSelectedEscola(null);
+            setSelectedRegional('');
             onUserCreated?.();
             setIsOpen(false);
         }
@@ -196,7 +199,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                             <Select
                                 onValueChange={(value) => {
                                     setSelectedRegional(value === '_todas' ? '' : value);
-                                    form.setValue('ue', undefined, { shouldValidate: true });
+                                    setSelectedEscola(null);
                                 }}
                                 value={selectedRegional || '_todas'}
                                 disabled={isAdmin}
@@ -213,29 +216,24 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                             </Select>
                         </div>
 
-                        <FormField
-                            control={form.control}
-                            name="ue"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Escola Vinculada</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value ?? undefined} disabled={isAdmin}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecione uma escola" />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="null">Nenhuma</SelectItem>
-                                            {escolasFiltradas.map(escola => (
-                                                <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                        <div className="space-y-2">
+                            <Label>Escola Vinculada</Label>
+                            <Select
+                                onValueChange={(value) => setSelectedEscola(value === 'none' ? null : value)}
+                                value={selectedEscola ?? 'none'}
+                                disabled={isAdmin}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione uma escola" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Nenhuma</SelectItem>
+                                    {escolasFiltradas.map(escola => (
+                                        <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
 
                         <div className="space-y-2">
                             <h4 className="font-medium">Módulos Acessíveis</h4>
