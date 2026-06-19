@@ -185,7 +185,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                         />
 
                         <div className="space-y-2">
-                            <Label>Regional <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+                            <Label>Regional</Label>
                             <Select
                                 onValueChange={(value) => {
                                     setSelectedRegional(value === '_todas' ? '' : value);
@@ -212,7 +212,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Escola Vinculada</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isAdmin}>
+                                    <Select onValueChange={field.onChange} value={field.value ?? undefined} disabled={isAdmin}>
                                         <FormControl>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Selecione uma escola" />
