@@ -117,7 +117,14 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
 
     return (
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
-            <SheetContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-lg flex flex-col">
+            <SheetContent
+                onPointerDownOutside={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest('[data-radix-popper-content-wrapper]')) return;
+                    e.preventDefault();
+                }}
+                className="sm:max-w-lg flex flex-col"
+            >
                 <SheetHeader>
                     <SheetTitle>Criar Novo Usuário</SheetTitle>
                     <SheetDescription>
