@@ -26,12 +26,9 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { useToast } from '@/hooks/use-toast';
 import { createUser } from './actions';
-import { Loader2, ChevronsUpDown, Check, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 import type { Escola } from '@/lib/types';
 
 type Module = {
@@ -77,9 +74,17 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
     const role = form.watch('role');
     const isAdmin = role === 'admin';
 
-    const [escolaPopoverOpen, setEscolaPopoverOpen] = useState(false);
-    const escolasOrdenadas = useMemo(() => [...allEscolas].sort((a, b) => a.escolar.localeCompare(b.escolar)), [allEscolas]);
-    
+    const [selectedRegional, setSelectedRegional] = useState('');
+    const regionais = useMemo(() => [...new Set(allEscolas.map(e => e.regional).filter(Boolean).sort((a,b) => (a || '').localeCompare(b || '')))], [allEscolas]);
+
+    // Sem regional selecionada mostra todas; com regional filtra
+    const escolasFiltradas = useMemo(() => {
+        const base = selectedRegional
+            ? allEscolas.filter(e => e.regional === selectedRegional)
+            : allEscolas;
+        return [...base].sort((a, b) => a.escolar.localeCompare(b.escolar));
+    }, [allEscolas, selectedRegional]);
+
     const handleModuleToggle = (moduleId: string) => {
         const currentModules = form.getValues('modules') || [];
         const newModules = currentModules.includes(moduleId)
@@ -178,77 +183,52 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                                 </FormItem>
                             )}
                         />
-                        
+
+                        <div className="space-y-2">
+                            <Label>Regional <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+                            <Select
+                                onValueChange={(value) => {
+                                    setSelectedRegional(value === '_todas' ? '' : value);
+                                    form.setValue('ue', undefined, { shouldValidate: true });
+                                }}
+                                value={selectedRegional || '_todas'}
+                                disabled={isAdmin}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Todas as regionais" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="_todas">Todas as regionais</SelectItem>
+                                    {regionais.map(regional => (
+                                        <SelectItem key={regional} value={regional!}>{regional}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
                         <FormField
                             control={form.control}
                             name="ue"
-                            render={({ field }) => {
-                                const escolaSelecionada = allEscolas.find(e => e.id === field.value);
-                                return (
-                                    <FormItem>
-                                        <FormLabel>Escola Vinculada</FormLabel>
-                                        <div className="flex gap-2">
-                                            <Popover open={escolaPopoverOpen} onOpenChange={setEscolaPopoverOpen}>
-                                                <PopoverTrigger asChild>
-                                                    <FormControl>
-                                                        <Button
-                                                            variant="outline"
-                                                            role="combobox"
-                                                            disabled={isAdmin}
-                                                            className={cn('flex-1 justify-between font-normal', !escolaSelecionada && 'text-muted-foreground')}
-                                                        >
-                                                            <span className="truncate">
-                                                                {escolaSelecionada ? escolaSelecionada.escolar : 'Buscar escola...'}
-                                                            </span>
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                        </Button>
-                                                    </FormControl>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-[380px] p-0" align="start">
-                                                    <Command>
-                                                        <CommandInput placeholder="Digite o nome da escola..." />
-                                                        <CommandList>
-                                                            <CommandEmpty>Nenhuma escola encontrada.</CommandEmpty>
-                                                            <CommandGroup>
-                                                                {escolasOrdenadas.map(escola => (
-                                                                    <CommandItem
-                                                                        key={escola.id}
-                                                                        value={escola.escolar}
-                                                                        onSelect={() => {
-                                                                            field.onChange(escola.id);
-                                                                            setEscolaPopoverOpen(false);
-                                                                        }}
-                                                                    >
-                                                                        <Check className={cn('mr-2 h-4 w-4', field.value === escola.id ? 'opacity-100' : 'opacity-0')} />
-                                                                        <div>
-                                                                            <p className="text-sm">{escola.escolar}</p>
-                                                                            {escola.regional && <p className="text-xs text-muted-foreground">{escola.regional}</p>}
-                                                                        </div>
-                                                                    </CommandItem>
-                                                                ))}
-                                                            </CommandGroup>
-                                                        </CommandList>
-                                                    </Command>
-                                                </PopoverContent>
-                                            </Popover>
-                                            {field.value && (
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    disabled={isAdmin}
-                                                    onClick={() => field.onChange(null)}
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                </Button>
-                                            )}
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                );
-                            }}
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Escola Vinculada</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value || ''} disabled={isAdmin}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione uma escola" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="null">Nenhuma</SelectItem>
+                                            {escolasFiltradas.map(escola => (
+                                                <SelectItem key={escola.id} value={escola.id}>{escola.escolar}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
                         />
-
 
                         <div className="space-y-2">
                             <h4 className="font-medium">Módulos Acessíveis</h4>
