@@ -205,7 +205,9 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                                 disabled={isAdmin}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Todas as regionais" />
+                                    <SelectValue placeholder="Todas as regionais">
+                                        {selectedRegional || 'Todas as regionais'}
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="_todas">Todas as regionais</SelectItem>
@@ -224,7 +226,11 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                                 disabled={isAdmin}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Selecione uma escola" />
+                                    <SelectValue placeholder="Selecione uma escola">
+                                        {selectedEscola
+                                            ? (allEscolas.find(e => e.id === selectedEscola)?.escolar ?? 'Escola selecionada')
+                                            : 'Nenhuma'}
+                                    </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">Nenhuma</SelectItem>
