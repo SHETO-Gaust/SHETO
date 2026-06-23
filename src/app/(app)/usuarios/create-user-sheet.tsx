@@ -76,6 +76,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
 
     const [selectedRegional, setSelectedRegional] = useState('');
     const [selectedEscola, setSelectedEscola] = useState<string | null>(null);
+    const [selectedEscolaName, setSelectedEscolaName] = useState('Nenhuma');
     const regionais = useMemo(() => [...new Set(allEscolas.map(e => e.regional).filter(Boolean).sort((a,b) => (a || '').localeCompare(b || '')))], [allEscolas]);
 
     // Sem regional selecionada mostra todas; com regional filtra
@@ -112,6 +113,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
             });
             form.reset();
             setSelectedEscola(null);
+            setSelectedEscolaName('Nenhuma');
             setSelectedRegional('');
             onUserCreated?.();
             setIsOpen(false);
@@ -200,6 +202,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                                 onValueChange={(value) => {
                                     setSelectedRegional(value === '_todas' ? '' : value);
                                     setSelectedEscola(null);
+                                    setSelectedEscolaName('Nenhuma');
                                 }}
                                 value={selectedRegional || '_todas'}
                                 disabled={isAdmin}
@@ -219,12 +222,20 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                         <div className="space-y-2">
                             <Label>Escola Vinculada</Label>
                             <Select
-                                onValueChange={(value) => setSelectedEscola(value === 'none' ? null : value)}
+                                onValueChange={(value) => {
+                                    if (value === 'none') {
+                                        setSelectedEscola(null);
+                                        setSelectedEscolaName('Nenhuma');
+                                    } else {
+                                        setSelectedEscola(value);
+                                        setSelectedEscolaName(allEscolas.find(e => String(e.id) === String(value))?.escolar ?? value);
+                                    }
+                                }}
                                 value={selectedEscola ?? 'none'}
                                 disabled={isAdmin}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Selecione uma escola" />
+                                    <span className="truncate">{selectedEscolaName}</span>
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">Nenhuma</SelectItem>
