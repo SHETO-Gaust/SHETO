@@ -102,7 +102,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
 
   try {
     await transporter.sendMail({
-      from: `"SHE - Sistema de Horário Escolar" <${user}>`,
+      from: `"SHE - Sistema de Horário Escolar" <${process.env.GMAIL_EMAIL}>`,
       to: data.to,
       subject: 'Acesso Liberado - Sistema de Horário Escolar (SHE)',
       html: html,

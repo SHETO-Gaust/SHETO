@@ -459,7 +459,7 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                                         ) : row.status_global === 'em_rascunho' ? (
                                             <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-950/30 dark:hover:bg-orange-950/50 font-black text-[9px] uppercase tracking-tighter">Em Rascunho</Badge>
                                         ) : (
-                                            <Badge variant="ghost" className="text-muted-foreground/40 font-black text-[9px] uppercase tracking-tighter">Sem Dados</Badge>
+                                            <Badge variant="outline" className="text-muted-foreground/40 font-black text-[9px] uppercase tracking-tighter">Sem Dados</Badge>
                                         )}
                                     </TableCell>
                                     <TableCell>
@@ -590,7 +590,7 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                     ) : bulkState.resumo && bulkState.resumo.length > 0 ? (
                         <>
                             <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800 font-medium mb-2 dark:bg-orange-950/30 dark:border-orange-900 dark:text-orange-300">
-                                Atenção: <strong>{totalEmMassa} horários-rascunho</strong> em <strong>{bulkState.resumo.length} escolas</strong> serão excluídos.
+                                Atenção: <strong>{bulkState.resumo.reduce((acc, e) => acc + e.total_rascunhos, 0)} horários-rascunho</strong> em <strong>{bulkState.resumo.length} escolas</strong> serão excluídos.
                             </div>
                             <div className="max-h-[350px] overflow-y-auto border rounded-md">
                                 <Table>
