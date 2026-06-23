@@ -319,7 +319,6 @@ export function ProfessoresClient({
                   </TableCell>
                   <TableCell className="text-center font-medium">
                       <div className="text-xs">{prof.aulas_disponiveis} disp.</div>
-                      <div className="text-[10px] text-muted-foreground">{prof.aulas_planejamento} plan.</div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
