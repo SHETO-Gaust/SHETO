@@ -24,15 +24,16 @@ export async function getUsers(): Promise<Profile[]> {
     return (data || []) as Profile[];
 }
 
-export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user', ue: string | null | undefined) {
+export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user', ue: string | null | undefined, escolas_favoritas?: string[]) {
     const supabaseAdmin = await createAdminClient();
 
     const { error } = await supabaseAdmin
         .from('profiles')
-        .update({ 
-            modules, 
-            role, 
-            ue: role === 'admin' ? null : (ue === 'null' ? null : ue) 
+        .update({
+            modules,
+            role,
+            ue: role === 'admin' ? null : (ue === 'null' ? null : ue),
+            escolas_favoritas: role === 'admin' ? (escolas_favoritas || []) : [],
         })
         .eq('id', userId);
 
@@ -68,6 +69,7 @@ const createUserSchema = z.object({
   role: z.enum(['admin', 'user']),
   modules: z.array(z.string()),
   ue: z.string().nullable().optional(),
+  escolas_favoritas: z.array(z.string()).optional(),
 });
 
 export async function createUser(formData: z.infer<typeof createUserSchema>) {
@@ -82,7 +84,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         };
     }
     
-    const { email, password, name, role, modules, ue } = validatedFields.data;
+    const { email, password, name, role, modules, ue, escolas_favoritas } = validatedFields.data;
 
     // 1. Criar no Authentication
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -113,7 +115,8 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
             role: role,
             modules: modules,
             email: email,
-            ue: ue === 'null' ? null : ue,
+            ue: role === 'admin' ? null : (ue === 'null' ? null : ue),
+            escolas_favoritas: role === 'admin' ? (escolas_favoritas || []) : [],
             active: true,
         }, { onConflict: 'id' });
 
