@@ -4,20 +4,25 @@ import nodemailer from 'nodemailer';
  * Cria o transporte apenas se as credenciais existirem no .env
  */
 function getTransporter() {
-  const user = process.env.GMAIL_EMAIL;
-  const pass = process.env.GMAIL_APP_PASSWORD;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || '465', 10);
 
-  if (!user || !pass) {
+  if (!user || !pass || !host) {
     return null;
   }
 
   return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user,
-      pass,
-    },
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
   });
+}
+
+function getFrom() {
+  return process.env.SMTP_FROM || '"SHETO" <no-reply@seduc.to.gov.br>';
 }
 
 export type WelcomeEmailData = {
@@ -102,7 +107,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
 
   try {
     await transporter.sendMail({
-      from: `"SHETO" <${process.env.GMAIL_EMAIL}>`,
+      from: getFrom(),
       to: data.to,
       subject: 'Acesso Liberado - Sistema de Horário Escolar (SHE)',
       html: html,
@@ -116,10 +121,9 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
 
 export async function sendRestrictionRequestEmail(data: { to: string, name: string, schoolName: string, token: string }) {
   const transporter = getTransporter();
-  const user = process.env.GMAIL_EMAIL;
 
   if (!transporter) {
-    console.error('ERRO: GMAIL_EMAIL ou GMAIL_APP_PASSWORD não configurados no .env');
+    console.error('ERRO: Variáveis SMTP não configuradas no .env');
     return { error: 'Serviço de e-mail não configurado. Informe ao administrador do sistema.' };
   }
 
@@ -186,7 +190,7 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
 
   try {
     await transporter.sendMail({
-      from: `"SHETO" <${user}>`,
+      from: getFrom(),
       to: data.to,
       subject: `Preferências de Horário - ${data.schoolName}`,
       html: html,
@@ -222,8 +226,7 @@ const PERIODO_LABELS: Record<string, string> = {
 
 export async function sendPreferenciasConfirmacaoEmail(data: ConfirmacaoPreferenciasData) {
   const transporter = getTransporter();
-  const emailUser = process.env.GMAIL_EMAIL;
-  if (!transporter || !emailUser) return { error: 'Serviço de e-mail não configurado.' };
+  if (!transporter) return { error: 'Serviço de e-mail não configurado.' };
 
   const livreHtml = data.semPreferencia
     ? '<em style="color:#64748b">Sem preferência — sistema escolherá automaticamente.</em>'
@@ -333,7 +336,7 @@ export async function sendPreferenciasConfirmacaoEmail(data: ConfirmacaoPreferen
 
   try {
     await transporter.sendMail({
-      from: `"SHETO" <${emailUser}>`,
+      from: getFrom(),
       to: data.to,
       subject: `Confirmação de Preferências — ${data.schoolName}`,
       html,
@@ -355,9 +358,8 @@ export type MassCommunicationData = {
 
 export async function sendMassCommunicationEmail(data: MassCommunicationData) {
   const transporter = getTransporter();
-  const emailUser = process.env.GMAIL_EMAIL;
-  
-  if (!transporter || !emailUser) {
+
+  if (!transporter) {
     return { error: 'Serviço de e-mail não configurado.' };
   }
 
@@ -412,8 +414,8 @@ export async function sendMassCommunicationEmail(data: MassCommunicationData) {
 
     for (const chunk of bccChunks) {
         await transporter.sendMail({
-          from: `"SHETO - Comunicados" <${emailUser}>`,
-          to: emailUser, 
+          from: getFrom(),
+          to: process.env.SMTP_USER!,
           bcc: chunk,
           subject: data.subject,
           html: html,
