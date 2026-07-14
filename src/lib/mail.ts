@@ -102,7 +102,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
 
   try {
     await transporter.sendMail({
-      from: `"SHE - Sistema de Horário Escolar" <${process.env.GMAIL_EMAIL}>`,
+      from: `"SHETO" <${process.env.GMAIL_EMAIL}>`,
       to: data.to,
       subject: 'Acesso Liberado - Sistema de Horário Escolar (SHE)',
       html: html,
@@ -186,7 +186,7 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
 
   try {
     await transporter.sendMail({
-      from: `"SHE - Sistema de Horário Escolar" <${user}>`,
+      from: `"SHETO" <${user}>`,
       to: data.to,
       subject: `Preferências de Horário - ${data.schoolName}`,
       html: html,
@@ -333,7 +333,7 @@ export async function sendPreferenciasConfirmacaoEmail(data: ConfirmacaoPreferen
 
   try {
     await transporter.sendMail({
-      from: `"SHE - Sistema de Horário Escolar" <${emailUser}>`,
+      from: `"SHETO" <${emailUser}>`,
       to: data.to,
       subject: `Confirmação de Preferências — ${data.schoolName}`,
       html,
@@ -412,7 +412,7 @@ export async function sendMassCommunicationEmail(data: MassCommunicationData) {
 
     for (const chunk of bccChunks) {
         await transporter.sendMail({
-          from: `"SHE - Comunicados" <${emailUser}>`,
+          from: `"SHETO - Comunicados" <${emailUser}>`,
           to: emailUser, 
           bcc: chunk,
           subject: data.subject,
