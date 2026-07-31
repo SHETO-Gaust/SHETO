@@ -8,8 +8,10 @@ import { gerarHorarioAlgoritmico, type SugestaoRealocacao } from '@/lib/timetabl
 import { getTurmas } from '../turmas/actions';
 import { getProfessores } from '../professores/actions';
 import { getTurnos } from '../turno/actions';
+import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[], error?: string }> {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
     const { data, error } = await supabase
         .from('turnos')
@@ -23,6 +25,7 @@ export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[
 }
 
 export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horario[], error?: string }> {
+    await requireEscolaDoRecurso('turnos', turnoId, 'horarios');
     const supabase = await createClient();
     const { data, error } = await supabase
         .from('horarios')
@@ -41,6 +44,7 @@ export async function iniciarGeracaoHorario(
     configGerminacao: ConfiguracaoGerminacao[] = [],
     force: boolean = false
 ) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
 
     if (!nomeHorario || nomeHorario.trim() === '') return { error: 'O nome do horário é obrigatório.' };
@@ -101,6 +105,7 @@ export async function confirmarGeracaoComRealocacao(
     aulas: any[],
     sugestoes: SugestaoRealocacao[]
 ) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
 
     // 1. Atualizar aulas dos horários publicados (realocação)
@@ -145,6 +150,7 @@ async function salvarNovaGrade(escolaId: string, turnoId: string, nome: string, 
 }
 
 export async function consolidarHorario(id: string) {
+    await requireEscolaDoRecurso('horarios', id, 'horarios');
     const supabase = await createClient();
     const { data: current } = await supabase.from('horarios').select('turno_id').eq('id', id).single();
     if (!current) return { error: 'Horário não encontrado.' };
@@ -158,6 +164,7 @@ export async function consolidarHorario(id: string) {
 }
 
 export async function deleteHorario(id: string) {
+    await requireEscolaDoRecurso('horarios', id, 'horarios');
     const supabase = await createClient();
     const { error } = await supabase.from('horarios').delete().eq('id', id);
     if (error) return { error: 'Não foi possível deletar.' };
@@ -166,6 +173,7 @@ export async function deleteHorario(id: string) {
 }
 
 export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioCompleto, error?: string }> {
+    await requireEscolaDoRecurso('horarios', id, 'horarios');
     const supabase = await createClient();
     const { data: horario, error: hError } = await supabase.from('horarios').select('*, turno:turnos(*)').eq('id', id).single();
     if (hError || !horario) return { error: 'Horário não encontrado.' };

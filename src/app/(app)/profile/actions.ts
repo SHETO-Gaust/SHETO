@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { requireAuth } from '@/lib/auth/guards';
 import { z } from 'zod';
 
 const updatePasswordSchema = z.object({
@@ -13,6 +14,9 @@ const updatePasswordSchema = z.object({
 });
 
 export async function updatePassword(formData: z.infer<typeof updatePasswordSchema>) {
+    // Alem da sessao, requireAuth garante que o perfil esta ativo - um usuario
+    // desativado nao deve conseguir trocar a propria senha.
+    await requireAuth();
     const supabase = await createClient();
 
     const validatedFields = updatePasswordSchema.safeParse(formData);
@@ -56,13 +60,23 @@ export async function updatePassword(formData: z.infer<typeof updatePasswordSche
     return { success: true };
 }
 
-export async function updateSelectedSchool(userId: string, schoolId: string | null) {
+export async function updateSelectedSchool(_userId: string, schoolId: string | null) {
+    // O userId do cliente e IGNORADO de proposito: usar a sessao como fonte de
+    // verdade impede que alguem troque a escola de outro usuario passando o id
+    // dele. O parametro so permanece para nao quebrar a assinatura no cliente.
+    const perfil = await requireAuth();
     const supabase = await createClient();
+
+    // Usuario comum so pode selecionar a escola a qual esta vinculado;
+    // admin pode alternar entre qualquer escola.
+    if (perfil.role !== 'admin' && schoolId !== null && String(perfil.ue ?? '') !== String(schoolId)) {
+        return { error: 'Você não tem acesso a esta unidade escolar.' };
+    }
 
     const { error } = await supabase
         .from('profiles')
         .update({ ue: schoolId })
-        .eq('id', userId);
+        .eq('id', perfil.id);
 
     if (error) {
         console.error('Error updating selected school:', error);

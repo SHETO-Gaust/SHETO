@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { requireAdmin } from '@/lib/auth/guards';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,7 @@ export type EscolaInput = z.infer<typeof escolaSchema>;
 // ─── Server Actions ───────────────────────────────────────────────────────────
 
 export async function getEscolas(): Promise<EscolaCompleta[]> {
+    await requireAdmin();
     const supabase = await createClient();
     const { data, error } = await supabase
         .from('escolas')
@@ -46,6 +48,7 @@ export async function getEscolas(): Promise<EscolaCompleta[]> {
 }
 
 export async function createEscola(input: EscolaInput) {
+    await requireAdmin();
     const validated = escolaSchema.safeParse(input);
     if (!validated.success) {
         return { error: 'Dados inválidos.', errors: validated.error.flatten().fieldErrors };
@@ -65,6 +68,7 @@ export async function createEscola(input: EscolaInput) {
 }
 
 export async function updateEscola(id: number, input: EscolaInput) {
+    await requireAdmin();
     const validated = escolaSchema.safeParse(input);
     if (!validated.success) {
         return { error: 'Dados inválidos.', errors: validated.error.flatten().fieldErrors };
@@ -86,6 +90,7 @@ export async function updateEscola(id: number, input: EscolaInput) {
 }
 
 export async function deleteEscola(id: number) {
+    await requireAdmin();
     const supabase = await createClient();
     const { error } = await supabase.from('escolas').delete().eq('id', id);
 

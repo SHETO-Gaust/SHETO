@@ -6,8 +6,10 @@ import { revalidatePath } from 'next/cache';
 import type { Profile, Escola } from '@/lib/types';
 import { z } from 'zod';
 import { sendWelcomeEmail } from '@/lib/mail';
+import { requireAdmin } from '@/lib/auth/guards';
 
 export async function getUsers(): Promise<Profile[]> {
+    await requireAdmin();
     const supabaseAdmin = await createAdminClient();
 
     // Usamos o Admin Client para ver todos os perfis ignorando RLS de usuário comum
@@ -25,6 +27,7 @@ export async function getUsers(): Promise<Profile[]> {
 }
 
 export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user', ue: string | null | undefined, escolas_favoritas?: string[]) {
+    await requireAdmin();
     const supabaseAdmin = await createAdminClient();
 
     const { error } = await supabaseAdmin
@@ -47,6 +50,7 @@ export async function updateUserPermissions(userId: string, modules: string[], r
 }
 
 export async function toggleUserStatus(userId: string, currentStatus: boolean) {
+    await requireAdmin();
     const supabaseAdmin = await createAdminClient();
     const { error } = await supabaseAdmin
         .from('profiles')
@@ -73,6 +77,7 @@ const createUserSchema = z.object({
 });
 
 export async function createUser(formData: z.infer<typeof createUserSchema>) {
+    await requireAdmin();
     const supabaseAdmin = await createAdminClient();
 
     const validatedFields = createUserSchema.safeParse(formData);

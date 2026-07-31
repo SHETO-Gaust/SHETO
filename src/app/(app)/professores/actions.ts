@@ -7,6 +7,7 @@ import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestric
 import { sendRestrictionRequestEmail, sendPreferenciasConfirmacaoEmail } from '@/lib/mail';
 import { randomBytes } from 'crypto';
 import { validateCPF } from '@/lib/utils';
+import { requireEscolaDaSolicitacao, requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 /* -------------------------------------------------------------------------- */
 /* GET PROFESSORES                               */
@@ -15,6 +16,7 @@ export async function getProfessores(escolaId: string): Promise<{
   data?: ProfessorComDados[];
   error?: string;
 }> {
+    await requireEscolaEModulo(escolaId, 'professores');
   const supabase = await createClient();
 
   try {
@@ -87,6 +89,7 @@ const upsertProfessorSchema = z.object({
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
+    await requireEscolaEModulo(formData.escola_id, 'professores');
   const supabase = await createClient(); 
   
   const validated = upsertProfessorSchema.safeParse(formData);
@@ -139,6 +142,7 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
 /* DELETE PROFESSOR                             */
 /* -------------------------------------------------------------------------- */
 export async function deleteProfessor(id: string) {
+    await requireEscolaDoRecurso('professores', id, 'professores');
   const supabase = await createClient();
   const { error } = await supabase.from('professores').delete().eq('id', id);
   if (error) return { error: 'Não foi possível deletar the professor.' };
@@ -150,6 +154,7 @@ export async function deleteProfessor(id: string) {
 /* UPDATE COMPONENTES DO PROFESSOR                     */
 /* -------------------------------------------------------------------------- */
 export async function updateProfessorComponentes(professorId: string, componenteIds: string[]) {
+    await requireEscolaDoRecurso('professores', professorId, 'professores');
     const supabase = await createClient();
     const { error: deleteError } = await supabase.from('professores_componentes').delete().eq('professor_id', professorId);
     if (deleteError) return { error: 'Não foi possível limpar as disciplinas antigas.' };
@@ -172,6 +177,7 @@ export async function updateProfessorRestricoes(
     semPreferencia: boolean = false,
     diasPreferidos?: string[]
 ) {
+    await requireEscolaDoRecurso('professores', professorId, 'professores');
     const supabase = await createClient();
     const updateData: any = { 
         restricoes,
@@ -198,6 +204,7 @@ export async function updateProfessorRestricoes(
 /* SOLICITAR RESTRIÇÕES VIA E-MAIL                     */
 /* -------------------------------------------------------------------------- */
 export async function solicitarRestricoesEmail(professorId: string) {
+    await requireEscolaDoRecurso('professores', professorId, 'professores');
     const supabase = await createClient();
     
     const { data: prof, error: pError } = await supabase.from('professores').select('*, escola:escolas(*)').eq('id', professorId).maybeSingle();
@@ -314,6 +321,7 @@ export async function processarRespostaRestricao(
     diasPreferidosFinal?: string[],
     enviarEmail: boolean = false
 ) {
+    await requireEscolaDaSolicitacao(solicitacaoId, 'professores');
     const supabase = await createClient();
     
     const { data: sol } = await supabase

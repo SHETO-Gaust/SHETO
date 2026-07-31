@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
 import type { Turno, HorarioAula } from '@/lib/types';
+import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 /* -------------------------------------------------------------------------- */
 /*                               GET TURNOS                                   */
@@ -17,6 +18,7 @@ import type { Turno, HorarioAula } from '@/lib/types';
 export async function getTurnos(
   escolaId: string
 ): Promise<{ data?: Turno[]; error?: string }> {
+    await requireEscolaEModulo(escolaId, 'turno');
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -91,6 +93,7 @@ const upsertTurnoSchema = z.object({
 export async function upsertTurno(
   formData: z.infer<typeof upsertTurnoSchema>
 ) {
+    await requireEscolaEModulo(formData.escola_id, 'turno');
   const supabase = await createClient(); 
 
   const validated = upsertTurnoSchema.safeParse(formData);
@@ -130,6 +133,7 @@ export async function upsertTurno(
 /* -------------------------------------------------------------------------- */
 
 export async function updateTurnoStatus(id: string, ativo: boolean) {
+    await requireEscolaDoRecurso('turnos', id, 'turno');
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -183,6 +187,8 @@ const updateHorariosSchema = z
 export async function updateTurnoHorarios(
   formData: z.infer<typeof updateHorariosSchema>
 ) {
+    // este formData nao carrega escola_id - resolvemos pelo proprio turno
+    await requireEscolaDoRecurso('turnos', formData.id, 'turno');
   const supabase = await createClient();
 
   const validated = updateHorariosSchema.safeParse(formData);
@@ -213,6 +219,7 @@ export async function updateTurnoHorarios(
 /*                                DELETE TURNO                                */
 /* -------------------------------------------------------------------------- */
 export async function deleteTurno(id: string) {
+    await requireEscolaDoRecurso('turnos', id, 'turno');
   const supabase = await createClient();
 
   const { error } = await supabase.from('turnos').delete().eq('id', id);

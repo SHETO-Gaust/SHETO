@@ -3,12 +3,14 @@
 
 import { createClient } from '@/lib/supabase/server';
 import type { HorarioCompleto, Turno, Escola, Horario } from '@/lib/types';
+import { requireEscolaEModulo } from '@/lib/auth/guards';
 
 /**
  * Busca todos os horários publicados e turnos de uma escola,
  * tratando o limite de 1000 registros do banco de dados através de busca em lotes.
  */
 export async function getHorariosEscolaCompletos(escolaId: string) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
 
     // 1. Buscar todos os turnos da escola
