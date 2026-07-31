@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, AlertTriangle, Info, FolderDown, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getHorariosSalvos, getHorariosSalvosTodasTurnos, deleteHorario, gerarLoteHorario, salvarGradeFinal, converterPreProducaoParaRascunho, getHorarioDetalhado } from './actions';
+import { getHorariosSalvos, getHorariosSalvosTodasTurnos, deleteHorario, gerarLoteHorario, salvarGradeFinal, converterPreProducaoParaRascunho, getHorarioDetalhado, getDisciplinasParaConfigGerminacao } from './actions';
 import { exportarTodosHorariosZIP } from '@/lib/export-horario';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -37,7 +37,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
-import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
@@ -140,42 +139,13 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         const nextVersion = horarios.length + 1;
         setNomeHorarioInput(`Horário V${nextVersion}`);
 
-        const supabase = createClient();
         const turnoIdsToFetch = selectedTurnoId === 'todos'
             ? turnosAtivos.map(t => t.id)
             : [selectedTurnoId];
 
-        const { data: series } = await supabase
-            .from('series')
-            .select(`
-            id,
-            series_componentes(
-                aulas_presenciais,
-                aulas_nao_presenciais,
-                componente:componentes_curriculares(id, nome, sigla)
-            )
-        `)
-            .in('turno_id', turnoIdsToFetch);
+        const { data: list } = await getDisciplinasParaConfigGerminacao(turnoIdsToFetch);
 
-        if (series) {
-            const discMap = new Map<string, { id: string, nome: string, sigla: string, maxAulas: number }>();
-            series.forEach((s: any) => {
-                const componentes = Array.isArray(s.series_componentes) ? s.series_componentes : [s.series_componentes];
-                componentes.forEach((sc: any) => {
-                    if (!sc) return;
-                    const total = (sc.aulas_presenciais || 0) + (sc.aulas_nao_presenciais || 0);
-                    if (total >= 2) {
-                        const existing = discMap.get(sc.componente.id);
-                        discMap.set(sc.componente.id, {
-                            id: sc.componente.id,
-                            nome: sc.componente.nome,
-                            sigla: sc.componente.sigla,
-                            maxAulas: Math.max(total, existing?.maxAulas || 0)
-                        });
-                    }
-                });
-            });
-            const list = Array.from(discMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+        if (list) {
             setDisciplinasParaConfig(list);
             setConfigGerminacao(list.map(d => ({
                 componente_id: d.id,

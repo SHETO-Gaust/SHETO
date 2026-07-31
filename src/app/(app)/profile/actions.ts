@@ -55,3 +55,19 @@ export async function updatePassword(formData: z.infer<typeof updatePasswordSche
 
     return { success: true };
 }
+
+export async function updateSelectedSchool(userId: string, schoolId: string | null) {
+    const supabase = await createClient();
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({ ue: schoolId })
+        .eq('id', userId);
+
+    if (error) {
+        console.error('Error updating selected school:', error);
+        return { error: 'Não foi possível atualizar a escola selecionada.' };
+    }
+
+    return { success: true };
+}

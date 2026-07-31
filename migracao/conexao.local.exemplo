@@ -1,0 +1,27 @@
+# ============================================================
+#  COMO USAR
+# ============================================================
+# 1. Renomeie/copie este arquivo para:  conexao.local
+# 2. Cole abaixo a connection string do Supabase.
+#
+# Onde pegar:
+#   Dashboard -> Project Settings -> Database
+#   -> Connection string -> aba "URI"
+#
+# Troque [YOUR-PASSWORD] pela senha real do banco
+#   (Project Settings -> Database -> Database password
+#    -> se nao souber, use "Reset database password")
+#
+# ATENCAO A PORTA:
+#   :5432  -> OK  (Direct connection ou Session pooler)
+#   :6543  -> NAO SERVE (Transaction pooler nao suporta pg_dump)
+#
+# Se a senha tiver caracteres especiais (@ : / ? # [ ] espaco),
+# eles precisam ser codificados na URL:
+#   @ -> %40      : -> %3A      / -> %2F
+#   # -> %23      ? -> %3F      espaco -> %20
+#
+# Este arquivo esta no .gitignore e NUNCA vai para o repositorio.
+# ============================================================
+
+postgresql://postgres.elbaujzaudswpdoiuiwy:SUA_SENHA_AQUI@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
