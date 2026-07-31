@@ -54,7 +54,12 @@ export function buildSelectColumns(
 
     let expr: string;
     if (isCountOnly) {
-      expr = `(SELECT jsonb_build_object('count', count(*)) FROM "${f.table}" AS "${innerAlias}" WHERE ${innerWhere})`;
+      // O PostgREST devolve o agregado count como ARRAY de um elemento
+      // ([{ count: N }]), e o app consome nesse formato (ex.: serie.turmas[0].count).
+      // Envolver em jsonb_build_array mantem a compatibilidade.
+      expr =
+        `(SELECT jsonb_build_array(jsonb_build_object('count', count(*))) ` +
+        `FROM "${f.table}" AS "${innerAlias}" WHERE ${innerWhere})`;
     } else if (rel.kind === 'belongs-to') {
       expr =
         `(SELECT to_jsonb("x") FROM (SELECT ${inner.columns.join(', ')} ` +
