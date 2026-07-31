@@ -47,10 +47,11 @@ export default async function LoginPage() {
             Política de Privacidade
           </Link>
           <Image
-            src="/img/seduc.png"
-            alt="SEDUC Tocantins"
-            width={180}
-            height={40}
+            src="/img/brasao_pb.svg"
+            alt="Brasão do Estado do Tocantins"
+            width={53}
+            height={64}
+            unoptimized
             className="object-contain brightness-0 invert opacity-70"
           />
         </div>
