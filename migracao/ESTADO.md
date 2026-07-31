@@ -1,7 +1,10 @@
 # Migração Supabase → PostgreSQL local + NextAuth
 
-**Última atualização:** 30/07/2026
-**Status:** Fases 0 a 4 concluídas. Falta a Fase 5.
+**Última atualização:** 31/07/2026
+**Status:** ✅ MIGRAÇÃO CONCLUÍDA — todas as 6 fases.
+
+O sistema roda inteiramente sem internet, sem os pacotes `@supabase/*` e
+sem nenhuma variável de ambiente do Supabase.
 
 ---
 
@@ -80,12 +83,40 @@ guarda além das 8 intencionalmente públicas.
 - `professores/actions.ts` — `getSolicitacaoByToken`, `responderSolicitacao`
   (o professor não tem login; o token tokenizado **é** a credencial)
 
-### O que falta
+### Fase 5 — Validação e corte ✅
 
-### Fase 5 — Validação e corte
-- Testar todos os módulos ponta a ponta
-- Remover dependências `@supabase/*` do `package.json`
-- Limpar variáveis do Supabase do `.env.local`
+Percorridos com login real e dados de produção (Escola Elizângela Glória
+Cardoso, INEP 17056438):
+
+| Módulo | Resultado |
+|---|---|
+| Login | sessão criada, senha original funcionando |
+| Dashboard | escola vinculada e horário publicado |
+| Turnos | 4 turnos, grade de 9 aulas + intervalos (JSONB intacto) |
+| Professores | lista com disciplinas (N:N), turnos (array UUID), carga |
+| Séries | 3 séries, C.H. 45/45, contagem de turmas correta |
+| Turmas | 22 turmas, "alocação completa" |
+| Gerar Horário | histórico V1 publicado / V2 rascunho |
+| Grade completa | **990 aulas** com disciplina, professor e intervalos |
+| Refino | carrega e lista horários publicados |
+| Relatórios | Carga Horária (28/28 = 100%) e Mapa (22 turmas) |
+| Usuários | 58 perfis com join de escolas |
+| Auditoria | **486 unidades**, gráfico por regional, paginação |
+| Consulta pública | busca por INEP sem login retorna a grade |
+
+**Corte:** `@supabase/ssr` e `@supabase/supabase-js` desinstalados,
+variáveis `NEXT_PUBLIC_SUPABASE_*` e `SUPABASE_SERVICE_ROLE_KEY` removidas
+do `.env.local`. Servidor reiniciado sem elas — tudo segue funcionando.
+
+> **Bug encontrado nesta fase:** a tela de Séries mostrava "0 turmas" em
+> todas, sendo que o banco tinha 8, 8 e 6. Causa: o PostgREST devolve
+> `tabela(count)` como **array** (`[{count: N}]`) e o app lê
+> `serie.turmas[0].count`; o shim devolvia objeto, então `[0]` era
+> `undefined` e o `?? 0` mascarava tudo como zero.
+>
+> O smoke test da Fase 2 não pegou porque só verificava
+> `typeof count === 'number'` — e `0` é um número válido. Só apareceu ao
+> olhar dados reais na tela.
 
 ---
 
