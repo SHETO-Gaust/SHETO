@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, Users, Layers, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, iniciarGeracaoHorario, deleteHorario, confirmarGeracaoComRealocacao } from './actions';
+import { getDisciplinasParaConfigGerminacao } from '../gerarhorarios/actions';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import Link from 'next/link';
@@ -34,7 +35,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
-import { createClient } from '@/lib/supabase/client';
 import { type SugestaoRealocacao } from '@/lib/timetabling';
 
 type GeradorHorarioClientProps = {
@@ -91,36 +91,9 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     const nextVersion = horarios.length + 1;
     setNomeHorarioInput(`Horário V${nextVersion}`);
     
-    const supabase = createClient();
-    const { data: series } = await supabase
-        .from('series')
-        .select(`
-            id, 
-            series_componentes(
-                aulas_presenciais, 
-                aulas_nao_presenciais, 
-                componente:componentes_curriculares(id, nome, sigla)
-            )
-        `)
-        .eq('turno_id', selectedTurnoId);
+    const { data: list } = await getDisciplinasParaConfigGerminacao([selectedTurnoId]);
 
-    if (series) {
-        const discMap = new Map<string, { id: string, nome: string, sigla: string, maxAulas: number }>();
-        series.forEach((s: any) => {
-            s.series_componentes.forEach((sc: any) => {
-                const total = (sc.aulas_presenciais || 0) + (sc.aulas_nao_presenciais || 0);
-                if (total >= 2) {
-                    const existing = discMap.get(sc.componente.id);
-                    discMap.set(sc.componente.id, {
-                        id: sc.componente.id,
-                        nome: sc.componente.nome,
-                        sigla: sc.componente.sigla,
-                        maxAulas: Math.max(total, existing?.maxAulas || 0)
-                    });
-                }
-            });
-        });
-        const list = Array.from(discMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
+    if (list) {
         setDisciplinasParaConfig(list);
         // Alterado geminar para false por padrão
         setConfigGerminacao(list.map(d => ({ componente_id: d.id, geminar: false, tamanho_bloco: 2 })));

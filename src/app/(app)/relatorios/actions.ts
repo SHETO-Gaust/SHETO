@@ -55,7 +55,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     
     // 2. Séries
     const seriesIncompletas = seriesDoTurno.filter(s => {
-        const total = s.series_componentes.reduce((acc, curr) => acc + (curr.aulas_presenciais || 0), 0);
+        const total = (s.series_componentes as any[]).reduce((acc, curr) => acc + (curr.aulas_presenciais || 0), 0);
         const esperado = (selectedTurno?.aulas_por_dia || 0) * (selectedTurno?.dias_semana?.length || 0);
         return total !== esperado;
     });

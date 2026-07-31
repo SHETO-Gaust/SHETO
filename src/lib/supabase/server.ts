@@ -1,55 +1,26 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { getPool } from '@/lib/db/pool';
+import { createDbClient } from '@/lib/db/client';
+import { createAuthShim } from '@/lib/db/auth-shim';
 
-// Cliente padrão para o usuário logado
+/**
+ * Cliente para uso em Server Components / Server Actions.
+ * Mantem a mesma interface do supabase-js (from/rpc/auth) mas roda contra
+ * o Postgres local via node-postgres, sem depender do Supabase.
+ */
 export async function createClient() {
-  const cookieStore = await cookies()
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // O método `setAll` foi chamado de um Server Component.
-            // Isso pode ser ignorado se você tiver um middleware atualizando as sessões.
-          }
-        },
-      },
-    }
-  )
+  const pool = getPool();
+  return {
+    ...createDbClient(pool),
+    auth: createAuthShim(pool),
+  };
 }
 
-// Use isso APENAS em Server Actions/Components para tarefas administrativas
+/**
+ * Antigamente usava a service role key para contornar RLS. No Postgres
+ * local nao ha essa distincao de papel - a mesma conexao e usada aqui.
+ * A autorizacao (quem pode ver/editar o que) e responsabilidade da
+ * camada de aplicacao (ver Fase 4 da migracao).
+ */
 export async function createAdminClient() {
-  const cookieStore = await cookies()
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!, // Certifique-se de ter essa variável no seu .env
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // O método `setAll` foi chamado de um Server Component.
-          }
-        },
-      },
-    }
-  )
+  return createClient();
 }

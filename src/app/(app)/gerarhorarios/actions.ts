@@ -22,6 +22,46 @@ export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[
     return { data: data as Turno[] };
 }
 
+export type DisciplinaParaConfig = { id: string; nome: string; sigla: string; maxAulas: number };
+
+export async function getDisciplinasParaConfigGerminacao(turnoIds: string[]): Promise<{ data?: DisciplinaParaConfig[], error?: string }> {
+    const supabase = await createClient();
+    const { data: series, error } = await supabase
+        .from('series')
+        .select(`
+            id,
+            series_componentes(
+                aulas_presenciais,
+                aulas_nao_presenciais,
+                componente:componentes_curriculares(id, nome, sigla)
+            )
+        `)
+        .in('turno_id', turnoIds);
+
+    if (error) return { error: 'Não foi possível buscar as disciplinas.' };
+
+    const discMap = new Map<string, DisciplinaParaConfig>();
+    (series || []).forEach((s: any) => {
+        const componentes = Array.isArray(s.series_componentes) ? s.series_componentes : [s.series_componentes];
+        componentes.forEach((sc: any) => {
+            if (!sc) return;
+            const total = (sc.aulas_presenciais || 0) + (sc.aulas_nao_presenciais || 0);
+            if (total >= 2) {
+                const existing = discMap.get(sc.componente.id);
+                discMap.set(sc.componente.id, {
+                    id: sc.componente.id,
+                    nome: sc.componente.nome,
+                    sigla: sc.componente.sigla,
+                    maxAulas: Math.max(total, existing?.maxAulas || 0)
+                });
+            }
+        });
+    });
+
+    const list = Array.from(discMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    return { data: list };
+}
+
 export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horario[], error?: string }> {
     const supabase = await createClient();
     const { data, error } = await supabase

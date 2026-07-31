@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Button } from '@/components/ui/button';
 import { Building2, ChevronsUpDown, Check, Loader2 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { updateSelectedSchool } from '@/app/(app)/profile/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -56,13 +56,9 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
         setOpen(false);
         if (newSchoolId === currentSchoolId) return;
 
-        const supabase = createClient();
         const ueValue = newSchoolId === 'null' ? null : newSchoolId;
 
-        const { error } = await supabase
-            .from('profiles')
-            .update({ ue: ueValue })
-            .eq('id', userProfile.id);
+        const { error } = await updateSelectedSchool(userProfile.id, ueValue);
 
         if (error) {
             toast({

@@ -17,13 +17,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { signOut } from '@/app/login/actions';
 import { User, LogOut, KeyRound } from 'lucide-react';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
+import type { AuthUser } from '@/lib/db/auth-shim';
 import type { Profile } from '@/lib/types';
 import { useState } from 'react';
 import { ChangePasswordSheet } from '@/app/(app)/profile/change-password-sheet';
 
 type UserNavProps = {
-  user: SupabaseUser;
+  user: AuthUser;
   profile: Profile | null;
 };
 

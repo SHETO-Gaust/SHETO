@@ -1,12 +1,12 @@
-'use client';
+'use server';
 
-import { createClient } from './supabase/client';
+import { createClient } from './supabase/server';
 
 /**
  * Busca todas as regionais únicas da tabela escolas
  */
 export async function getRegionais(): Promise<string[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('escolas')
@@ -41,7 +41,7 @@ export async function getEscolasPorRegional(regional: string): Promise<string[]>
     return [];
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('escolas')

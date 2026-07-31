@@ -47,7 +47,7 @@ export async function getProfessores(escolaId: string): Promise<{
     const professoresComDados: ProfessorComDados[] = professores.map(prof => {
       const professorComponenteIds = links?.filter(l => l.professor_id === prof.id).map(l => l.componente_id) || [];
       const professorComponentes = professorComponenteIds.map(id => componentesMap.get(id)).filter((c): c is Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'> => !!c);
-      const professorTurnos = (prof.turnos_ids || []).map(id => turnosMap.get(id)).filter((t): t is Turno => !!t);
+      const professorTurnos = ((prof.turnos_ids || []) as string[]).map(id => turnosMap.get(id)).filter((t): t is Turno => !!t);
       const sol = solicitacoes?.find(s => s.professor_id === prof.id) || null;
 
       return {
