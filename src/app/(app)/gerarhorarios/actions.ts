@@ -8,8 +8,10 @@ import { gerarHorarioAlgoritmico } from '@/lib/timetabling';
 import { getTurmas } from '../turmas/actions';
 import { getProfessores } from '../professores/actions';
 import { getTurnos } from '../turno/actions';
+import { requireEscolaDoRecurso, requireEscolaDosRecursos, requireEscolaEModulo } from '@/lib/auth/guards';
 
 export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[], error?: string }> {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
     const { data, error } = await supabase
         .from('turnos')
@@ -25,6 +27,7 @@ export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[
 export type DisciplinaParaConfig = { id: string; nome: string; sigla: string; maxAulas: number };
 
 export async function getDisciplinasParaConfigGerminacao(turnoIds: string[]): Promise<{ data?: DisciplinaParaConfig[], error?: string }> {
+    await requireEscolaDosRecursos('turnos', turnoIds, 'horarios');
     const supabase = await createClient();
     const { data: series, error } = await supabase
         .from('series')
@@ -63,6 +66,7 @@ export async function getDisciplinasParaConfigGerminacao(turnoIds: string[]): Pr
 }
 
 export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horario[], error?: string }> {
+    await requireEscolaDoRecurso('turnos', turnoId, 'horarios');
     const supabase = await createClient();
     const { data, error } = await supabase
         .from('horarios')
@@ -75,6 +79,7 @@ export async function getHorariosSalvos(turnoId: string): Promise<{ data?: Horar
 }
 
 export async function getHorariosSalvosTodasTurnos(escolaId: string): Promise<{ data?: (Horario & { turno_nome: string })[], error?: string }> {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
     const { data, error } = await supabase
         .from('horarios')
@@ -102,6 +107,7 @@ export async function gerarLoteHorario(
     progress: number = 0,
     permitirMesmoProfDisciplinasMesmoDia: boolean = false
 ) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
 
     const [
@@ -234,6 +240,7 @@ export async function salvarGradeFinal(
     aulas: any[],
     status: 'em_rascunho' | 'pre_producao' = 'em_rascunho'
 ) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
 
     const { data: novoHorario, error: hError } = await supabase
@@ -305,6 +312,7 @@ export async function gerarSuperHorarioLote(
     progress: number = 0,
     permitirMesmoProfDisciplinasMesmoDia: boolean = false
 ) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
 
     const [
@@ -402,6 +410,7 @@ export async function gerarSuperHorarioLote(
 }
 
 export async function consolidarHorario(id: string) {
+    await requireEscolaDoRecurso('horarios', id, 'horarios');
     const supabase = await createClient();
     const { data: current } = await supabase.from('horarios').select('turno_id').eq('id', id).single();
     if (!current) return { error: 'Horário não encontrado.' };
@@ -418,6 +427,7 @@ export async function consolidarHorario(id: string) {
 }
 
 export async function converterPreProducaoParaRascunho(horarioIds: string[]) {
+    await requireEscolaDosRecursos('horarios', horarioIds, 'horarios');
     if (horarioIds.length === 0) return { success: true };
     const supabase = await createClient();
     const { error } = await supabase
@@ -431,6 +441,7 @@ export async function converterPreProducaoParaRascunho(horarioIds: string[]) {
 }
 
 export async function reverterParaRascunho(id: string) {
+    await requireEscolaDoRecurso('horarios', id, 'horarios');
     const supabase = await createClient();
     const { error } = await supabase.from('horarios').update({ status: 'em_rascunho' }).eq('id', id);
     if (error) return { error: 'Não foi possível reverter.' };
@@ -439,6 +450,7 @@ export async function reverterParaRascunho(id: string) {
 }
 
 export async function deleteHorario(id: string) {
+    await requireEscolaDoRecurso('horarios', id, 'horarios');
     const supabase = await createClient();
     const { error } = await supabase.from('horarios').delete().eq('id', id);
     if (error) return { error: 'Não foi possível deletar.' };
@@ -477,6 +489,7 @@ export async function analisarConflitosHorarios(
     turnoFiltro: string,
     selecionadosIds?: string[]
 ): Promise<{ data?: HorarioConflictResult[]; error?: string }> {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
 
     let horarios: any[];
@@ -604,6 +617,7 @@ export async function analisarConflitosHorarios(
 }
 
 export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioCompleto, error?: string }> {
+    await requireEscolaDoRecurso('horarios', id, 'horarios');
     const supabase = await createClient();
     const { data: horario, error: hError } = await supabase.from('horarios').select('*, turno:turnos(*)').eq('id', id).single();
     if (hError || !horario) return { error: 'Horário não encontrado.' };

@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
 import type { NivelEnsino } from '@/lib/types';
+import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 /* -------------------------------------------------------------------------- */
 /*                               GET NIVEIS ENSINO                            */
@@ -17,6 +18,7 @@ import type { NivelEnsino } from '@/lib/types';
 export async function getNiveisEnsino(
   escolaId: string
 ): Promise<{ data?: NivelEnsino[]; error?: string }> {
+    await requireEscolaEModulo(escolaId, 'ensino');
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -74,6 +76,7 @@ const upsertNivelEnsinoSchema = z.object({
 export async function upsertNivelEnsino(
   formData: z.infer<typeof upsertNivelEnsinoSchema>
 ) {
+    await requireEscolaEModulo(formData.escola_id, 'ensino');
   const supabase = await createClient();
 
   const validated = upsertNivelEnsinoSchema.safeParse(formData);
@@ -114,6 +117,7 @@ export async function upsertNivelEnsino(
 }
 
 export async function deleteNivelEnsino(id: string) {
+    await requireEscolaDoRecurso('niveis_ensino', id, 'ensino');
   const supabase = await createClient();
 
   const { error } = await supabase.from('niveis_ensino').delete().eq('id', id);

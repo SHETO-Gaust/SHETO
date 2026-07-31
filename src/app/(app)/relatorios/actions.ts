@@ -6,11 +6,13 @@ import type { ChecklistReportData, TurmaComDados, ProfessorComDados, Turno } fro
 import { getTurmas } from '@/app/(app)/turmas/actions';
 import { getProfessores } from '@/app/(app)/professores/actions';
 import { getTurnos } from '@/app/(app)/turno/actions';
+import { requireEscolaEModulo } from '@/lib/auth/guards';
 
 /**
  * Relatório 1: Checklist de Dados
  */
 export async function getChecklistReportData(escolaId: string, turnoId: string): Promise<{ data?: ChecklistReportData; error?: string }> {
+    await requireEscolaEModulo(escolaId, 'horarios');
   const supabase = await createClient();
 
   try {
@@ -93,6 +95,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
  * Relatório 2: Carga Horária Docente (Audit)
  */
 export async function getWorkloadReportData(escolaId: string, turnoId: string) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const { data: turmas } = await getTurmas(escolaId);
     const { data: professores } = await getProfessores(escolaId);
 
@@ -137,6 +140,7 @@ export async function getWorkloadReportData(escolaId: string, turnoId: string) {
  * Relatório 3: Mapa de Gargalos (Heatmap de Disponibilidade)
  */
 export async function getBottleneckReportData(escolaId: string, turnoId: string) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
     const { data: turno } = await supabase.from('turnos').select('*').eq('id', turnoId).single();
     const { data: turmas } = await supabase.from('turmas').select('id, serie:series(turno_id)').filter('serie.turno_id', 'eq', turnoId);

@@ -49,3 +49,4 @@ firestore-debug.log
 /migracao/dumps/
 *.backup
 *.dump
+__pycache__/

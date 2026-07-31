@@ -1,7 +1,7 @@
 # Migração Supabase → PostgreSQL local + NextAuth
 
 **Última atualização:** 30/07/2026
-**Status:** Fases 0 a 3 concluídas. Faltam Fases 4 e 5.
+**Status:** Fases 0 a 4 concluídas. Falta a Fase 5.
 
 ---
 
@@ -40,9 +40,7 @@ Solução: trazer banco e autenticação para dentro da máquina.
 
 ---
 
-## O que falta
-
-### Fase 4 — Autorização (~2-4h)
+### Fase 4 — Autorização ✅
 
 **Contexto:** ao medir, descobri que o RLS do Supabase protegia menos do que parecia.
 Quase todas as políticas eram `auth.role() = 'authenticated'` ("basta estar logado").
@@ -52,24 +50,37 @@ A separação por escola **sempre** foi responsabilidade da aplicação, nunca d
 sem RLS, expostas à chave pública do Supabase) **deixa de existir** — no Postgres
 local não há chave pública, só o servidor acessa o banco.
 
-**Risco a fechar:** 79 Server Actions em 14 arquivos não verificam sessão. Elas
-dependiam do RLS exigir login. Como Server Actions são endpoints HTTP, dá para
-chamá-las diretamente sem passar pela tela de login.
+**Risco fechado:** Server Actions são endpoints HTTP — podiam ser chamadas
+diretamente, sem passar pela tela de login.
 
-Trabalho:
-1. Criar helpers `requireAuth()`, `requireAdmin()`, `requireEscola()`
-2. Aplicar a guarda correta em cada uma das 79 actions
-3. **Manter públicas:** `src/app/horarios/actions.ts` e `src/app/restricoes/[token]/`
+Guardas criadas em `src/lib/auth/guards.ts`:
 
-Distribuição das actions a proteger:
-```
-13 gerarhorarios     5 turno           3 relatorios
- 9 professores       5 turmas          3 refinodehorario
- 8 auditoria         4 usuarios        3 ensino
- 7 avaliacoes-admin  4 unidades        3 componentes
- 6 serie             3 substituicoes   2 profile
-                                       1 visualizarhorario
-```
+| Guarda | Uso |
+|---|---|
+| `requireAuth()` | sessão válida + perfil ativo |
+| `requireAdmin()` | apenas administradores |
+| `requireEscola(id)` | admin, ou usuário da própria escola |
+| `requireModulo(mod)` | respeita grupos `dados-horario` / `usuarios` |
+| `requireEscolaDoRecurso(tabela, id, mod)` | resolve a escola dona do registro |
+| `requireEscolaDosRecursos(tabela, ids[], mod)` | versão em lote |
+| `requireEscolaDaSolicitacao(id, mod)` | dois saltos (solicitação → professor → escola) |
+
+**77 guardas aplicadas.** Auditoria automatizada confirma: nenhuma action sem
+guarda além das 8 intencionalmente públicas.
+
+> **Falha encontrada pelo próprio teste:** ao chamar as Server Actions sem sessão,
+> descobri que `updateSelectedSchool` (criada por mim na Fase 2) **executava e
+> chegava ao banco**. Pior: recebia `userId` do cliente, então dava para trocar a
+> escola de outro usuário. Corrigida — agora ignora o parâmetro e usa a sessão
+> como fonte de verdade.
+
+**Permanecem públicas por design:**
+- `login/actions.ts` — signIn, signInGetResult, signOut
+- `horarios/actions.ts` — consulta pública de horários por INEP
+- `professores/actions.ts` — `getSolicitacaoByToken`, `responderSolicitacao`
+  (o professor não tem login; o token tokenizado **é** a credencial)
+
+### O que falta
 
 ### Fase 5 — Validação e corte
 - Testar todos os módulos ponta a ponta

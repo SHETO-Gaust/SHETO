@@ -6,11 +6,13 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getProfessores } from '@/app/(app)/professores/actions';
 import type { TurmaComDados, Serie, ComponenteCurricular, ProfessorComDados, Turno } from '@/lib/types';
+import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 /* -------------------------------------------------------------------------- */
 /*                                  GET TURMAS                                */
 /* -------------------------------------------------------------------------- */
 export async function getTurmas(escolaId: string): Promise<{ data?: TurmaComDados[], error?: string }> {
+    await requireEscolaEModulo(escolaId, 'turmas');
   const supabase = await createClient();
   try {
     const { data: turmas, error: turmasError } = await supabase
@@ -42,6 +44,7 @@ export async function getEnsalamentoDependencies(escolaId: string): Promise<{
     professores: ProfessorComDados[],
     componentes: ComponenteCurricular[],
 }> {
+    await requireEscolaEModulo(escolaId, 'turmas');
     const supabase = await createClient();
     const [seriesResult, professoresResult, componentesResult] = await Promise.all([
         supabase.from('series').select(`
@@ -76,6 +79,7 @@ const upsertTurmaSchema = z.object({
 });
 
 export async function upsertTurma(formData: z.infer<typeof upsertTurmaSchema>) {
+    await requireEscolaEModulo(formData.escola_id, 'turmas');
     const supabase = await createClient();
     const validated = upsertTurmaSchema.safeParse(formData);
     if (!validated.success) {
@@ -104,6 +108,7 @@ export async function upsertTurma(formData: z.infer<typeof upsertTurmaSchema>) {
 /*                                DELETE TURMA                                */
 /* -------------------------------------------------------------------------- */
 export async function deleteTurma(id: string) {
+    await requireEscolaDoRecurso('turmas', id, 'turmas');
     const supabase = await createClient();
     const { error } = await supabase.from('turmas').delete().eq('id', id);
     if (error) {
@@ -127,6 +132,7 @@ const alocacaoSchema = z.object({
 });
 
 export async function updateAlocacaoProfessores(formData: z.infer<typeof alocacaoSchema>) {
+    await requireEscolaDoRecurso('turmas', formData.turma_id, 'turmas');
     const supabase = await createClient();
     const validated = alocacaoSchema.safeParse(formData);
     if (!validated.success) return { error: 'Dados de alocação inválidos.' };

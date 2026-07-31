@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
 import type { ComponenteCurricular } from '@/lib/types';
+import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 const defaultComponentes = [
   { nome: 'Língua Portuguesa', sigla: 'LP' },
@@ -25,6 +26,7 @@ const defaultComponentes = [
 export async function getComponentes(
   escolaId: string
 ): Promise<{ data?: ComponenteCurricular[]; error?: string }> {
+    await requireEscolaEModulo(escolaId, 'componentes');
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -67,6 +69,7 @@ const upsertComponenteSchema = z.object({
 export async function upsertComponente(
   formData: z.infer<typeof upsertComponenteSchema>
 ) {
+    await requireEscolaEModulo(formData.escola_id, 'componentes');
   const supabase = await createClient();
 
   const validated = upsertComponenteSchema.safeParse(formData);
@@ -107,6 +110,7 @@ export async function upsertComponente(
 }
 
 export async function deleteComponente(id: string) {
+    await requireEscolaDoRecurso('componentes_curriculares', id, 'componentes');
   const supabase = await createClient();
 
   const { error } = await supabase.from('componentes_curriculares').delete().eq('id', id);

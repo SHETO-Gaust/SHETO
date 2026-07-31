@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { Horario, Turno, Escola } from '@/lib/types';
 import { sendMassCommunicationEmail } from '@/lib/mail';
+import { requireAdmin } from '@/lib/auth/guards';
 
 export type AuditoriaRow = {
     escola: Escola;
@@ -31,6 +32,7 @@ export type AuditoriaStats = {
 };
 
 export async function getAuditoriaStats(): Promise<AuditoriaStats> {
+    await requireAdmin();
     const supabase = await createClient();
     try {
         const { count: totalRascunhos } = await supabase
@@ -97,6 +99,7 @@ export async function getAuditoriaData({
     search?: string; 
     status?: string;
 }): Promise<{ data: AuditoriaRow[], total: number, error?: string }> {
+    await requireAdmin();
     const supabase = await createClient();
 
     try {
@@ -199,6 +202,7 @@ export async function getAuditoriaData({
 }
 
 export async function deleteHorarioAuditoria(id: string) {
+    await requireAdmin();
     const supabase = await createClient();
     const { error } = await supabase.from('horarios').delete().eq('id', id);
     if (error) return { error: 'Não foi possível deletar o horário.' };
@@ -207,6 +211,7 @@ export async function deleteHorarioAuditoria(id: string) {
 }
 
 export async function limparRascunhosEscola(escolaId: string) {
+    await requireAdmin();
     const supabase = await createClient();
     try {
         const { data: turnos, error: tError } = await supabase
@@ -236,6 +241,7 @@ export async function limparRascunhosEscola(escolaId: string) {
 }
 
 export async function limparRascunhosAntigos(dias: number) {
+    await requireAdmin();
     const supabase = await createClient();
     const dataCorte = new Date();
     dataCorte.setDate(dataCorte.getDate() - dias);
@@ -258,6 +264,7 @@ export async function limparRascunhosAntigos(dias: number) {
 }
 
 export async function getResumoLimpeza(dias: number): Promise<{ data?: ResumoLimpeza[], error?: string }> {
+    await requireAdmin();
     const supabase = await createClient();
     const dataCorte = new Date();
     dataCorte.setDate(dataCorte.getDate() - dias);
@@ -323,6 +330,7 @@ export type UserListItem = {
 };
 
 export async function getUsersForCommunication(): Promise<{ data?: UserListItem[], error?: string }> {
+    await requireAdmin();
     const supabase = await createClient();
     try {
         const { data, error } = await supabase
@@ -348,6 +356,7 @@ export async function getUsersForCommunication(): Promise<{ data?: UserListItem[
 }
 
 export async function enviarComunicadoMassaAction(data: { titulo: string, html: string, targetIds: string[] | 'all' }) {
+    await requireAdmin();
     const supabase = await createClient();
     
     // Auth Check

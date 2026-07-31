@@ -5,12 +5,14 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular, SerieAulaFixa } from '@/lib/types';
+import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 
 /* -------------------------------------------------------------------------- */
 /*                                 GET SERIES                                 */
 /* -------------------------------------------------------------------------- */
 export async function getSeries(escolaId: string): Promise<{ data?: SerieComDados[], error?: string }> {
+    await requireEscolaEModulo(escolaId, 'serie');
   const supabase = await createClient();
   try {
     const { data: series, error: seriesError } = await supabase
@@ -73,6 +75,7 @@ export async function getSerieDependencies(escolaId: string): Promise<{
     turnos: Turno[],
     componentes: ComponenteCurricular[],
 }> {
+    await requireEscolaEModulo(escolaId, 'serie');
     const supabase = await createClient();
     const [niveisResult, turnosResult, componentesResult] = await Promise.all([
         supabase.from('niveis_ensino').select('*').eq('escola_id', escolaId),
@@ -101,6 +104,7 @@ const upsertSerieSchema = z.object({
 });
 
 export async function upsertSerie(formData: z.infer<typeof upsertSerieSchema>) {
+    await requireEscolaEModulo(formData.escola_id, 'serie');
     const supabase = await createClient();
     const validated = upsertSerieSchema.safeParse(formData);
     if (!validated.success) {
@@ -152,6 +156,7 @@ const cargaHorariaSchema = z.object({
 });
 
 export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSchema>) {
+    await requireEscolaDoRecurso('series', formData.serie_id, 'serie');
     const supabase = await createClient();
     const validated = cargaHorariaSchema.safeParse(formData);
     if (!validated.success) return { error: 'Dados inválidos.' };
@@ -371,6 +376,7 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
 /*                              DUPLICATE SERIE                               */
 /* -------------------------------------------------------------------------- */
 export async function duplicateSerie(serieId: string, newName: string, newTurnoId: string) {
+    await requireEscolaDoRecurso('series', serieId, 'serie');
     const supabase = await createClient();
     
     const { data: originalSerie, error: fetchError } = await supabase
@@ -431,6 +437,7 @@ export async function duplicateSerie(serieId: string, newName: string, newTurnoI
 /*                                DELETE SERIE                                */
 /* -------------------------------------------------------------------------- */
 export async function deleteSerie(id: string) {
+    await requireEscolaDoRecurso('series', id, 'serie');
     const supabase = await createClient();
     const { error } = await supabase.from('series').delete().eq('id', id);
     if (error) {

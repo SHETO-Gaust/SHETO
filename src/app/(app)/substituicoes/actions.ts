@@ -4,14 +4,17 @@
 import { createClient } from '@/lib/supabase/server';
 import type { Turno, ProfessorComDados } from '@/lib/types';
 import { getProfessores } from '../professores/actions';
+import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 export async function getTurnosAtivos(escolaId: string) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
     const { data } = await supabase.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true).order('nome');
     return { data: data as Turno[] };
 }
 
 export async function getProfessorAulasNoDia(turnoId: string, professorId: string, dia: string) {
+    await requireEscolaDoRecurso('turnos', turnoId, 'horarios');
     const supabase = await createClient();
     
     // 1. Buscar horário publicado para o turno
@@ -38,6 +41,7 @@ export async function getProfessorAulasNoDia(turnoId: string, professorId: strin
 }
 
 export async function buscarSubstitutosDisponiveis(escolaId: string, turnoId: string, dia: string, aulaIndex: number, turmaId: string) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
     const { data: professores } = await getProfessores(escolaId);
     const { data: turno } = await supabase.from('turnos').select('*').eq('id', turnoId).single();

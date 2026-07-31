@@ -4,8 +4,10 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { Turno } from '@/lib/types';
 import type { AulaRefino, Move } from '@/lib/refino-horario';
+import { requireEscolaDosRecursos, requireEscolaEModulo } from '@/lib/auth/guards';
 
 export async function getHorariosParaRefino(escolaId: string) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
     const { data: horarios, error } = await supabase
         .from('horarios')
@@ -18,6 +20,7 @@ export async function getHorariosParaRefino(escolaId: string) {
 }
 
 export async function getDadosRefinoHorario(escolaId: string, horarioSelecionadoId: string) {
+    await requireEscolaEModulo(escolaId, 'horarios');
     const supabase = await createClient();
 
     // 1. Buscar todos os turnos
@@ -113,6 +116,17 @@ export async function aplicarMudancasRefino(mudancas: Move[]) {
 
     const supabase = await createClient();
     const aulaIds = mudancas.map(m => m.aulaId);
+
+    // A escola dona destas aulas esta a dois saltos (horario_aulas -> horarios),
+    // entao resolvemos os horarios envolvidos e delegamos a checagem em lote.
+    const { data: aulasParaValidar } = await supabase
+        .from('horario_aulas')
+        .select('horario_id')
+        .in('id', aulaIds);
+    const horarioIds = Array.from(
+        new Set((aulasParaValidar || []).map((a: { horario_id: string }) => a.horario_id))
+    );
+    await requireEscolaDosRecursos('horarios', horarioIds, 'horarios');
 
     // ── Phase 0: Guard — aulas fixas não podem ser movidas ────────────────────
     const { data: aulasParaMover } = await supabase
