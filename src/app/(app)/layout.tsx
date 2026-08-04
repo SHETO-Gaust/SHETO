@@ -23,6 +23,13 @@ import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/login/actions';
 import { headers } from 'next/headers';
 
+/**
+ * Toda pagina sob (app) depende da sessao do usuario e do banco - nenhuma
+ * pode ser prerenderizada em build. Aplicado no layout, vale para todos os
+ * segmentos abaixo dele.
+ */
+export const dynamic = 'force-dynamic';
+
 const moduleMap: { [key: string]: string } = {
     '/dashboard': 'dashboard',
     '/professores': 'professores',
