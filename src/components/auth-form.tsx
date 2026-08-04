@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Mail, Lock } from 'lucide-react';
 import { signIn } from '@/app/login/actions';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 export function AuthForm() {
   const [loading, setLoading] = useState(false);
@@ -52,6 +53,14 @@ export function AuthForm() {
             placeholder="Senha"
             className="pl-10 bg-gray-100 border-0 rounded-xl h-12 text-gray-700 placeholder:text-gray-400 focus-visible:ring-sky-400"
           />
+        </div>
+        <div className="flex justify-end">
+          <Link
+            href="/esqueci-senha"
+            className="text-sm text-sky-600 hover:text-sky-700 hover:underline underline-offset-2"
+          >
+            Esqueci minha senha
+          </Link>
         </div>
         <Button
           type="submit"

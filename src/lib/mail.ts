@@ -25,6 +25,22 @@ function getFrom() {
   return process.env.SMTP_FROM || '"SHETO" <no-reply@seduc.to.gov.br>';
 }
 
+/** Dominio oficial da aplicacao - usado quando nenhuma variavel esta definida. */
+const BASE_URL_PADRAO = 'https://sheto.seduc.to.gov.br';
+
+/**
+ * URL base usada nos links dos e-mails.
+ *
+ * Prefere APP_BASE_URL porque e' lida em tempo de execucao: basta editar o
+ * .env e reiniciar. NEXT_PUBLIC_SITE_URL continua aceita por compatibilidade,
+ * mas o Next substitui variaveis NEXT_PUBLIC_* no momento do build - mudar o
+ * valor dela exige `npm run build` de novo.
+ */
+function getBaseUrl() {
+  const url = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || BASE_URL_PADRAO;
+  return url.replace(/\/+$/, '');
+}
+
 export type WelcomeEmailData = {
   to: string;
   name: string;
@@ -43,7 +59,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
     return { error: 'Serviço de e-mail não configurado. Verifique as credenciais no .env' };
   }
 
-  const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://sheto.vercel.app'}/login`;
+  const loginUrl = `${getBaseUrl()}/login`;
 
   const html = `
     <!DOCTYPE html>
@@ -119,6 +135,93 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
   }
 }
 
+// ─── E-mail de redefinição de senha ──────────────────────────────────────────
+
+export type PasswordResetEmailData = {
+  to: string;
+  name: string;
+  token: string;
+  expiraEmMinutos: number;
+};
+
+export async function sendPasswordResetEmail(data: PasswordResetEmailData) {
+  const transporter = getTransporter();
+
+  if (!transporter) {
+    console.error('ERRO: Variáveis SMTP não configuradas no .env');
+    return { error: 'Serviço de e-mail não configurado. Informe ao administrador do sistema.' };
+  }
+
+  const resetUrl = `${getBaseUrl()}/redefinir-senha/${data.token}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'PT Sans', sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .header { text-align: center; margin-bottom: 25px; }
+        .content { background-color: #f8fafc; padding: 25px; border-radius: 8px; }
+        .button { display: inline-block; padding: 14px 28px; background-color: #0ea5e9; color: #ffffff !important; text-decoration: none; border-radius: 999px; font-weight: bold; margin: 20px 0; }
+        .warning { font-size: 13px; color: #475569; margin-top: 20px; padding: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 4px; }
+        .link-fallback { font-size: 11px; color: #94a3b8; word-break: break-all; margin-top: 16px; }
+        .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 25px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h2 style="color: #1e3a8a; margin: 0;">Redefinição de Senha</h2>
+          <p style="color: #64748b;">Sistema de Horário Escolar (SHE)</p>
+        </div>
+
+        <div class="content">
+          <p>Olá, <strong>${data.name}</strong>!</p>
+          <p>Recebemos uma solicitação para redefinir a senha da sua conta no SHE.</p>
+
+          <div style="text-align: center;">
+            <a href="${resetUrl}" class="button">Criar Nova Senha</a>
+          </div>
+
+          <div class="warning">
+            <strong>Atenção:</strong> este link é pessoal, vale por
+            <strong>${data.expiraEmMinutos} minutos</strong> e pode ser usado
+            <strong>uma única vez</strong>.
+            <br/><br/>
+            Se você não solicitou a redefinição, ignore este e-mail — sua senha
+            atual permanece válida e nenhuma ação é necessária.
+          </div>
+
+          <p class="link-fallback">
+            Se o botão não funcionar, copie e cole este endereço no navegador:<br/>
+            ${resetUrl}
+          </p>
+        </div>
+
+        <div class="footer">
+          <p>Secretaria da Educação do Estado do Tocantins © ${new Date().getFullYear()}</p>
+          <p style="margin: 4px 0 0;">Não responda a este e-mail.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: getFrom(),
+      to: data.to,
+      subject: 'Redefinição de Senha - Sistema de Horário Escolar (SHE)',
+      html,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao enviar e-mail de redefinição:', error);
+    return { error: 'Falha no envio do e-mail. Verifique a configuração SMTP do servidor.' };
+  }
+}
+
 export async function sendRestrictionRequestEmail(data: { to: string, name: string, schoolName: string, token: string }) {
   const transporter = getTransporter();
 
@@ -127,8 +230,7 @@ export async function sendRestrictionRequestEmail(data: { to: string, name: stri
     return { error: 'Serviço de e-mail não configurado. Informe ao administrador do sistema.' };
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://sheto.vercel.app';
-  const requestUrl = `${baseUrl}/restricoes/${data.token}`;
+  const requestUrl = `${getBaseUrl()}/restricoes/${data.token}`;
 
   const html = `
     <!DOCTYPE html>

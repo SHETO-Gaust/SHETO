@@ -6,6 +6,16 @@ import { auth as getNextAuthSession, signIn as nextAuthSignIn, signOut as nextAu
 export type AuthUser = { id: string; email: string; user_metadata?: Record<string, any> };
 type AuthResult<T> = { data: T; error: { message: string } | null };
 
+/**
+ * O Next sinaliza bailout de render estatico, redirect e notFound lancando
+ * erros marcados com `digest`. Engolir esses erros num catch generico faz a
+ * pagina seguir o render como "sem usuario" em vez de virar dinamica - era
+ * isso que quebrava o build com "Nao autenticado." durante o prerender.
+ */
+function repassarErroDeControleDoNext(err: unknown): void {
+  if (typeof (err as { digest?: unknown } | null)?.digest === 'string') throw err;
+}
+
 /** Wrapper de auth compativel com a interface supabase.auth.* usada no restante do app, com NextAuth por baixo. */
 export function createAuthShim(pool: Pool) {
   return {
@@ -17,6 +27,7 @@ export function createAuthShim(pool: Pool) {
           : null;
         return { data: { user }, error: null };
       } catch (err: any) {
+        repassarErroDeControleDoNext(err);
         return { data: { user: null }, error: { message: err?.message ?? String(err) } };
       }
     },
@@ -29,6 +40,7 @@ export function createAuthShim(pool: Pool) {
           : null;
         return { data: { session: shaped }, error: null };
       } catch (err: any) {
+        repassarErroDeControleDoNext(err);
         return { data: { session: null }, error: { message: err?.message ?? String(err) } };
       }
     },
@@ -70,6 +82,7 @@ export function createAuthShim(pool: Pool) {
         const row = rows[0];
         return { data: { user: row ? { id: row.id, email: row.email } : null }, error: null };
       } catch (err: any) {
+        repassarErroDeControleDoNext(err);
         return { data: { user: null }, error: { message: err?.message ?? String(err) } };
       }
     },

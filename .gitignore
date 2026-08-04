@@ -50,3 +50,6 @@ firestore-debug.log
 *.backup
 *.dump
 __pycache__/
+
+# dumps do banco gerados localmente - contem hashes de senha e dados pessoais
+/db-dump/
