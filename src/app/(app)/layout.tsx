@@ -22,7 +22,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/login/actions';
 import { headers } from 'next/headers';
-import { ThemeToggle } from '@/components/theme-toggle';
 
 const moduleMap: { [key: string]: string } = {
     '/dashboard': 'dashboard',
@@ -165,7 +164,6 @@ export default async function AppLayout({
             <SchoolSelector userProfile={userProfile as any} allEscolas={allEscolas} />
           </div>
           <div className="ml-auto flex items-center gap-4 shrink-0">
-            <ThemeToggle />
             <UserNav user={user} profile={userProfile as any} />
           </div>
         </header>

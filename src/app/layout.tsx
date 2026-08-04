@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme-provider';
+import { ThemeShortcut } from '@/components/theme-shortcut';
 
 export const metadata: Metadata = {
   title: 'SHE - Sistema de Horário Escolar',
@@ -21,12 +22,16 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
+        {/* storageKey novo: ignora o tema que ficou salvo no navegador na época
+            do botão de alternar, garantindo modo claro em todas as máquinas. */}
         <ThemeProvider
             attribute="class"
-            defaultTheme="system"
-            enableSystem
+            storageKey="sheto-theme"
+            defaultTheme="light"
+            enableSystem={false}
             disableTransitionOnChange
         >
+            <ThemeShortcut />
             {children}
             <Toaster />
         </ThemeProvider>
