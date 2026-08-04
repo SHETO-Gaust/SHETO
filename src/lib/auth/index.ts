@@ -6,6 +6,14 @@ import { getPool } from '@/lib/db/pool';
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: 'jwt' },
   pages: { signIn: '/login' },
+  /**
+   * Fora da Vercel o Auth.js nao confia no cabecalho Host por padrao (defesa
+   * contra host header injection) e derruba o login com UntrustedHost. Aqui a
+   * aplicacao roda atras do proxy da SEDUC, entao o host precisa ser aceito.
+   * Defina AUTH_URL no .env para fixar a URL canonica - o proxy e' quem deve
+   * garantir que o Host chegue correto.
+   */
+  trustHost: true,
   providers: [
     Credentials({
       credentials: { email: {}, password: {} },
