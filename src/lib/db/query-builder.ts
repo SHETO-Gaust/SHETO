@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { parseSelect, type SelectField } from './select-parser';
 import { buildSelectColumns } from './sql-builder';
-import { preloadSchemaMetadata, getPrimaryKeySync, resolveRelationshipSync } from './relationships';
+import { preloadSchemaMetadata, getPrimaryKeySync, resolveRelationshipSync, getColumnTypeSync } from './relationships';
 
 type FilterOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'ilike' | 'is';
 
@@ -33,6 +33,23 @@ function serializeParam(val: unknown): unknown {
 }
 
 /**
+ * Remove as chaves com valor `undefined` do payload.
+ *
+ * No supabase-js o payload vira JSON antes de ir para o PostgREST, e
+ * `JSON.stringify` simplesmente descarta chaves `undefined` - a coluna nem e
+ * mencionada no INSERT e o DEFAULT do banco vale. Aqui montamos o SQL direto,
+ * entao sem esta limpeza `{ id: undefined }` viraria `INSERT (id) VALUES (NULL)`
+ * e estouraria not-null / sobrescreveria gen_random_uuid().
+ */
+function dropUndefined(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
+/**
  * TData espelha o comportamento do supabase-js: por padrao um array (select
  * normal), estreitado para um objeto unico por single()/maybeSingle().
  * Sem isso, `data: any` faz o TypeScript perder o tipo contextual dos
@@ -61,6 +78,25 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
   private p(val: unknown): string {
     this.params.push(serializeParam(val));
     return `$${this.params.length}`;
+  }
+
+  /**
+   * Parametro de INSERT/UPDATE serializado conforme o tipo REAL da coluna.
+   *
+   * Para colunas json/jsonb o valor tem que ir como texto JSON. Deixar o
+   * node-postgres serializar um array JS gera o literal de array do Postgres
+   * (`{}`, `{a,b}`): `[]` era gravado como `{}` (objeto vazio) silenciosamente
+   * e arrays de primitivos estouravam erro de sintaxe json.
+   */
+  private pCol(col: string, val: unknown): string {
+    const tipo = getColumnTypeSync(this.table, col);
+    if (tipo === 'json' || tipo === 'jsonb') {
+      // null/undefined viram NULL de SQL (e nao o literal JSON "null"),
+      // que e o que o PostgREST faz para `{"coluna": null}`.
+      this.params.push(val === undefined || val === null ? null : JSON.stringify(val));
+      return `$${this.params.length}`;
+    }
+    return this.p(val);
   }
 
   private cond(col: string, op: FilterOp, val: unknown, alias: string = BASE_ALIAS): string {
@@ -283,12 +319,17 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
     }
 
     if (this.mode === 'insert' || this.mode === 'upsert') {
-      const rows = Array.isArray(this.insertPayload) ? this.insertPayload : [this.insertPayload];
+      const rows = (Array.isArray(this.insertPayload) ? this.insertPayload : [this.insertPayload]).map(dropUndefined);
       const cols = Array.from(new Set(rows.flatMap((r) => Object.keys(r))));
-      const valuesSql = rows
-        .map((row) => `(${cols.map((c) => this.p(row[c] !== undefined ? row[c] : null)).join(', ')})`)
-        .join(', ');
-      let sql = `INSERT INTO "${this.table}" AS "${BASE_ALIAS}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES ${valuesSql}`;
+      let sql: string;
+      if (cols.length === 0) {
+        sql = `INSERT INTO "${this.table}" AS "${BASE_ALIAS}" DEFAULT VALUES`;
+      } else {
+        const valuesSql = rows
+          .map((row) => `(${cols.map((c) => this.pCol(c, row[c] !== undefined ? row[c] : null)).join(', ')})`)
+          .join(', ');
+        sql = `INSERT INTO "${this.table}" AS "${BASE_ALIAS}" (${cols.map((c) => `"${c}"`).join(', ')}) VALUES ${valuesSql}`;
+      }
 
       if (this.mode === 'upsert') {
         const conflictCols = this.upsertOnConflict
@@ -307,8 +348,15 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
     }
 
     if (this.mode === 'update') {
-      const cols = Object.keys(this.updatePayload);
-      const setSql = cols.map((c) => `"${c}" = ${this.p(this.updatePayload[c])}`).join(', ');
+      const payload = dropUndefined(this.updatePayload);
+      const cols = Object.keys(payload);
+      if (cols.length === 0) {
+        // Nada a atualizar: o supabase-js aceita e vira no-op, entao nao estouramos SQL invalido.
+        // Zeramos os params porque os filtros ja empilhados nao aparecem neste SQL.
+        this.params = [];
+        return { sql: `SELECT 1 WHERE false`, wantsReturning: false };
+      }
+      const setSql = cols.map((c) => `"${c}" = ${this.pCol(c, payload[c])}`).join(', ');
       let sql = `UPDATE "${this.table}" AS "${BASE_ALIAS}" SET ${setSql}`;
       if (this.whereClauses.length) sql += ` WHERE ${this.whereClauses.join(' AND ')}`;
       if (this.wantsSelect) {
