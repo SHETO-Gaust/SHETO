@@ -13,6 +13,7 @@ export type Relationship = {
 
 let cache: Relationship[] | null = null;
 let pkCache: Map<string, string[]> | null = null;
+let colTypeCache: Map<string, Map<string, string>> | null = null;
 
 async function loadPrimaryKeys(pool: Pool): Promise<Map<string, string[]>> {
   const { rows } = await pool.query(`
@@ -28,6 +29,24 @@ async function loadPrimaryKeys(pool: Pool): Promise<Map<string, string[]>> {
     const list = map.get(r.table_name) ?? [];
     list.push(r.column_name);
     map.set(r.table_name, list);
+  }
+  return map;
+}
+
+async function loadColumnTypes(pool: Pool): Promise<Map<string, Map<string, string>>> {
+  const { rows } = await pool.query(`
+    select table_name, column_name, data_type
+    from information_schema.columns
+    where table_schema = 'public'
+  `);
+  const map = new Map<string, Map<string, string>>();
+  for (const r of rows) {
+    let cols = map.get(r.table_name);
+    if (!cols) {
+      cols = new Map<string, string>();
+      map.set(r.table_name, cols);
+    }
+    cols.set(r.column_name, r.data_type);
   }
   return map;
 }
@@ -63,6 +82,17 @@ async function loadRelationships(pool: Pool): Promise<Relationship[]> {
 export async function preloadSchemaMetadata(pool: Pool): Promise<void> {
   if (!cache) cache = await loadRelationships(pool);
   if (!pkCache) pkCache = await loadPrimaryKeys(pool);
+  if (!colTypeCache) colTypeCache = await loadColumnTypes(pool);
+}
+
+/**
+ * Tipo declarado da coluna no Postgres (data_type do information_schema).
+ * Usado para serializar o valor no formato certo - sem isso um array JS
+ * destinado a uma coluna jsonb vira literal de array do Postgres ("{}"),
+ * que o jsonb aceita como OBJETO vazio e grava dado corrompido.
+ */
+export function getColumnTypeSync(table: string, column: string): string | undefined {
+  return colTypeCache?.get(table)?.get(column);
 }
 
 export function getPrimaryKeySync(table: string): string[] {
