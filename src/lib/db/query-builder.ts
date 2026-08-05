@@ -32,6 +32,11 @@ function serializeParam(val: unknown): unknown {
   return val;
 }
 
+/** Lista crua estilo PostgREST sem nenhum elemento, ex: "()" ou "( )". */
+function isListaVazia(raw: string): boolean {
+  return raw.replace(/[\s()]/g, '') === '';
+}
+
 /**
  * Remove as chaves com valor `undefined` do payload.
  *
@@ -184,8 +189,19 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
   in(col: string, values: unknown[] | string) {
     if (typeof values === 'string') {
       // formato cru estilo postgrest, ex: "(1,2,3)"
+      if (isListaVazia(values)) {
+        this.whereClauses.push('false');
+        return this;
+      }
       this.whereClauses.push(`"${BASE_ALIAS}"."${col}" IN ${values}`);
     } else {
+      // `IN ()` e sintaxe invalida no Postgres; no PostgREST `in.()` e valido
+      // e simplesmente nao casa com nada. Ex.: getSeries() com a escola sem
+      // nenhuma serie cai aqui com uma lista de ids vazia.
+      if (values.length === 0) {
+        this.whereClauses.push('false');
+        return this;
+      }
       const placeholders = values.map((v) => this.p(v));
       this.whereClauses.push(`"${BASE_ALIAS}"."${col}" IN (${placeholders.join(', ')})`);
     }
@@ -194,9 +210,18 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
 
   not(col: string, op: FilterOp | 'in', val: unknown) {
     if (op === 'in') {
+      // Espelho do caso acima: "nao esta em lista vazia" e verdadeiro para todos.
       if (typeof val === 'string') {
+        if (isListaVazia(val)) {
+          this.whereClauses.push('true');
+          return this;
+        }
         this.whereClauses.push(`"${BASE_ALIAS}"."${col}" NOT IN ${val}`);
       } else {
+        if ((val as unknown[]).length === 0) {
+          this.whereClauses.push('true');
+          return this;
+        }
         const placeholders = (val as unknown[]).map((v) => this.p(v));
         this.whereClauses.push(`"${BASE_ALIAS}"."${col}" NOT IN (${placeholders.join(', ')})`);
       }
@@ -320,6 +345,12 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
 
     if (this.mode === 'insert' || this.mode === 'upsert') {
       const rows = (Array.isArray(this.insertPayload) ? this.insertPayload : [this.insertPayload]).map(dropUndefined);
+      // insert([]) e no-op no supabase-js. Sem esta saida antecipada o caso
+      // "nenhuma linha" cairia no DEFAULT VALUES abaixo e gravaria uma linha fantasma.
+      if (Array.isArray(this.insertPayload) && rows.length === 0) {
+        this.params = [];
+        return { sql: `SELECT 1 WHERE false`, wantsReturning: false };
+      }
       const cols = Array.from(new Set(rows.flatMap((r) => Object.keys(r))));
       let sql: string;
       if (cols.length === 0) {
