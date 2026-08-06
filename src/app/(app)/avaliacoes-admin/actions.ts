@@ -155,7 +155,15 @@ export async function consolidarHorario(id: string) {
     const { data: current } = await supabase.from('horarios').select('turno_id').eq('id', id).single();
     if (!current) return { error: 'Horário não encontrado.' };
 
-    await supabase.from('horarios').update({ status: 'em_rascunho' }).eq('turno_id', current.turno_id).eq('status', 'publicado');
+    // Falhar aqui em silêncio deixaria dois horários publicados para o mesmo turno.
+    const { error: revertError } = await supabase.from('horarios')
+        .update({ status: 'em_rascunho' })
+        .eq('turno_id', current.turno_id)
+        .eq('status', 'publicado');
+    if (revertError) {
+        console.error('Erro ao reverter horário publicado do turno:', revertError);
+        return { error: 'Erro ao consolidar: não foi possível reverter a grade publicada anterior deste turno.' };
+    }
     const { error: uError } = await supabase.from('horarios').update({ status: 'publicado' }).eq('id', id);
     if (uError) return { error: 'Erro ao consolidar.' };
 
