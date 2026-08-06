@@ -77,6 +77,14 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
   private upsertOnConflict: string | null = null;
   private deleteCountOpt: 'exact' | null = null;
   private params: unknown[] = [];
+  /**
+   * Erro detectado ao montar a consulta (encadeamento invalido). Guardado em vez
+   * de lancado na hora: os metodos de filtro sao sincronos e ficam FORA do
+   * try/catch do execute(), entao um throw ali viraria excecao nao tratada na
+   * Server Action. Assim o chamador recebe `{ data: null, error }` como em
+   * qualquer outra falha.
+   */
+  private buildError: Error | null = null;
 
   constructor(private pool: Pool, private table: string) {}
 
@@ -118,15 +126,37 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
     }
   }
 
-  /** Resolve os filtros diferidos (alias.coluna vindos de .filter()) em condicoes EXISTS, usando os embeds declarados no select(). */
+  /**
+   * Encaminha um filtro: "coluna" vai direto para o WHERE; "alias.coluna"
+   * (recurso embutido) fica pendente ate o buildSql, quando os embeds do
+   * select() ja sao conhecidos e viram um EXISTS.
+   */
+  private pushFilter(path: string, op: FilterOp, val: unknown) {
+    if (path.includes('.')) {
+      this.deferredFilters.push({ path, op, val });
+    } else {
+      this.whereClauses.push(this.cond(path, op, val));
+    }
+    return this;
+  }
+
+  /** Resolve os filtros diferidos (alias.coluna) em condicoes EXISTS, usando os embeds declarados no select(). */
   private resolveDeferredFilters(fields: SelectField[]): string[] {
     return this.deferredFilters.map(({ path, op, val }) => {
-      const [aliasName, colName] = path.split('.');
-      const embedField = fields.find(
-        (f): f is Extract<SelectField, { kind: 'embed' }> => f.kind === 'embed' && f.alias === aliasName
-      );
-      if (!embedField) {
-        throw new Error(`.filter(): nao encontrei o embed "${aliasName}" no select() de "${this.table}"`);
+      const partes = path.split('.');
+      if (partes.length !== 2) {
+        throw new Error(`filtro em recurso embutido aceita apenas "alias.coluna", recebido: "${path}"`);
+      }
+      const [aliasName, colName] = partes;
+      const isEmbed = (f: SelectField): f is Extract<SelectField, { kind: 'embed' }> => f.kind === 'embed';
+      // O PostgREST aceita tanto o apelido do embed quanto o nome da tabela.
+      // O app usa os dois: refinodehorario filtra por "horario.status" e
+      // gerarhorarios por "horarios.status", ambos sobre horario:horarios!inner.
+      const embedField =
+        fields.find((f) => isEmbed(f) && f.alias === aliasName) ??
+        fields.find((f) => isEmbed(f) && f.table === aliasName);
+      if (!embedField || !isEmbed(embedField)) {
+        throw new Error(`filtro: nao encontrei o embed "${aliasName}" no select() de "${this.table}"`);
       }
       const rel = resolveRelationshipSync(this.table, embedField.table);
       const embAlias = `f_${aliasName}`;
@@ -176,17 +206,28 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
 
   // --- filtros ----------------------------------------------------------
 
-  eq(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'eq', val)); return this; }
-  neq(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'neq', val)); return this; }
-  gt(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'gt', val)); return this; }
-  gte(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'gte', val)); return this; }
-  lt(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'lt', val)); return this; }
-  lte(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'lte', val)); return this; }
-  like(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'like', val)); return this; }
-  ilike(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'ilike', val)); return this; }
-  is(col: string, val: unknown) { this.whereClauses.push(this.cond(col, 'is', val)); return this; }
+  // Todos aceitam "coluna" ou "alias.coluna" (recurso embutido), como no PostgREST.
+  eq(col: string, val: unknown) { return this.pushFilter(col, 'eq', val); }
+  neq(col: string, val: unknown) { return this.pushFilter(col, 'neq', val); }
+  gt(col: string, val: unknown) { return this.pushFilter(col, 'gt', val); }
+  gte(col: string, val: unknown) { return this.pushFilter(col, 'gte', val); }
+  lt(col: string, val: unknown) { return this.pushFilter(col, 'lt', val); }
+  lte(col: string, val: unknown) { return this.pushFilter(col, 'lte', val); }
+  like(col: string, val: unknown) { return this.pushFilter(col, 'like', val); }
+  ilike(col: string, val: unknown) { return this.pushFilter(col, 'ilike', val); }
+  is(col: string, val: unknown) { return this.pushFilter(col, 'is', val); }
+
+  /** Registra uma falha de montagem para ser devolvida como erro no await. */
+  private fail(msg: string) {
+    if (!this.buildError) this.buildError = new Error(msg);
+    return this;
+  }
 
   in(col: string, values: unknown[] | string) {
+    if (col.includes('.')) {
+      // Falha explicita e melhor que gerar SQL quebrado ou, pior, ignorar o filtro.
+      return this.fail(`.in() ainda nao suporta filtro em recurso embutido ("${col}")`);
+    }
     if (typeof values === 'string') {
       // formato cru estilo postgrest, ex: "(1,2,3)"
       if (isListaVazia(values)) {
@@ -209,6 +250,9 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
   }
 
   not(col: string, op: FilterOp | 'in', val: unknown) {
+    if (col.includes('.')) {
+      return this.fail(`.not() ainda nao suporta filtro em recurso embutido ("${col}")`);
+    }
     if (op === 'in') {
       // Espelho do caso acima: "nao esta em lista vazia" e verdadeiro para todos.
       if (typeof val === 'string') {
@@ -232,10 +276,18 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
   }
 
   or(filterStr: string) {
-    const conds = filterStr.split(',').map((part) => {
+    const partes = filterStr.split(',');
+    // Uma virgula dentro do valor (busca do usuario, ex.: "PALMAS, TO") parte a
+    // string no lugar errado e sobra um trecho sem "coluna.operador". Antes isso
+    // virava um OR vazio no SQL ("... OR  OR ..."), erro 42601 na tela.
+    const malformada = partes.find((part) => part.split('.').length < 3 || !part.split('.')[0] || !part.split('.')[1]);
+    if (malformada !== undefined) {
+      return this.fail(`.or(): condicao mal formada "${malformada}" - use o formato "coluna.operador.valor"`);
+    }
+    if (partes.length === 0) return this;
+    const conds = partes.map((part) => {
       const [col, op, ...rest] = part.split('.');
-      const val = rest.join('.');
-      return this.cond(col, op as FilterOp, val);
+      return this.cond(col, op as FilterOp, rest.join('.'));
     });
     this.whereClauses.push(`(${conds.join(' OR ')})`);
     return this;
@@ -243,12 +295,7 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
 
   /** Filtro generico estilo PostgREST. Aceita "coluna" (tabela base) ou "alias.coluna" (tabela embutida no select()). */
   filter(path: string, op: FilterOp, val: unknown) {
-    if (path.includes('.')) {
-      this.deferredFilters.push({ path, op, val });
-    } else {
-      this.whereClauses.push(this.cond(path, op, val));
-    }
-    return this;
+    return this.pushFilter(path, op, val);
   }
 
   /** `referencedTable` so afeta ordenacao de relacoes to-many embutidas; para o caso de uso atual (relacao to-one) e um no-op, igual ao comportamento real do PostgREST. */
@@ -321,7 +368,17 @@ export class QueryBuilder<TData = any[]> implements PromiseLike<PgResult<TData>>
   }
 
   private buildSql(): { sql: string; wantsReturning: boolean } {
+    if (this.buildError) throw this.buildError;
     const fields = parseSelect(this.selectStr ?? '*');
+
+    // Filtro em recurso embutido so e resolvido no SELECT. Deixar passar em
+    // UPDATE/DELETE significaria descartar o filtro em silencio - ou seja,
+    // atualizar/apagar a tabela inteira. Falha alto e cedo.
+    if (this.mode !== 'select' && this.deferredFilters.length > 0) {
+      throw new Error(
+        `filtro em recurso embutido ("${this.deferredFilters[0].path}") nao e suportado em ${this.mode.toUpperCase()}`
+      );
+    }
 
     if (this.mode === 'select') {
       const built = buildSelectColumns(BASE_ALIAS, this.table, fields);
