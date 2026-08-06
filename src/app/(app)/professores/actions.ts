@@ -118,14 +118,33 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
     if (error.code === '23505') {
         return { error: `Este CPF já está cadastrado nesta unidade escolar.` };
     }
-    return { error: 'Não foi possível salvar the professor.' };
+    return { error: 'Não foi possível salvar o professor.' };
   }
 
+  // Delete + insert sem checar erro deixava o professor sem NENHUMA disciplina se
+  // o insert falhasse: ele some da lista de "professores qualificados" na alocação
+  // de turmas, sem nada indicar o motivo.
   if (componente_ids !== undefined) {
-    await supabase.from('professores_componentes').delete().eq('professor_id', professor.id);
+    const { error: delLinksError } = await supabase
+        .from('professores_componentes')
+        .delete()
+        .eq('professor_id', professor.id);
+
+    if (delLinksError) {
+        console.error('Error clearing professor componentes:', delLinksError);
+        return { error: 'O professor foi salvo, mas não foi possível atualizar as disciplinas dele.' };
+    }
+
     if (componente_ids.length > 0) {
         const linksToInsert = componente_ids.map(componente_id => ({ professor_id: professor.id, componente_id }));
-        await supabase.from('professores_componentes').insert(linksToInsert);
+        const { error: insLinksError } = await supabase
+            .from('professores_componentes')
+            .insert(linksToInsert);
+
+        if (insLinksError) {
+            console.error('Error inserting professor componentes:', insLinksError);
+            return { error: 'O professor foi salvo, mas não foi possível gravar as disciplinas dele. Reabra o cadastro e selecione as disciplinas novamente.' };
+        }
     }
   }
 
