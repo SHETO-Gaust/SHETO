@@ -111,7 +111,12 @@ export async function getAuditoriaData({
             .select('*', { count: 'exact' });
 
         if (search) {
-            query = query.or(`escolar.ilike.%${search}%,regional.ilike.%${search}%`);
+            // A vírgula separa as condições do .or(), então uma vírgula digitada na
+            // busca (ex.: "PALMAS, TO") partiria a expressão no lugar errado.
+            const termo = search.replace(/,/g, ' ').trim();
+            if (termo) {
+                query = query.or(`escolar.ilike.%${termo}%,regional.ilike.%${termo}%`);
+            }
         }
 
         if (status && status !== 'all') {
