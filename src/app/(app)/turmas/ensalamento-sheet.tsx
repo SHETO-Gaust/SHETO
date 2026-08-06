@@ -143,10 +143,17 @@ export function AlocacaoProfessoresSheet({ isOpen, setIsOpen, turma, dependencie
   };
   
   const getProfessoresQualificados = (componenteId: string) => {
-    return dependencies.professores.filter(prof => 
+    return dependencies.professores.filter(prof =>
         prof.componentes.some(c => c.id === componenteId) && prof.turnos_ids.includes(turma.serie.turno_id)
     );
   };
+
+  // Sem carga horaria definida na serie nao ha disciplina alguma para alocar. Sem
+  // este aviso o painel abre em branco e parece quebrado.
+  const componentesComCarga = turma.serie.componentes.filter(
+    c => (c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0) > 0
+  );
+  const semCargaHoraria = componentesComCarga.length === 0;
 
   return (
     <>
@@ -159,7 +166,20 @@ export function AlocacaoProfessoresSheet({ isOpen, setIsOpen, turma, dependencie
 
           <Form {...form}>
             <form id="ensalamento-form" onSubmit={form.handleSubmit(onSubmit)} className="flex-1 overflow-y-auto pr-2 -mr-4 space-y-4 py-4">
-              {turma.serie.componentes.filter(c => (c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0) > 0).map((serieComp, index) => {
+              {semCargaHoraria && (
+                <div className="p-6 border-2 border-dashed rounded-lg text-center space-y-2">
+                  <p className="font-semibold">Nenhuma disciplina para alocar</p>
+                  <p className="text-sm text-muted-foreground">
+                    A série <span className="font-medium">{turma.serie.nome}</span> ainda não tem carga horária
+                    definida, então não há disciplinas nesta turma. Defina a carga horária da série (Passo 5) e
+                    volte aqui para alocar os professores.
+                  </p>
+                  <Link href="/serie" className="inline-block font-semibold text-primary hover:underline text-sm">
+                    Ir para Séries
+                  </Link>
+                </div>
+              )}
+              {componentesComCarga.map((serieComp, index) => {
                 const professoresQualificados = getProfessoresQualificados(serieComp.componente_id);
                 const totalAulas = (serieComp.aulas_presenciais || 0) + (serieComp.aulas_nao_presenciais || 0);
 
@@ -202,7 +222,7 @@ export function AlocacaoProfessoresSheet({ isOpen, setIsOpen, turma, dependencie
 
           <SheetFooter className="mt-auto border-t pt-4">
             <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
-            <Button type="submit" form="ensalamento-form" disabled={loading} className="min-w-[100px]">
+            <Button type="submit" form="ensalamento-form" disabled={loading || semCargaHoraria} className="min-w-[100px]">
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
             </Button>
           </SheetFooter>

@@ -93,7 +93,10 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
                         {group.turmas.map(turma => {
                             const totalComponentes = turma.serie.componentes.filter(c => (c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0) > 0).length;
                             const componentesEnsalados = turma.professores.length;
-                            const isCompleto = totalComponentes === componentesEnsalados;
+                            // Serie sem carga horaria nao tem disciplina alguma; 0 de 0 nao e
+                            // "completo", e sim nada para alocar.
+                            const semCarga = totalComponentes === 0;
+                            const isCompleto = !semCarga && totalComponentes === componentesEnsalados;
 
                             return (
                                 <Card key={turma.id} className="flex flex-col">
@@ -113,7 +116,11 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
                                     <CardContent className="flex-grow space-y-3">
                                         <div>
                                             <p className="text-sm font-medium text-muted-foreground">
-                                                {isCompleto ? "Alocação completa" : `Alocação: ${componentesEnsalados} de ${totalComponentes} disciplinas`}
+                                                {semCarga
+                                                    ? "Série sem carga horária definida"
+                                                    : isCompleto
+                                                        ? "Alocação completa"
+                                                        : `Alocação: ${componentesEnsalados} de ${totalComponentes} disciplinas`}
                                             </p>
                                         </div>
                                     </CardContent>
