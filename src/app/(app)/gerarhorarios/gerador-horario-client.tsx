@@ -93,7 +93,22 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     const [isProcessing, setIsProcessing] = useState(false);
     const [currentAttempt, setCurrentAttempt] = useState(0);
     const MAX_ATTEMPTS = 100000;
-    const BATCH_SIZE = 500;
+    /**
+     * Tentativas por chamada ao servidor.
+     *
+     * Era 500, o que dava ~56s de processamento por requisição. O proxy da SEDUC
+     * corta em 60s: o lote que passou de 62s teve a conexão derrubada, o cliente
+     * recebeu a página de erro do proxy no lugar da resposta da Server Action e
+     * a geração morreu com "An unexpected response was received from the server"
+     * — depois de 13 minutos de trabalho jogados fora.
+     *
+     * Com 100, cada requisição fecha em ~11s, bem longe de qualquer gateway. O
+     * total de tentativas não muda; muda só o tamanho do pedaço enviado por vez
+     * (e a barra de progresso passa a andar 5x mais).
+     */
+    const BATCH_SIZE = 100;
+    /** Uma falha de rede num lote não pode custar a geração inteira. */
+    const MAX_TENTATIVAS_REDE = 3;
     const [isBaixandoTodos, setIsBaixandoTodos] = useState(false);
     const [baixarProgresso, setBaixarProgresso] = useState<{ atual: number; total: number } | null>(null);
 
@@ -192,14 +207,38 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
                 while (attempts < MAX_ATTEMPTS && !foundSolution) {
                     const progress = attempts / MAX_ATTEMPTS;
-                    const result = await gerarLoteHorario(
-                        escolaId,
-                        turno.id,
-                        configGerminacao,
-                        BATCH_SIZE,
-                        progress,
-                        permitirMesmoProfDisciplinasMesmoDia
-                    ) as any;
+
+                    // Um lote pode falhar por motivo transitório (proxy cortando a
+                    // conexão, rede da escola oscilando). Perder a geração inteira
+                    // por causa disso é o que já custou 13 minutos de processamento:
+                    // aqui o lote é refeito antes de desistir.
+                    let result: any;
+                    let ultimoErroDeRede: unknown = null;
+                    for (let t = 1; t <= MAX_TENTATIVAS_REDE; t++) {
+                        try {
+                            result = await gerarLoteHorario(
+                                escolaId,
+                                turno.id,
+                                configGerminacao,
+                                BATCH_SIZE,
+                                progress,
+                                permitirMesmoProfDisciplinasMesmoDia
+                            ) as any;
+                            ultimoErroDeRede = null;
+                            break;
+                        } catch (erroRede) {
+                            ultimoErroDeRede = erroRede;
+                            console.error(`Lote falhou (tentativa ${t}/${MAX_TENTATIVAS_REDE}):`, erroRede);
+                            if (t < MAX_TENTATIVAS_REDE) {
+                                setProcessingTurnoLabel(
+                                    `${isMulti ? turno.nome + ' — ' : ''}reconectando (${t}/${MAX_TENTATIVAS_REDE})`
+                                );
+                                await new Promise(r => setTimeout(r, 2000 * t));
+                            }
+                        }
+                    }
+                    if (ultimoErroDeRede) throw ultimoErroDeRede;
+                    setProcessingTurnoLabel(isMulti ? turno.nome : '');
 
                     if (result.error && !result.aulas) {
                         setGenError(result.error);
@@ -255,7 +294,16 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             await loadHorarios(selectedTurnoId);
         } catch (err) {
             console.error(err);
-            toast({ title: 'Erro Crítico', description: 'Ocorreu um erro no servidor durante o processamento.', variant: 'destructive' });
+            // A mensagem real precisa aparecer na tela: a geração roda por
+            // centenas de lotes e, sem ela, uma falha no meio do processo é
+            // indistinguível de qualquer outra — sobra "deu erro no servidor".
+            const detalhe = err instanceof Error ? err.message : String(err);
+            setGenError(`Erro no servidor durante o processamento: ${detalhe}`);
+            toast({
+                title: 'Erro Crítico',
+                description: detalhe,
+                variant: 'destructive',
+            });
         } finally {
             setIsProcessing(false);
             setProcessingTurnoLabel('');

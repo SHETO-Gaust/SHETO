@@ -1,0 +1,27 @@
+{
+  // Compila o worker de geração de horário à parte do Next.
+  //
+  // O Next bundla o código do servidor em .next/server/chunks, de onde não dá
+  // para apontar um caminho estável para `new Worker(...)`. Então o worker vira
+  // um arquivo CommonJS avulso em workers/, carregado por caminho absoluto.
+  //
+  // Não usa o tsconfig.json principal porque aquele tem "noEmit": true,
+  // "module": "esnext" e "jsx": "preserve" — nenhum deles serve aqui.
+  //
+  // Só funciona sem bundler porque timetabling.ts importa exclusivamente tipos.
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "noEmit": false,
+    "sourceMap": true,
+    "rootDir": "src/lib",
+    "outDir": "workers"
+  },
+  "include": ["src/lib/timetabling.worker.ts", "src/lib/timetabling.ts", "src/lib/types.ts"]
+}

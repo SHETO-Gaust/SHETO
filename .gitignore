@@ -53,3 +53,12 @@ __pycache__/
 
 # dumps do banco gerados localmente - contem hashes de senha e dados pessoais
 /db-dump/
+/sheto-dump.sql
+
+# artefato de build do worker de geracao de horario (npm run build:worker)
+/workers/
+
+# log do motor de geracao de horario (src/lib/log-geracao.ts) - so faz sentido
+# na maquina que rodou a geracao, e cita nome de professor e de turma
+/log.txt
+/log.txt.1
