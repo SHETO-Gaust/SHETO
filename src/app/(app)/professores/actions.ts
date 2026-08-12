@@ -6,6 +6,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server';
 import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestricao, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { sendRestrictionRequestEmail, sendPreferenciasConfirmacaoEmail } from '@/lib/mail';
 import { randomBytes } from 'crypto';
+import { lerProfessores } from '@/lib/dados/leitura';
 import { validateCPF } from '@/lib/utils';
 import { requireEscolaDaSolicitacao, requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
@@ -17,54 +18,7 @@ export async function getProfessores(escolaId: string): Promise<{
   error?: string;
 }> {
     await requireEscolaEModulo(escolaId, 'professores');
-  const supabase = await createClient();
-
-  try {
-    const { data: professores, error: profError } = await supabase
-      .from('professores')
-      .select('*')
-      .eq('escola_id', escolaId)
-      .order('nome_completo', { ascending: true });
-
-    if (profError) throw profError;
-    if (!professores || professores.length === 0) return { data: [] };
-
-    const professorIds = professores.map(p => p.id);
-    
-    const [
-        { data: links },
-        { data: componentes },
-        { data: turnos },
-        { data: solicitacoes }
-    ] = await Promise.all([
-        supabase.from('professores_componentes').select('professor_id, componente_id').in('professor_id', professorIds),
-        supabase.from('componentes_curriculares').select('id, nome, sigla').eq('escola_id', escolaId),
-        supabase.from('turnos').select('*').eq('escola_id', escolaId),
-        supabase.from('solicitacoes_restricoes').select('*').in('professor_id', professorIds).neq('status', 'concluido').order('created_at', { ascending: false })
-    ]);
-
-    const componentesMap = new Map(componentes?.map(c => [c.id, c]) || []);
-    const turnosMap = new Map(turnos?.map(t => [t.id, t]) || []);
-
-    const professoresComDados: ProfessorComDados[] = professores.map(prof => {
-      const professorComponenteIds = links?.filter(l => l.professor_id === prof.id).map(l => l.componente_id) || [];
-      const professorComponentes = professorComponenteIds.map(id => componentesMap.get(id)).filter((c): c is Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'> => !!c);
-      const professorTurnos = ((prof.turnos_ids || []) as string[]).map(id => turnosMap.get(id)).filter((t): t is Turno => !!t);
-      const sol = solicitacoes?.find(s => s.professor_id === prof.id) || null;
-
-      return {
-        ...prof,
-        componentes: professorComponentes,
-        turnos: professorTurnos,
-        solicitacao_pendente: sol as SolicitacaoRestricao
-      };
-    });
-
-    return { data: professoresComDados };
-  } catch (error: any) {
-    console.error('Error fetching professors data:', error);
-    return { error: 'Não foi possível buscar os dados dos professores.' };
-  }
+    return lerProfessores(escolaId);
 }
 
 /* -------------------------------------------------------------------------- */

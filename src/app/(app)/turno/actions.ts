@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
+import { lerTurnos } from '@/lib/dados/leitura';
 import type { Turno, HorarioAula } from '@/lib/types';
 import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
@@ -21,16 +22,8 @@ export async function getTurnos(
     await requireEscolaEModulo(escolaId, 'turno');
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from('turnos')
-    .select('*')
-    .eq('escola_id', escolaId)
-    .order('nome', { ascending: true });
-
-  if (error) {
-    console.error('Error fetching turnos:', error);
-    return { error: 'Não foi possível buscar os turnos.' };
-  }
+  const { data, error: erroLeitura } = await lerTurnos(escolaId);
+  if (erroLeitura) return { error: erroLeitura };
 
   if (!data || data.length === 0) {
     const defaultTurnos = [

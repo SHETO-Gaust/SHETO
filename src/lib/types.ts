@@ -103,15 +103,22 @@ export type ProfessorComDados = Professor & {
     solicitacao_pendente?: SolicitacaoRestricao | null;
 };
 
-export type SerieAulaFixa = {
+/**
+ * Aula travada em dia/horário fixo, por turma.
+ *
+ * Era por série (`series_aulas_fixas`), o que obrigava todas as turmas ao mesmo
+ * slot. A "aula coletiva" (`compartilhada` + `professor_responsavel_id`) saiu
+ * junto na migração: cada turma tem a sua aula, com o professor que ela já tem
+ * alocado. As colunas homônimas em `horario_aulas` continuam existindo para as
+ * grades publicadas antes disso.
+ */
+export type TurmaAulaFixa = {
   id: string;
-  serie_id: string;
+  turma_id: string;
   componente_id: string;
   tipo_aula: 'presencial' | 'nao_presencial';
   dia_semana: string;
   aula_index: number;
-  compartilhada: boolean;
-  professor_responsavel_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -145,7 +152,6 @@ export type SerieComDados = Serie & {
   total_aulas_presenciais_distribuidas: number;
   total_aulas_nao_presenciais_distribuidas: number;
   turmas_count: number;
-  aulas_fixas: SerieAulaFixa[];
 };
 
 
@@ -174,6 +180,7 @@ export type TurmaComDados = Turma & {
     professores: (TurmaProfessor & {
         professor: Pick<Professor, 'id' | 'nome_horario'>;
     })[];
+    aulas_fixas: TurmaAulaFixa[];
 };
 
 
@@ -199,6 +206,8 @@ export type Horario = {
   nome: string;
   status: 'em_rascunho' | 'publicado' | 'pre_producao';
   created_at: string;
+  /** Aulas que o gerador não conseguiu alocar. null/ausente = grade completa. */
+  pendencias?: PendenciaDetalhada[] | null;
 };
 
 export type HorarioAulaGerada = {
@@ -266,7 +275,29 @@ export type PendenciaDetalhada = {
     motivo_real: string;
 };
 
+/**
+ * Veredito sobre a existência de solução.
+ *
+ * `impossivel` é uma prova: com estes dados nenhuma arrumação funcionaria, e
+ * gerar de novo não adianta. `indeterminado` significa que a busca não achou
+ * solução e as verificações também não acharam prova de que não exista — pode
+ * haver uma, difícil de encontrar. A tela precisa distinguir os dois: mandar o
+ * usuário desfazer restrições quando o problema era só a busca custa caro.
+ */
+export type CertificadoInviabilidade = {
+  veredito: 'impossivel' | 'indeterminado';
+  causas: {
+    tipo: 'carga_turma' | 'carga_professor' | 'horario_sem_cobertura';
+    titulo: string;
+    detalhe: string;
+    correcao: string;
+  }[];
+  observacoes: string[];
+};
+
 export type DiagnosticoFalha = {
+  /** Prova de inviabilidade, quando existe. Ausente em diagnósticos antigos. */
+  certificado?: CertificadoInviabilidade;
   causasIdentificadas: {
     tipo: 'excess_ban' | 'excess_folga' | 'choque_turno_oposto' | 'choque_turno_local' | 'falta_slot_turma' | 'geminacao_impossivel' | 'restricao_serie' | 'sem_professor' | 'heuristica_busca';
     descricao: string;

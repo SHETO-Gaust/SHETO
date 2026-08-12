@@ -1,17 +1,23 @@
-
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { Turno, Horario, HorarioCompleto, ConfiguracaoGerminacao } from '@/lib/types';
-// A geração roda numa worker thread: chamada direta, ela congela o event loop
-// do processo inteiro e derruba o sistema para todos os outros usuários.
-import { gerarHorarioEmWorker } from '@/lib/timetabling-pool';
-import { registrarLog, registrarLogs } from '@/lib/log-geracao';
-import { getTurmas } from '../turmas/actions';
-import { getProfessores } from '../professores/actions';
-import { getTurnos } from '../turno/actions';
+import { registrarLog } from '@/lib/log-geracao';
 import { requireEscolaDoRecurso, requireEscolaDosRecursos, requireEscolaEModulo } from '@/lib/auth/guards';
+import { inepDaEscola, invalidarCacheGeracao, mensagemDeErro } from '@/lib/geracao/dados';
+import { salvarGrade } from '@/lib/geracao/salvar-grade';
+import { ORCAMENTO_PADRAO, dispararJob } from '@/lib/geracao/orquestrador';
+import {
+    GeracaoEmAndamentoError,
+    criarJob,
+    lerGradeParcial,
+    lerJob,
+    lerJobRelevante,
+    limparGradeParcial,
+    solicitarCancelamento,
+    type GeracaoJob,
+} from '@/lib/geracao/job-store';
 
 export async function getTurnosAtivos(escolaId: string): Promise<{ data?: Turno[], error?: string }> {
     await requireEscolaEModulo(escolaId, 'horarios');
@@ -99,311 +105,166 @@ export async function getHorariosSalvosTodasTurnos(escolaId: string): Promise<{ 
     };
 }
 
-/**
- * Mensagem legível de uma exceção.
- *
- * O cliente do gerador roda ~200 lotes em sequência; quando um deles estoura,
- * o Next converte a exceção da Server Action num erro opaco e o único rastro
- * que sobra na tela é "erro no servidor". Devolver a mensagem real como dado
- * (`{ error }`) é o que torna a falha diagnosticável — sem ela, cada incidente
- * vira tentativa e erro.
- */
-function mensagemDeErro(err: unknown): string {
-    if (err instanceof Error) return err.message;
-    return String(err);
-}
+// ─────────────────────────────────────────────────────────────────────────────
+//  GERAÇÃO EM SEGUNDO PLANO
+//
+//  Antes daqui saía `gerarLoteHorario`: a tela chamava a action uma vez por
+//  lote de 100 tentativas, centenas de vezes seguidas, e o laço vivia no
+//  navegador. Fechar a aba matava a geração e cada lote era uma requisição
+//  longa exposta ao corte de 60s do proxy da SEDUC.
+//
+//  Agora a tela só dispara o job, pergunta o andamento e pede a parada — quem
+//  executa é o orquestrador, no servidor (`src/lib/geracao/orquestrador.ts`).
+// ─────────────────────────────────────────────────────────────────────────────
 
-type DadosDaGeracao = {
-    turnoData: Turno;
-    turmasDoTurno: any[];
-    allProfessores: any[];
-    allTurnos: Turno[];
-    ocupacoes: any[];
-    aulasFixas: any[];
+/** O que a tela precisa saber sobre uma geração. Espelha a linha de `geracao_jobs`. */
+export type EstadoGeracao = {
+    id: string;
+    status: GeracaoJob['status'];
+    emAndamento: boolean;
+    cancelamentoSolicitado: boolean;
+    turnoAtualNome: string | null;
+    turnosConcluidos: number;
+    totalTurnos: number;
+    tentativas: number;
+    orcamento: number;
+    horariosGerados: string[];
+    erro: string | null;
+    diagnostico: any | null;
+    /** Há uma grade incompleta guardada que o usuário pode optar por salvar. */
+    temGradeParcial: boolean;
+    turnoParcialNome: string | null;
+    criadoEm: string;
 };
 
-/**
- * INEP da escola, para prefixar as linhas do log.txt.
- *
- * `escolas.id` é a chave interna (bigint) e não diz nada a quem lê o log; o INEP
- * é o código que a SEDUC usa para se referir à unidade. O mapa vive no processo
- * porque isso nunca muda e a geração pergunta uma vez por lote.
- */
-declare global {
-    // eslint-disable-next-line no-var
-    var __shetoInepPorEscola: Map<string, string> | undefined;
-}
-
-/**
- * Decide se o diagnóstico do motor entra no log.txt neste lote.
- *
- * O diagnóstico é caro em linhas (uma seção por bloco pendente) e repete-se
- * igual lote após lote — a geração de 10/08 travou em exatamente 384 aulas nas
- * 14 tentativas seguidas. Gravar as ~200 linhas mil vezes só consome a rotação
- * do arquivo e esconde o que interessa. Por padrão registra-se o primeiro lote
- * da execução, que é onde a causa aparece; `SHETO_LOG_MOTOR_TODOS_LOTES=1`
- * força o registro de todos quando se está caçando algo que muda com a
- * progressão do relaxamento de restrições.
- */
-function deveRegistrarDiagnostico(progress: number): boolean {
-    if (process.env.SHETO_LOG_MOTOR_TODOS_LOTES === '1') return true;
-    return progress === 0;
-}
-
-async function inepDaEscola(escolaId: string): Promise<string> {
-    if (!global.__shetoInepPorEscola) global.__shetoInepPorEscola = new Map();
-    const cache = global.__shetoInepPorEscola;
-
-    const guardado = cache.get(String(escolaId));
-    if (guardado) return guardado;
-
-    try {
-        const supabase = await createClient();
-        const { data } = await supabase.from('escolas').select('inep').eq('id', escolaId).maybeSingle();
-        // Sem INEP cadastrado, o id ainda identifica a unidade — melhor que nada.
-        const inep = data?.inep ? String(data.inep) : `escola-${escolaId}`;
-        cache.set(String(escolaId), inep);
-        return inep;
-    } catch {
-        return `escola-${escolaId}`;
-    }
-}
-
-/**
- * Cache do conjunto de dados de uma geração.
- *
- * O cliente chama a action uma vez por LOTE (até 200 vezes seguidas por turno)
- * e cada chamada relia turmas, professores, turnos, aulas fixas e a varredura
- * inteira de `horario_aulas` — a consulta mais cara do sistema, que só cresce
- * com o histórico de grades. Como nada disso muda durante a geração, relê-la a
- * cada lote é puro desperdício e é o que faz um lote no meio da série estourar
- * o `statement_timeout` do Postgres (ou o timeout do proxy) sem motivo.
- *
- * TTL curto e invalidação explícita nas mutações: entre um turno e o seguinte a
- * chave muda (inclui o turnoId), então a geração multi-turno continua enxergando
- * a pré-produção que o turno anterior acabou de gravar.
- */
-const CACHE_TTL_MS = Number(process.env.SHETO_GERACAO_CACHE_MS) || 30_000;
-
-declare global {
-    // eslint-disable-next-line no-var
-    var __shetoCacheGeracao: Map<string, { expiraEm: number; dados: DadosDaGeracao }> | undefined;
-}
-
-function cacheGeracao() {
-    if (!global.__shetoCacheGeracao) global.__shetoCacheGeracao = new Map();
-    return global.__shetoCacheGeracao;
-}
-
-/** Chamado por toda mutação de horário: os dados em cache podem ter ficado velhos. */
-function invalidarCacheGeracao() {
-    global.__shetoCacheGeracao?.clear();
-}
-
-/**
- * Carrega tudo que o motor precisa. Lança em qualquer falha de leitura — um
- * erro engolido aqui gerava uma grade "sem conflito nenhum" só porque a
- * consulta de ocupações voltou vazia, e o choque só aparecia depois de publicado.
- */
-async function carregarDadosDaGeracao(
-    escolaId: string,
-    turnoId: string,
-    statusOcupacao: string[]
-): Promise<DadosDaGeracao> {
-    const chave = `${escolaId}|${turnoId}|${statusOcupacao.join(',')}`;
-    const emCache = cacheGeracao().get(chave);
-    if (emCache && emCache.expiraEm > Date.now()) return emCache.dados;
-
-    const supabase = await createClient();
-
-    const [
-        { data: allTurmas, error: turmasError },
-        { data: allProfessores, error: professoresError },
-        { data: allTurnos, error: turnosError },
-        turnoResult
-    ] = await Promise.all([
-        getTurmas(escolaId),
-        getProfessores(escolaId),
-        getTurnos(escolaId),
-        supabase.from('turnos').select('*').eq('id', turnoId).maybeSingle()
-    ]);
-
-    if (turmasError) throw new Error(`Falha ao ler as turmas: ${turmasError}`);
-    if (professoresError) throw new Error(`Falha ao ler os professores: ${professoresError}`);
-    if (turnosError) throw new Error(`Falha ao ler os turnos: ${turnosError}`);
-    if (turnoResult.error) throw new Error(`Falha ao ler o turno: ${turnoResult.error.message}`);
-    if (!turnoResult.data) throw new Error('Turno não encontrado.');
-
-    const turnoData = turnoResult.data as Turno;
-    const turmasDoTurno = allTurmas?.filter(t => t.serie?.turno_id === turnoId) || [];
-
-    if (turmasDoTurno.length === 0) {
-        throw new Error(`Nenhuma turma vinculada ao turno "${turnoData.nome}". Verifique o Passo 6.`);
-    }
-
-    // Ocupações para detecção de conflitos (professor identificado por CPF global,
-    // porque o mesmo docente pode estar cadastrado em mais de uma unidade).
-    const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
-    const allTeacherIds = allProfessores?.map(p => p.id) || [];
-    const { data: globalProfessors, error: globalProfError } =
-        await supabase.from('professores').select('id').in('cpf', cpfs);
-    if (globalProfError) throw new Error(`Falha ao ler os professores de outras unidades: ${globalProfError.message}`);
-    const professorIdsGlobais = Array.from(new Set([...allTeacherIds, ...(globalProfessors?.map(p => p.id) || [])]));
-
-    const aulaSelectFields = `
-            id, professor_id, dia_semana, aula_index, tipo, horario_id, turno_id,
-            professor:professores(nome_horario, restricoes, cpf),
-            turma:turmas(id, nome),
-            componente:componentes_curriculares(id, nome),
-            horario:horarios!inner(id, status, turno_id, turno:turnos(*))
-        `;
-
-    // Uma consulta por status: o .in() sobre coluna de tabela relacionada (!inner)
-    // não é suportado pelo query-builder e devolveria vazio em silêncio.
-    //
-    // 'pre_producao' importa na geração "Todos os Turnos": cada turno é salvo
-    // como pré-produção antes de o próximo ser gerado, e é isso que impede o
-    // segundo turno de realocar professores nos slots NP que o primeiro reservou.
-    const resultados = await Promise.all(
-        statusOcupacao.map(status =>
-            supabase
-                .from('horario_aulas')
-                .select(aulaSelectFields)
-                .in('professor_id', professorIdsGlobais)
-                .eq('horarios.status', status)
-        )
-    );
-
-    const ocupacoesBrutas: any[] = [];
-    resultados.forEach((r, i) => {
-        if (r.error) throw new Error(`Falha ao ler as grades com status "${statusOcupacao[i]}": ${r.error.message}`);
-        ocupacoesBrutas.push(...(r.data || []));
-    });
-
-    // ── FILTRO ANTI-FALSO-CONFLITO ──────────────────────────────────────────────
-    // Aulas do próprio turno sendo gerado saem do conjunto: versões antigas dele
-    // marcariam os professores como "globalmente ocupados" nos mesmos slots que a
-    // nova grade precisa usar, produzindo uma falha que não existe.
-    const ocupacoes = ocupacoesBrutas.filter(o => (o.horario as any)?.turno_id !== turnoId);
-
-    // Aulas fixas das séries presentes neste turno
-    const serieIds = [...new Set(turmasDoTurno.map((t: any) => t.serie?.id).filter(Boolean))];
-    let aulasFixas: any[] = [];
-    if (serieIds.length > 0) {
-        const { data: fixas, error: fixasError } = await supabase
-            .from('series_aulas_fixas')
-            .select('*')
-            .in('serie_id', serieIds);
-        if (fixasError) throw new Error(`Falha ao ler as aulas fixas: ${fixasError.message}`);
-        aulasFixas = fixas || [];
-    }
-
-    // ── LOG DE DIAGNÓSTICO ───────────────────────────────────────────────────
-    if (process.env.NODE_ENV !== 'production' || process.env.TIMETABLE_DEBUG === '1') {
-        console.log(`[GERADOR DEBUG] turnoId=${turnoId} status=${statusOcupacao.join('+')}`);
-        console.log(`[GERADOR DEBUG] ocupações globais brutas: ${ocupacoesBrutas.length}`);
-        console.log(`[GERADOR DEBUG] removidas por ser do próprio turno: ${ocupacoesBrutas.length - ocupacoes.length}`);
-        console.log(`[GERADOR DEBUG] ocupações globais passadas ao motor: ${ocupacoes.length}`);
-
-        const porProf = new Map<string, number>();
-        ocupacoes.forEach(o => {
-            const nome = (o.professor as any)?.nome_horario || o.professor_id;
-            porProf.set(nome, (porProf.get(nome) || 0) + 1);
-        });
-        if (porProf.size > 0) {
-            console.log(`[GERADOR DEBUG] professores com ocupações externas (top 5):`);
-            [...porProf.entries()]
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 5)
-                .forEach(([nome, count]) => console.log(`  - ${nome}: ${count} slots ocupados em outros turnos`));
-        }
-    }
-
-    const dados: DadosDaGeracao = {
-        turnoData,
-        turmasDoTurno,
-        allProfessores: allProfessores || [],
-        allTurnos: allTurnos || [],
-        ocupacoes,
-        aulasFixas,
+function paraEstado(job: GeracaoJob): EstadoGeracao {
+    return {
+        id: job.id,
+        status: job.status,
+        emAndamento: job.status === 'executando',
+        cancelamentoSolicitado: job.cancelamento_solicitado,
+        turnoAtualNome: job.turno_atual_nome,
+        turnosConcluidos: job.turnos_concluidos,
+        totalTurnos: job.turno_ids.length,
+        tentativas: job.tentativas,
+        orcamento: job.orcamento,
+        horariosGerados: job.horarios_gerados ?? [],
+        erro: job.erro,
+        diagnostico: job.diagnostico,
+        temGradeParcial: job.tem_grade_parcial === true,
+        turnoParcialNome: job.turno_parcial_nome,
+        criadoEm: job.created_at,
     };
-    cacheGeracao().set(chave, { expiraEm: Date.now() + CACHE_TTL_MS, dados });
-    return dados;
 }
 
 /**
- * Executa um lote de tentativas de geração de horário.
+ * Inicia a geração e retorna assim que o job está registrado — o processamento
+ * segue no servidor depois que esta requisição termina.
  */
-export async function gerarLoteHorario(
+export async function iniciarGeracao(
     escolaId: string,
-    turnoId: string,
+    turnoIds: string[],
+    nome: string,
     configGerminacao: ConfiguracaoGerminacao[],
-    loteSize: number = 500,
-    progress: number = 0,
     permitirMesmoProfDisciplinasMesmoDia: boolean = false
-) {
-    await requireEscolaEModulo(escolaId, 'horarios');
-    const inep = await inepDaEscola(escolaId);
+): Promise<{ data?: EstadoGeracao; error?: string }> {
+    const profile = await requireEscolaEModulo(escolaId, 'horarios');
+
+    if (turnoIds.length === 0) return { error: 'Nenhum turno selecionado para a geração.' };
+    if (!nome.trim()) return { error: 'O nome do horário é obrigatório.' };
 
     try {
-        const dados = await carregarDadosDaGeracao(escolaId, turnoId, ['publicado', 'pre_producao']);
-
-        registrarLog(
-            inep,
-            `LOTE INICIADO | turno="${dados.turnoData.nome}" (${turnoId}) | tentativas=${loteSize} | ` +
-                `progresso=${(progress * 100).toFixed(1)}% | turmas=${dados.turmasDoTurno.length} | ` +
-                `professores=${dados.allProfessores.length} | ocupacoes_externas=${dados.ocupacoes.length} | ` +
-                `aulas_fixas=${dados.aulasFixas.length} | geminacao=${configGerminacao.filter(c => c.geminar).length} disciplina(s) | ` +
-                `mesmo_prof_disciplinas_mesmo_dia=${permitirMesmoProfDisciplinasMesmoDia ? 'permitido' : 'bloqueado'}`
-        );
-
-        const inicio = Date.now();
-        const result = await gerarHorarioEmWorker(
-            [
-                dados.turnoData as any,
-                dados.turmasDoTurno,
-                dados.allProfessores,
-                dados.allTurnos,
+        const job = await criarJob({
+            escolaId,
+            criadoPor: profile?.id ?? null,
+            turnoIds,
+            config: {
+                nome: nome.trim(),
                 configGerminacao,
-                false,
-                dados.ocupacoes,
-                loteSize,
-                progress,
-                dados.aulasFixas,
                 permitirMesmoProfDisciplinasMesmoDia,
-            ],
-            // Tudo que o motor imprimiu no lote, inclusive o diagnóstico de falha.
-            deveRegistrarDiagnostico(progress) ? (linhas) => registrarLogs(inep, linhas) : undefined
-        );
+            },
+            orcamento: ORCAMENTO_PADRAO,
+        });
 
-        const duracao = Date.now() - inicio;
-        registrarLog(
-            inep,
-            result.success
-                ? `LOTE OK | turno="${dados.turnoData.nome}" | grade fechada com ${result.aulas.length} aulas ` +
-                  `em ${result.attemptsMade} tentativa(s) | ${duracao}ms`
-                : `LOTE SEM SOLUCAO | turno="${dados.turnoData.nome}" | ${result.attemptsMade} tentativa(s) | ` +
-                  `${result.aulas.length} aulas alocadas | ${duracao}ms | ${result.error ?? 'sem detalhe'}`
-        );
+        // Fora de qualquer `await`: a requisição responde agora e o job continua.
+        dispararJob(job);
 
-        if (process.env.NODE_ENV !== 'production' || process.env.TIMETABLE_DEBUG === '1') {
-            console.log(`[GERADOR] lote de ${loteSize} tentativas em ${duracao}ms (turno ${turnoId})`);
-        }
-
-        return result;
+        revalidatePath('/gerarhorarios');
+        return { data: paraEstado(job) };
     } catch (err) {
-        // Sem este log a causa se perde: o Next redige a exceção antes de ela
-        // chegar ao navegador e a tela mostra apenas um aviso genérico.
-        console.error(`[GERADOR] falha no lote (escola=${escolaId} turno=${turnoId} progress=${progress}):`, err);
-        registrarLog(
-            inep,
-            `LOTE FALHOU | turno=${turnoId} | progresso=${(progress * 100).toFixed(1)}% | ` +
-                `${mensagemDeErro(err)}\n${err instanceof Error && err.stack ? err.stack : ''}`
-        );
+        if (err instanceof GeracaoEmAndamentoError) return { error: err.message };
+        const inep = await inepDaEscola(escolaId);
+        console.error(`[GERADOR] falha ao iniciar a geração (escola=${escolaId}):`, err);
+        registrarLog(inep, `JOB NAO INICIADO | escola=${escolaId} | ${mensagemDeErro(err)}`);
         return { error: mensagemDeErro(err) };
     }
 }
 
+/**
+ * Estado da geração desta unidade: a que está rodando ou, na falta dela, o
+ * último desfecho. É o que faz a tela reencontrar uma geração depois de o
+ * usuário fechar a aba, e o que mantém o botão bloqueado enquanto ela corre.
+ */
+export async function getEstadoGeracao(escolaId: string): Promise<{ data?: EstadoGeracao | null; error?: string }> {
+    await requireEscolaEModulo(escolaId, 'horarios');
+    try {
+        const job = await lerJobRelevante(escolaId);
+        return { data: job ? paraEstado(job) : null };
+    } catch (err) {
+        console.error(`[GERADOR] falha ao ler o estado da geração (escola=${escolaId}):`, err);
+        return { error: mensagemDeErro(err) };
+    }
+}
+
+/**
+ * Pede a parada. O orquestrador só reage na virada da rodada (≤ ~11s), então a
+ * tela mostra "interrompendo" até o status mudar de fato.
+ */
+export async function cancelarGeracao(jobId: string): Promise<{ error?: string }> {
+    const job = await lerJob(jobId);
+    if (!job) return { error: 'Geração não encontrada.' };
+
+    await requireEscolaEModulo(job.escola_id, 'horarios');
+
+    if (job.status !== 'executando') return { error: 'Esta geração já foi encerrada.' };
+
+    await solicitarCancelamento(jobId);
+    registrarLog(await inepDaEscola(job.escola_id), `CANCELAMENTO PEDIDO | job=${jobId}`);
+    return {};
+}
+
+/**
+ * Salva a melhor grade incompleta que a geração encontrou.
+ *
+ * Antes essas aulas voltavam junto da resposta do lote e viviam no estado do
+ * componente; com o laço no servidor, elas ficam guardadas no job até o usuário
+ * decidir — é o que mantém o "Forçar Salvamento" funcionando depois de fechar
+ * e reabrir a página.
+ */
+export async function salvarGradeParcial(jobId: string, nome: string) {
+    const parcial = await lerGradeParcial(jobId);
+    if (!parcial) return { error: 'Não há grade parcial guardada para esta geração.' };
+
+    await requireEscolaEModulo(parcial.escolaId, 'horarios');
+    const inep = await inepDaEscola(parcial.escolaId);
+
+    const resultado = await salvarGrade(
+        parcial.escolaId, parcial.turnoId, `${nome} (Com Pendências)`, parcial.aulas, 'em_rascunho', inep,
+        parcial.pendencias
+    );
+    if (resultado.error) return { error: resultado.error };
+
+    await limparGradeParcial(jobId);
+    revalidatePath('/gerarhorarios');
+    return { data: resultado.data };
+}
+
+/**
+ * Grava uma grade montada fora do fluxo de geração.
+ *
+ * O miolo vive em `@/lib/geracao/salvar-grade` porque o orquestrador também
+ * precisa dele, e lá não existe sessão para o guard nem rota para revalidar.
+ */
 export async function salvarGradeFinal(
     escolaId: string,
     turnoId: string,
@@ -412,150 +273,15 @@ export async function salvarGradeFinal(
     status: 'em_rascunho' | 'pre_producao' = 'em_rascunho'
 ) {
     await requireEscolaEModulo(escolaId, 'horarios');
-    const supabase = await createClient();
     const inep = await inepDaEscola(escolaId);
 
-    const { data: novoHorario, error: hError } = await supabase
-        .from('horarios')
-        .insert({
-            escola_id: escolaId,
-            turno_id: turnoId,
-            nome: nome,
-            status,
-        })
-        .select().single();
+    const resultado = await salvarGrade(escolaId, turnoId, nome, aulas, status, inep);
+    if (resultado.error) return { error: resultado.error };
 
-    if (hError) {
-        registrarLog(inep, `SALVAR FALHOU | "${nome}" | turno=${turnoId} | ${hError.message}`);
-        return { error: 'Falha ao criar registro do horário.' };
-    }
-
-    if (aulas.length > 0) {
-        const uniqueMap = new Map();
-        const aulasToInsert = [];
-
-        for (const a of aulas) {
-            // Chave de unicidade sincronizada com o NOVO índice do banco
-            const key = `${novoHorario.id}|${a.turma_id}|${a.dia_semana}|${a.aula_index}|${a.turno_id}`;
-            if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, true);
-                aulasToInsert.push({ 
-                    horario_id: novoHorario.id, 
-                    turma_id: a.turma_id,
-                    componente_id: a.componente_id,
-                    professor_id: (a.professor_id && a.professor_id !== 'none') ? a.professor_id : null,
-                    dia_semana: a.dia_semana,
-                    aula_index: a.aula_index,
-                    tipo: a.tipo,
-                    turno_id: a.turno_id,
-                    // Campos de rastreamento de aulas fixas/compartilhadas
-                    aula_fixa_id: a.aula_fixa_id || null,
-                    compartilhada: a.compartilhada || false,
-                    aula_compartilhada_id: a.aula_compartilhada_id || null,
-                });
-            }
-        }
-
-        const { error: insertError } = await supabase.from('horario_aulas').insert(aulasToInsert);
-        
-        if (insertError) {
-            console.error('Erro ao salvar aulas:', insertError);
-            registrarLog(
-                inep,
-                `SALVAR FALHOU | "${nome}" | ${aulasToInsert.length} aulas | ` +
-                    `codigo=${insertError.code ?? '-'} | ${insertError.message}`
-            );
-            await supabase.from('horarios').delete().eq('id', novoHorario.id);
-
-            if (insertError.code === '23505') {
-                return { error: 'Conflito de horários detectado. Por favor, execute o script SQL de atualização de índices no Supabase.' };
-            }
-            return { error: 'Erro ao salvar os detalhes da grade: ' + insertError.message };
-        }
-
-        registrarLog(
-            inep,
-            `GRADE SALVA | "${nome}" | status=${status} | horario_id=${novoHorario.id} | ` +
-                `${aulasToInsert.length} aulas gravadas` +
-                (aulas.length !== aulasToInsert.length ? ` (${aulas.length - aulasToInsert.length} duplicadas descartadas)` : '')
-        );
-    }
-
-    // A grade recém-salva vira ocupação para as próximas gerações (é assim que a
-    // geração "Todos os Turnos" evita choque entre turnos): o cache tem que cair.
-    invalidarCacheGeracao();
     revalidatePath('/gerarhorarios');
-    return { data: novoHorario };
+    return { data: resultado.data };
 }
 
-/**
- * SUPER HORÁRIO (Beta): executa um lote de tentativas considerando TODOS os horários
- * já existentes (rascunhos + publicados + pré-produção) de qualquer turno como
- * ocupações bloqueadas. Garante zero conflito com grades já salvas.
- * Não interfere em nada na geração normal — é uma função totalmente separada.
- */
-export async function gerarSuperHorarioLote(
-    escolaId: string,
-    turnoId: string,
-    configGerminacao: ConfiguracaoGerminacao[],
-    loteSize: number = 500,
-    progress: number = 0,
-    permitirMesmoProfDisciplinasMesmoDia: boolean = false
-) {
-    await requireEscolaEModulo(escolaId, 'horarios');
-    const inep = await inepDaEscola(escolaId);
-
-    try {
-        // A única diferença para a geração normal: rascunhos também contam como
-        // ocupação, garantindo zero conflito com qualquer grade já salva.
-        const dados = await carregarDadosDaGeracao(escolaId, turnoId, ['publicado', 'em_rascunho', 'pre_producao']);
-
-        registrarLog(
-            inep,
-            `SUPER HORARIO — LOTE INICIADO | turno="${dados.turnoData.nome}" (${turnoId}) | tentativas=${loteSize} | ` +
-                `progresso=${(progress * 100).toFixed(1)}% | turmas=${dados.turmasDoTurno.length} | ` +
-                `ocupacoes_externas=${dados.ocupacoes.length} (inclui rascunhos)`
-        );
-
-        if (process.env.NODE_ENV !== 'production' || process.env.TIMETABLE_DEBUG === '1') {
-            console.log(`[SUPER HORÁRIO] turnoId=${turnoId} ocupações consideradas: ${dados.ocupacoes.length}`);
-        }
-
-        const inicio = Date.now();
-        const result = await gerarHorarioEmWorker(
-            [
-                dados.turnoData as any,
-                dados.turmasDoTurno,
-                dados.allProfessores,
-                dados.allTurnos,
-                configGerminacao,
-                false,
-                dados.ocupacoes,
-                loteSize,
-                progress,
-                dados.aulasFixas,
-                permitirMesmoProfDisciplinasMesmoDia,
-            ],
-            deveRegistrarDiagnostico(progress) ? (linhas) => registrarLogs(inep, linhas) : undefined
-        );
-
-        registrarLog(
-            inep,
-            `SUPER HORARIO — LOTE ${result.success ? 'OK' : 'SEM SOLUCAO'} | turno="${dados.turnoData.nome}" | ` +
-                `${result.attemptsMade} tentativa(s) | ${result.aulas.length} aulas | ${Date.now() - inicio}ms`
-        );
-
-        return result;
-    } catch (err) {
-        console.error(`[SUPER HORÁRIO] falha no lote (escola=${escolaId} turno=${turnoId} progress=${progress}):`, err);
-        registrarLog(
-            inep,
-            `SUPER HORARIO — LOTE FALHOU | turno=${turnoId} | ${mensagemDeErro(err)}\n` +
-                `${err instanceof Error && err.stack ? err.stack : ''}`
-        );
-        return { error: mensagemDeErro(err) };
-    }
-}
 
 export async function consolidarHorario(id: string) {
     await requireEscolaDoRecurso('horarios', id, 'horarios');
