@@ -175,12 +175,6 @@ export default async function AppLayout({
           </div>
         </header>
         <div className="flex-1 relative overflow-auto">
-          <Image
-            src="/img/elements/10.png"
-            alt=""
-            fill
-            className="object-cover object-center pointer-events-none select-none opacity-[0.3]"
-          />
           <div className="relative z-10 p-4 sm:p-6">
             {hasPermission ? children : <AccessDenied />}
           </div>
