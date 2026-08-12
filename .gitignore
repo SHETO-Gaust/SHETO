@@ -62,3 +62,6 @@ __pycache__/
 # na maquina que rodou a geracao, e cita nome de professor e de turma
 /log.txt
 /log.txt.1
+
+# dumps de log trazidos da VM para investigacao — contem nomes de professores
+log-vm*.txt
