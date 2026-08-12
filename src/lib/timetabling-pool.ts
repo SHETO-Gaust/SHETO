@@ -5,11 +5,11 @@
  * na thread principal, o Node não atende mais ninguém — foi o que derrubou a
  * produção. Aqui cada geração vai para uma thread separada.
  *
- * Os workers são reaproveitados entre chamadas de propósito: o gerador é
- * chamado em lotes (o cliente do /gerarhorarios faz até 200 chamadas seguidas),
- * e criar uma thread por lote desperdiçaria dezenas de milissegundos em cada
- * uma. O pool é um singleton em `globalThis` pelo mesmo motivo do pool do
- * Postgres: sobreviver ao hot-reload do Next em desenvolvimento.
+ * Os workers são reaproveitados entre chamadas de propósito: o orquestrador da
+ * geração despacha centenas de rodadas seguidas, e criar uma thread por rodada
+ * desperdiçaria dezenas de milissegundos em cada uma. O pool é um singleton em
+ * `globalThis` pelo mesmo motivo do pool do Postgres: sobreviver ao hot-reload
+ * do Next em desenvolvimento.
  *
  * Requer `npm run build:worker` (já encadeado no `build` e no `dev`).
  */
@@ -39,8 +39,25 @@ type Job = {
  * Deixa ao menos 2 núcleos livres: um para a thread principal do Next atender
  * requisições e outro para o Postgres, que roda na mesma VM. Ajustável por
  * SHETO_WORKERS quando o dimensionamento da máquina mudar.
+ *
+ * O teto era 4, herdado da época em que a tela despachava um lote por vez e
+ * três destas threads ficavam paradas de qualquer jeito. Agora o orquestrador
+ * despacha uma rodada por thread, então o teto é o que de fato dimensiona a
+ * geração: na VM de 8 vCPU são 6 threads gerando e 2 núcleos livres.
+ *
+ * ATENÇÃO ao esperar ganho proporcional: NÃO é linear. Medido em máquina de 8
+ * CPUs lógicas, 1.200 tentativas da mesma escola:
+ *
+ *     1 thread  32,9s   |   3 threads  14,6s (2,25x)
+ *     2 threads 18,5s   |   4 threads  13,5s (2,44x)
+ *                       |   6 threads  12,8s (2,57x)
+ *
+ * A curva satura por volta de 3–4 threads: o motor aloca muito por tentativa e
+ * passa a disputar memória e GC, não CPU. Da quarta thread em diante o ganho é
+ * de poucos por cento — se a máquina precisar de fôlego para atender as telas,
+ * baixar SHETO_WORKERS para 4 custa quase nada em tempo de geração.
  */
-const NUM_WORKERS = Number(process.env.SHETO_WORKERS) || Math.max(1, Math.min(4, os.cpus().length - 2));
+export const NUM_WORKERS = Number(process.env.SHETO_WORKERS) || Math.max(1, Math.min(6, os.cpus().length - 2));
 
 /**
  * Um lote que não termina seguraria um worker para sempre. O limite é

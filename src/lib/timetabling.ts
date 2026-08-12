@@ -8,7 +8,7 @@ import {
   type LivreDocenciaPeriodo,
   type DiagnosticoFalha,
   type PendenciaDetalhada,
-  type SerieAulaFixa
+  type TurmaAulaFixa
 } from './types';
 
 export type SugestaoRealocacao = {
@@ -25,8 +25,13 @@ export type SugestaoRealocacao = {
 
 type HorarioAulaGeradaAlgoritmo = Omit<HorarioAulaGerada, 'id' | 'horario_id'> & {
   turno_id: string;
-  // Tracking de aulas fixas/compartilhadas (espelha colunas do DB)
+  /** Aponta para o travamento (`turmas_aulas_fixas`) que originou esta aula. */
   aula_fixa_id?: string | null;
+  /**
+   * Espelham colunas de `horario_aulas` que só existem para as grades geradas
+   * antes da migração 20260812, quando havia "aula coletiva". O motor sempre
+   * grava `false`/`null` — o refino continua lendo os grupos históricos.
+   */
   compartilhada?: boolean;
   aula_compartilhada_id?: string | null;
 };
@@ -45,10 +50,16 @@ type BlocoGeracao = {
   turma_nome: string;
   componente_id: string;
   componente_nome: string;
+  /** Só para casar com os padrões agregados da rede, que são por sigla. */
+  componente_sigla?: string;
   professor_id: string | null;
   professor_key: string | null;
   professor_nome: string;
   size: number;
+  /**
+   * Domínio do bloco: quantas posições (dia, slot) são viáveis olhando apenas as
+   * restrições fixas. Quanto menor, mais apertado — e mais cedo ele deve entrar.
+   */
   workload: number;
   priority: number;
   serie_restricoes?: Record<string, Record<number, string>>;
@@ -357,15 +368,61 @@ export function gerarHorarioAlgoritmico(
   configGerminacao: ConfiguracaoGerminacao[] = [],
   force: boolean = false,
   ocupacoesExistentes: any[] = [],
-  maxAttempts: number = 100000,
-  globalProgress: number = 0,
-  aulasFixas: SerieAulaFixa[] = [],
-  permitirMesmoProfDisciplinasMesmoDia: boolean = false
+  /** Quantas tentativas executar nesta chamada (o "pedaço" despachado a esta thread). */
+  chunk: number = 100000,
+  /**
+   * Índice GLOBAL da primeira tentativa deste pedaço dentro do orçamento total.
+   *
+   * Substituiu o antigo `globalProgress` (uma fração 0–1) porque com o orçamento
+   * repartido entre várias threads o motor precisa saber sua posição absoluta:
+   * é dela que saem a semente (única em toda a geração) e a fase de relaxamento.
+   */
+  offsetTentativa: number = 0,
+  aulasFixas: TurmaAulaFixa[] = [],
+  permitirMesmoProfDisciplinasMesmoDia: boolean = false,
+  /** Orçamento total da geração, sobre o qual a rampa de relaxamento é medida. */
+  totalTentativas: number = 100000,
+  /**
+   * O diagnóstico custa uma análise por bloco pendente. Ele só interessa quando
+   * a geração vai desistir — calculá-lo em todo pedaço (era o que acontecia) é
+   * trabalho jogado fora centenas de vezes.
+   */
+  computarDiagnostico: boolean = true,
+  /**
+   * Grade herdada — a melhor solução conhecida até agora, vinda de outra thread
+   * ou de uma rodada anterior. Quando presente, a busca parte dela em vez do
+   * zero: é a diferença entre quarenta mil recomeços e quarenta mil melhorias.
+   */
+  gradeHerdada?: HorarioAulaGeradaAlgoritmo[] | null,
+  /** Pesos acumulados por outras threads/rodadas. Ver `pesos` adiante. */
+  pesosIniciais?: Record<string, number> | null,
+  /**
+   * Quantos blocos faltavam em `gradeHerdada`. Sem este número a grade herdada
+   * entraria com custo desconhecido e a primeira tentativa do pedaço a
+   * substituiria mesmo sendo pior — jogando fora o que veio da memória ou de
+   * outra thread.
+   */
+  pendentesHerdados: number = Number.POSITIVE_INFINITY,
+  /**
+   * Distribuição histórica agregada da rede: para cada `comp=SIGLA|dia=X|aula=N`,
+   * a fatia das aulas daquele componente que costuma cair ali, entre 0 e 1.
+   *
+   * Entra só como desempate na escolha do slot, depois de todas as restrições —
+   * nunca bloqueia nem força nada. Vazio quando desligado por
+   * `SHETO_USAR_PADROES_GLOBAIS=0`, e aí a escolha volta a ser sorteio puro.
+   */
+  padroes: Record<string, number> = {},
 ): {
   success: boolean;
   aulas: HorarioAulaGeradaAlgoritmo[];
   error?: string;
   attemptsMade: number;
+  /** Menor número de blocos não alocados visto neste pedaço. Alimenta a parada por estagnação. */
+  melhorPendentes: number;
+  /** Índice global da tentativa que produziu `aulas`, só para o log. */
+  melhorIndice: number;
+  /** Pesos ao fim do pedaço, para o orquestrador somar e redistribuir. */
+  pesos: Record<string, number>;
   diagnostico?: DiagnosticoFalha;
 } {
   const turnosById = new Map<string, Turno>(todosTurnos.map(t => [t.id, t]));
@@ -402,8 +459,119 @@ export function gerarHorarioAlgoritmico(
     });
   }
 
+  // ── Aprendizado da busca ─────────────────────────────────────────────────
+
+  /** Identidade de um bloco entre tentativas — é por ela que o peso persiste. */
+  const chaveBloco = (b: BlocoGeracao) => `${b.turma_id}|${b.componente_id}|${b.tipo}`;
+
+  /**
+   * Peso por bloco: quantas vezes ele já terminou uma tentativa sem ser alocado.
+   *
+   * É a memória da busca. Bloco que falha repetidamente sobe na ordem até ser
+   * colocado antes de tudo, e a grade passa a se organizar EM VOLTA dele em vez
+   * de deixá-lo para o fim — que é a razão de ele nunca caber. Sem isto o motor
+   * refazia quarenta mil vezes o mesmo caminho e esbarrava sempre na mesma aula.
+   */
+  const pesos = new Map<string, number>(Object.entries(pesosIniciais ?? {}));
+
+  /**
+   * Domínio de um bloco: quantas posições (dia, slot inicial) são viáveis olhando
+   * apenas o que NÃO muda durante uma tentativa — BAN, folga e reunião de fluxo do
+   * professor, restrições da série, slots já travados na turma e as grades
+   * publicadas de outros turnos.
+   *
+   * É a medida de "quão apertado" o bloco é. Colocar primeiro quem tem menos
+   * saídas é a heurística do mais restrito primeiro: enquanto a grade está vazia,
+   * o professor com 12 bloqueios ainda tem onde caber; deixado para o fim, não tem.
+   *
+   * Cacheado por forma do bloco — não depende do andamento da tentativa.
+   */
+  const dominioCache = new Map<string, number>();
+  const calcularDominio = (b: BlocoGeracao): number => {
+    const chave = `${b.turma_id}|${b.componente_id}|${b.tipo}|${b.size}`;
+    const emCache = dominioCache.get(chave);
+    if (emCache !== undefined) return emCache;
+
+    const alvo = b.tipo === 'presencial' ? turno : turnoNP;
+    const prof = b.professor_id ? professoresById.get(b.professor_id) : undefined;
+    const travadosDaTurma = new Set(
+      aulasFixas
+        .filter(f => f.turma_id === b.turma_id)
+        .map(f => `${f.tipo_aula}|${f.dia_semana}|${f.aula_index}`)
+    );
+
+    let n = 0;
+    for (const d of alvo.dias_semana || []) {
+      const maxStart = (alvo.aulas_por_dia || 0) - b.size;
+      for (let i = 0; i <= maxStart; i++) {
+        let viavel = true;
+        for (let k = 0; k < b.size; k++) {
+          const idx = i + k;
+          if (travadosDaTurma.has(`${b.tipo}|${d}|${idx}`)) { viavel = false; break; }
+          if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') { viavel = false; break; }
+          if (prof) {
+            if (isBanHardBlocked(prof, alvo.id, d, idx)) { viavel = false; break; }
+            if (isReuniaoFluxoHardBlocked(prof, alvo.id, d, idx)) { viavel = false; break; }
+            if (isFolgaHardBlocked(prof, alvo, d, idx)) { viavel = false; break; }
+          }
+          if (b.professor_key) {
+            const [ini, fim] = getSlotMinutes(alvo, idx);
+            const ocupadoAlhures = (ocupacoesExistentesPorProfessorDia.get(`${b.professor_key}|${d}`) || [])
+              .some(occ => minutesConflitam(ini, fim, occ.inicio_min, occ.fim_min, alvo.id === occ.turno_id, idx, occ.aula_index));
+            if (ocupadoAlhures) { viavel = false; break; }
+          }
+        }
+        if (viavel) n++;
+      }
+    }
+
+    dominioCache.set(chave, n);
+    return n;
+  };
+
+  const temPadroes = Object.keys(padroes).length > 0;
+
+  /**
+   * Ordem em que os slots de um dia são tentados.
+   *
+   * Sem padrões históricos é sorteio puro, como sempre foi. Com eles, os slots
+   * onde aquele componente costuma cair na rede vêm primeiro — mas com ruído
+   * aleatório suficiente para nunca virar regra: é desempate, não restrição.
+   *
+   * O formato da chave repete o de `chavePadrao` em `geracao/memoria.ts`. Repetir
+   * é feio, mas obrigatório: este arquivo é compilado à parte pelo worker e não
+   * pode importar valor de lugar nenhum. Mudou lá, muda aqui.
+   */
+  const ordenarSlots = (b: BlocoGeracao, dia: string, maxStart: number, rng: () => number): number[] => {
+    const slots = Array.from({ length: maxStart + 1 }, (_, k) => k);
+    if (!temPadroes || !b.componente_sigla) return slots.sort(() => rng() - 0.5);
+
+    return slots
+      .map(i => {
+        // Média do histórico sobre os slots que o bloco vai ocupar.
+        let soma = 0;
+        for (let k = 0; k < b.size; k++) {
+          soma += padroes[`comp=${b.componente_sigla}|dia=${dia}|aula=${i + k}`] ?? 0;
+        }
+        // O ruído domina o histórico de propósito: o sinal agregado entre escolas
+        // é fraco, e deixá-lo mandar sozinho engessaria a busca.
+        return { i, score: (soma / b.size) * 0.6 + rng() };
+      })
+      .sort((x, y) => y.score - x.score)
+      .map(x => x.i);
+  };
+
   // ── Construção dos blocos ────────────────────────────────────────────────
-  const construirTodosOsBlocos = (forcarIndividuais: boolean, rng: () => number = Math.random): BlocoGeracao[] => {
+  /**
+   * @param larguraBucket agrupa domínios parecidos antes de embaralhar. Na fase de
+   *   exploração convém um valor alto (mais diversidade entre tentativas); na
+   *   intensificação, 1, para respeitar a ordem à risca.
+   */
+  const construirTodosOsBlocos = (
+    forcarIndividuais: boolean,
+    rng: () => number = Math.random,
+    larguraBucket: number = 4,
+  ): BlocoGeracao[] => {
     const blocos: BlocoGeracao[] = [];
 
     for (const t of turmas) {
@@ -415,11 +583,15 @@ export function gerarHorarioAlgoritmico(
 
         // Subtrair aulas fixas: Fase 0 pré-aloca esses slots, então o loop
         // principal não deve criar blocos duplicados para os mesmos slots.
+        //
+        // O filtro é por TURMA (não por série): desde a migração 20260812 cada
+        // turma tem os seus travamentos. Filtrar por série aqui geraria aula a
+        // mais ou a menos por turma, sem erro visível em lugar nenhum.
         const nFixaPresencial = aulasFixas.filter(af =>
-          af.serie_id === t.serie.id && af.componente_id === c.componente_id && af.tipo_aula === 'presencial'
+          af.turma_id === t.id && af.componente_id === c.componente_id && af.tipo_aula === 'presencial'
         ).length;
         const nFixaNP = aulasFixas.filter(af =>
-          af.serie_id === t.serie.id && af.componente_id === c.componente_id && af.tipo_aula === 'nao_presencial'
+          af.turma_id === t.id && af.componente_id === c.componente_id && af.tipo_aula === 'nao_presencial'
         ).length;
 
         // Presenciais — no turno principal
@@ -433,6 +605,7 @@ export function gerarHorarioAlgoritmico(
               turma_nome: t.nome,
               componente_id: c.componente_id,
               componente_nome: (c as any).componente?.nome || 'Disciplina',
+              componente_sigla: (c as any).componente?.sigla || undefined,
               professor_id: profId,
               professor_key: profKey,
               professor_nome: profNome,
@@ -455,6 +628,7 @@ export function gerarHorarioAlgoritmico(
               turma_nome: t.nome,
               componente_id: c.componente_id,
               componente_nome: (c as any).componente?.nome || 'Disciplina',
+              componente_sigla: (c as any).componente?.sigla || undefined,
               professor_id: profId,
               professor_key: profKey,
               professor_nome: profNome,
@@ -468,21 +642,50 @@ export function gerarHorarioAlgoritmico(
       }
     }
 
-    // Ordenar: menor priority primeiro; entre iguais, bloco maior primeiro
+    // `workload` era um campo morto, sempre zero. Agora carrega o domínio, que é
+    // o que diz quão apertado o bloco é.
+    for (const b of blocos) b.workload = calcularDominio(b);
+
+    /**
+     * Ordem de colocação — o coração da mudança.
+     *
+     * Antes era só prioridade e tamanho, com tudo embaralhado dentro do grupo:
+     * um professor com 12 bloqueios disputava slot em pé de igualdade com um sem
+     * nenhum, e quem chegava por último ficava sem lugar. Agora:
+     *
+     *   1. NP antes de presencial (inalterado — o contraturno é mais escasso)
+     *   2. maior peso primeiro       → o que já falhou vem antes
+     *   3. menor domínio primeiro    → o mais restrito vem antes
+     *   4. bloco maior primeiro      → geminação precisa de espaço contíguo
+     */
     blocos.sort((a, b) => {
       if (a.priority !== b.priority) return a.priority - b.priority;
+      const pa = pesos.get(chaveBloco(a)) ?? 0;
+      const pb = pesos.get(chaveBloco(b)) ?? 0;
+      if (pa !== pb) return pb - pa;
+      if (a.workload !== b.workload) return a.workload - b.workload;
       return b.size - a.size;
     });
 
-    // Shuffle Fisher-Yates dentro de cada grupo de prioridade.
-    // Preserva a ordenação inter-grupos (NP antes de presencial) mas varia
-    // qual bloco chega primeiro aos slots — crítico em grades restritas.
-    const grupos = new Map<number, number[]>();
+    /**
+     * Shuffle Fisher-Yates entre blocos de dificuldade equivalente.
+     *
+     * Embaralhar o grupo de prioridade inteiro (era o que se fazia) desfazia
+     * qualquer ordenação por dificuldade. Embaralhar só os empates preservaria a
+     * ordem mas deixaria todas as tentativas quase idênticas — sem diversidade
+     * não há o que explorar. O balde de largura `larguraBucket` é o meio-termo:
+     * varia a ordem entre blocos igualmente difíceis, mantém a ordem entre os
+     * diferentes.
+     */
+    const largura = Math.max(1, larguraBucket);
+    const baldes = new Map<string, number[]>();
     blocos.forEach((b, i) => {
-      if (!grupos.has(b.priority)) grupos.set(b.priority, []);
-      grupos.get(b.priority)!.push(i);
+      const peso = pesos.get(chaveBloco(b)) ?? 0;
+      const chave = `${b.priority}|${peso}|${Math.floor(b.workload / largura)}`;
+      if (!baldes.has(chave)) baldes.set(chave, []);
+      baldes.get(chave)!.push(i);
     });
-    for (const indices of grupos.values()) {
+    for (const indices of baldes.values()) {
       for (let i = indices.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
         [blocos[indices[i]], blocos[indices[j]]] = [blocos[indices[j]], blocos[indices[i]]];
@@ -509,132 +712,78 @@ export function gerarHorarioAlgoritmico(
    * BAN (indisponivel) e FOLGA (livre docência) são SEMPRE hard constraints
    * e NUNCA são afetados por relaxamento progressivo.
    */
-  // Conjunto de slots de professor que são compartilhados intencionalmente:
-  // chave = `${professorKey}|${dia}|${aula_index}` — usada para não rejeitar
-  // o professor por já estar ocupado quando a ocupação é uma aula coletiva
-  // da mesma série/componente.
-  const slotsCompartilhadosProfessor = new Set<string>();
-
   const executarTentativa = (
     permitirUsoPlanejamento: boolean,
     forcarIndividuais: boolean,
     ignorarDiasPreferidos: boolean = false,
     curProgLocal: number = 0,
     permitirUsoPersonalizado: boolean = false,
-    rng: () => number = Math.random
+    rng: () => number = Math.random,
+    /** Grade de partida. Presente = intensificação (ruína e recriação sobre ela). */
+    gradeBase: HorarioAulaGeradaAlgoritmo[] | null = null,
+    larguraBucket: number = 4,
+    /** Semeia a grade mas não a desmonta — usado para diagnosticar a grade final. */
+    preservarBase: boolean = false,
   ) => {
     const aulasGeradas: HorarioAulaGeradaAlgoritmo[] = [];
     const ocupacaoProfessoresPorDia = new Map<string, SlotOcupado[]>();
     const ocupacaoTurmas = new Set<string>();
-    slotsCompartilhadosProfessor.clear();
 
-    const todosOsBlocos = construirTodosOsBlocos(forcarIndividuais, rng);
+    const todosOsBlocos = construirTodosOsBlocos(forcarIndividuais, rng, larguraBucket);
 
     // ╔═══════════════════════════════════════════════════════════════════
-    // FASE 0 — Pré-alocação de aulas fixas
+    // FASE 0 — Pré-alocação de aulas travadas
     // As fixas entram ANTES do loop aleatório e marcam seus slots como
     // ocupados, de modo que o loop não tenta reocupá-los.
+    //
+    // O travamento é por turma desde a migração 20260812. Antes valia para a
+    // série inteira e havia o conceito de "aula coletiva" (uma turma junto da
+    // outra, com um professor só) — removido: quando as turmas tinham
+    // professores diferentes e nenhum responsável definido, a aula era gravada
+    // sem professor nenhum.
     // ╚═══════════════════════════════════════════════════════════════════
     for (const aulaFixa of aulasFixas) {
-      // Turmas do turno atual que pertencem a esta série
-      const turmasDaSerie = turmas.filter(t => t.serie.id === aulaFixa.serie_id);
-      if (turmasDaSerie.length === 0) continue;
+      const turma = turmas.find(t => t.id === aulaFixa.turma_id);
+      if (!turma) continue; // turma de outro turno
 
-      const { dia_semana: dia, aula_index: idx, tipo_aula, compartilhada } = aulaFixa;
+      const { dia_semana: dia, aula_index: idx, tipo_aula } = aulaFixa;
       const targetTurno = tipo_aula === 'presencial' ? turno : (resolverTurnoNP(turno, todosTurnos));
       const [ini, fim] = getSlotMinutes(targetTurno, idx);
+      const slotKey = `${turma.id}|${targetTurno.id}|${dia}|${idx}`;
 
-      // Usa o próprio id da aula fixa como agrupador das turmas — já é UUID válido.
-      const aulaCompartilhadaId = compartilhada ? aulaFixa.id : null;
-
-      // Resolver professor para aula compartilhada
-      let professorCompartilhadoId: string | null = null;
-      let professorCompartilhadoKey: string | null = null;
-      if (compartilhada) {
-        if (aulaFixa.professor_responsavel_id) {
-          professorCompartilhadoId = aulaFixa.professor_responsavel_id;
-          const p = professoresById.get(professorCompartilhadoId);
-          professorCompartilhadoKey = p ? getTeacherKey(p) : `id:${professorCompartilhadoId}`;
-        } else {
-          // Tentar inferir professor único
-          const profIds = new Set(
-            turmasDaSerie
-              .map(t => t.professores.find(p => p.componente_id === aulaFixa.componente_id)?.professor_id)
-              .filter(Boolean) as string[]
-          );
-          if (profIds.size === 1) {
-            professorCompartilhadoId = [...profIds][0];
-            const p = professoresById.get(professorCompartilhadoId);
-            professorCompartilhadoKey = p ? getTeacherKey(p) : `id:${professorCompartilhadoId}`;
-          }
-          // Se profIds.size > 1, não registramos professor (já deve ter sido bloqueado na validation)
-        }
+      // Verificar conflito de turma
+      if (ocupacaoTurmas.has(slotKey)) {
+        console.warn(`[FIXAS] Conflito de turma na pré-alocação: ${turma.nome} | ${dia}-${idx}`);
+        continue; // Não interrompe a tentativa; a garantia abaixo resolve
       }
 
-      // Pré-alocar para cada turma da série
-      for (const turma of turmasDaSerie) {
-        const slotKey = `${turma.id}|${targetTurno.id}|${dia}|${idx}`;
+      const profInfo = turma.professores.find(p => p.componente_id === aulaFixa.componente_id);
+      const profId = profInfo?.professor_id || null;
+      const profObj = profId ? professoresById.get(profId) : undefined;
+      const profKey = profObj ? getTeacherKey(profObj) : (profId ? `id:${profId}` : null);
 
-        // Verificar conflito de turma
-        if (ocupacaoTurmas.has(slotKey)) {
-          console.warn(`[FIXAS] Conflito de turma na pré-alocação: ${turma.nome} | ${dia}-${idx}`);
-          continue; // Não interrompe a tentativa; o diagnosótico pegará
-        }
+      aulasGeradas.push({
+        turma_id: turma.id,
+        componente_id: aulaFixa.componente_id,
+        professor_id: profId,
+        dia_semana: dia,
+        aula_index: idx,
+        tipo: tipo_aula,
+        turno_id: targetTurno.id,
+        aula_fixa_id: aulaFixa.id,
+        compartilhada: false,
+        aula_compartilhada_id: null,
+      });
 
-        // Resolver professor para aula individual
-        let profId: string | null = null;
-        let profKey: string | null = null;
-        if (compartilhada) {
-          profId = professorCompartilhadoId;
-          profKey = professorCompartilhadoKey;
-        } else {
-          const profInfo = turma.professores.find(p => p.componente_id === aulaFixa.componente_id);
-          profId = profInfo?.professor_id || null;
-          const profObj = profId ? professoresById.get(profId) : undefined;
-          profKey = profObj ? getTeacherKey(profObj) : (profId ? `id:${profId}` : null);
-        }
+      ocupacaoTurmas.add(slotKey);
 
-        // Registrar aula
-        aulasGeradas.push({
-          turma_id: turma.id,
-          componente_id: aulaFixa.componente_id,
-          professor_id: profId,
-          dia_semana: dia,
-          aula_index: idx,
-          tipo: tipo_aula,
+      if (profKey) {
+        pushMapArray(ocupacaoProfessoresPorDia, `${profKey}|${dia}`, {
           turno_id: targetTurno.id,
-          aula_fixa_id: aulaFixa.id,
-          compartilhada,
-          aula_compartilhada_id: aulaCompartilhadaId,
+          aula_index: idx,
+          inicio_min: ini,
+          fim_min: fim,
         });
-
-        ocupacaoTurmas.add(slotKey);
-
-        // Para aula compartilhada: professor entra UMA única vez (não por turma)
-        if (!compartilhada && profKey) {
-          pushMapArray(ocupacaoProfessoresPorDia, `${profKey}|${dia}`, {
-            turno_id: targetTurno.id,
-            aula_index: idx,
-            inicio_min: ini,
-            fim_min: fim,
-          });
-        }
-
-      }
-
-      // Professor da aula compartilhada: registrar UMA única vez
-      if (compartilhada && professorCompartilhadoKey) {
-        const mapKey = `${professorCompartilhadoKey}|${dia}`;
-        if (!(ocupacaoProfessoresPorDia.get(mapKey) || []).some(o => o.aula_index === idx && o.turno_id === targetTurno.id)) {
-          pushMapArray(ocupacaoProfessoresPorDia, mapKey, {
-            turno_id: targetTurno.id,
-            aula_index: idx,
-            inicio_min: ini,
-            fim_min: fim,
-          });
-        }
-        // Marcar slot como compartilhado para não rejeitar outras turmas da mesma aula
-        slotsCompartilhadosProfessor.add(`${professorCompartilhadoKey}|${dia}|${idx}`);
       }
     }
 
@@ -645,80 +794,78 @@ export function gerarHorarioAlgoritmico(
     // ao processar uma fixação, ela faz `continue` sem registrar a aula nem proteger
     // o slot. Este passo force-registra qualquer fixação que tenha sido ignorada.
     for (const aulaFixa of aulasFixas) {
-      const turmasDaSerieGarantia = turmas.filter(t => t.serie.id === aulaFixa.serie_id);
-      if (turmasDaSerieGarantia.length === 0) continue;
+      const turma = turmas.find(t => t.id === aulaFixa.turma_id);
+      if (!turma) continue;
+
+      const jaRegistrada = aulasGeradas.some(
+        a => a.aula_fixa_id === aulaFixa.id && a.turma_id === turma.id
+      );
+      if (jaRegistrada) continue;
 
       const targetTurnoGarantia = aulaFixa.tipo_aula === 'presencial'
         ? turno
         : (resolverTurnoNP(turno, todosTurnos));
       const [iniG, fimG] = getSlotMinutes(targetTurnoGarantia, aulaFixa.aula_index);
+      const slotKeyG = `${turma.id}|${targetTurnoGarantia.id}|${aulaFixa.dia_semana}|${aulaFixa.aula_index}`;
 
-      for (const turma of turmasDaSerieGarantia) {
-        const jaRegistrada = aulasGeradas.some(
-          a => a.aula_fixa_id === aulaFixa.id && a.turma_id === turma.id
+      console.warn(
+        `[FIXAS] Garantia ativada — travamento não registrado pela Fase 0:`,
+        `turma=${turma.nome} | dia=${aulaFixa.dia_semana} | idx=${aulaFixa.aula_index} | slotKey=${slotKeyG}`
+      );
+
+      // Remover qualquer aula não-fixa que ocupe ilegitimamente este slot
+      if (ocupacaoTurmas.has(slotKeyG)) {
+        const intruso = aulasGeradas.find(
+          a => a.turma_id === turma.id
+            && a.turno_id === targetTurnoGarantia.id
+            && a.dia_semana === aulaFixa.dia_semana
+            && a.aula_index === aulaFixa.aula_index
+            && !a.aula_fixa_id
         );
-        if (jaRegistrada) continue;
-
-        const slotKeyG = `${turma.id}|${targetTurnoGarantia.id}|${aulaFixa.dia_semana}|${aulaFixa.aula_index}`;
-        console.warn(
-          `[FIXAS] Garantia ativada — fixação não registrada pela Fase 0:`,
-          `turma=${turma.nome} | dia=${aulaFixa.dia_semana} | idx=${aulaFixa.aula_index} | slotKey=${slotKeyG}`
-        );
-
-        // Remover qualquer aula não-fixa que ocupe ilegitimamente este slot
-        if (ocupacaoTurmas.has(slotKeyG)) {
-          const intruso = aulasGeradas.find(
-            a => a.turma_id === turma.id
-              && a.turno_id === targetTurnoGarantia.id
-              && a.dia_semana === aulaFixa.dia_semana
-              && a.aula_index === aulaFixa.aula_index
-              && !a.aula_fixa_id
-          );
-          if (intruso) {
-            const idxArr = aulasGeradas.indexOf(intruso);
-            if (idxArr >= 0) aulasGeradas.splice(idxArr, 1);
-            ocupacaoTurmas.delete(slotKeyG);
-            if (intruso.professor_id) {
-              const pKey = teacherKeyMap.get(intruso.professor_id);
-              if (pKey) {
-                const mapKey = `${pKey}|${intruso.dia_semana}`;
-                const arr = ocupacaoProfessoresPorDia.get(mapKey) || [];
-                const filtered = arr.filter(o => !(o.aula_index === intruso.aula_index && o.turno_id === intruso.turno_id));
-                if (filtered.length > 0) ocupacaoProfessoresPorDia.set(mapKey, filtered);
-                else ocupacaoProfessoresPorDia.delete(mapKey);
-              }
+        if (intruso) {
+          const idxArr = aulasGeradas.indexOf(intruso);
+          if (idxArr >= 0) aulasGeradas.splice(idxArr, 1);
+          ocupacaoTurmas.delete(slotKeyG);
+          if (intruso.professor_id) {
+            const pKey = teacherKeyMap.get(intruso.professor_id);
+            if (pKey) {
+              const mapKey = `${pKey}|${intruso.dia_semana}`;
+              const arr = ocupacaoProfessoresPorDia.get(mapKey) || [];
+              const filtered = arr.filter(o => !(o.aula_index === intruso.aula_index && o.turno_id === intruso.turno_id));
+              if (filtered.length > 0) ocupacaoProfessoresPorDia.set(mapKey, filtered);
+              else ocupacaoProfessoresPorDia.delete(mapKey);
             }
           }
         }
+      }
 
-        const profInfoG = turma.professores.find(p => p.componente_id === aulaFixa.componente_id);
-        const profIdG = profInfoG?.professor_id || null;
-        const profObjG = profIdG ? professoresById.get(profIdG) : undefined;
-        const profKeyG = profObjG ? getTeacherKey(profObjG) : (profIdG ? `id:${profIdG}` : null);
+      const profInfoG = turma.professores.find(p => p.componente_id === aulaFixa.componente_id);
+      const profIdG = profInfoG?.professor_id || null;
+      const profObjG = profIdG ? professoresById.get(profIdG) : undefined;
+      const profKeyG = profObjG ? getTeacherKey(profObjG) : (profIdG ? `id:${profIdG}` : null);
 
-        aulasGeradas.push({
-          turma_id: turma.id,
-          componente_id: aulaFixa.componente_id,
-          professor_id: profIdG,
-          dia_semana: aulaFixa.dia_semana,
-          aula_index: aulaFixa.aula_index,
-          tipo: aulaFixa.tipo_aula,
+      aulasGeradas.push({
+        turma_id: turma.id,
+        componente_id: aulaFixa.componente_id,
+        professor_id: profIdG,
+        dia_semana: aulaFixa.dia_semana,
+        aula_index: aulaFixa.aula_index,
+        tipo: aulaFixa.tipo_aula,
+        turno_id: targetTurnoGarantia.id,
+        aula_fixa_id: aulaFixa.id,
+        compartilhada: false,
+        aula_compartilhada_id: null,
+      });
+
+      ocupacaoTurmas.add(slotKeyG);
+
+      if (profKeyG) {
+        pushMapArray(ocupacaoProfessoresPorDia, `${profKeyG}|${aulaFixa.dia_semana}`, {
           turno_id: targetTurnoGarantia.id,
-          aula_fixa_id: aulaFixa.id,
-          compartilhada: aulaFixa.compartilhada,
-          aula_compartilhada_id: aulaFixa.compartilhada ? aulaFixa.id : null,
+          aula_index: aulaFixa.aula_index,
+          inicio_min: iniG,
+          fim_min: fimG,
         });
-
-        ocupacaoTurmas.add(slotKeyG);
-
-        if (!aulaFixa.compartilhada && profKeyG) {
-          pushMapArray(ocupacaoProfessoresPorDia, `${profKeyG}|${aulaFixa.dia_semana}`, {
-            turno_id: targetTurnoGarantia.id,
-            aula_index: aulaFixa.aula_index,
-            inicio_min: iniG,
-            fim_min: fimG,
-          });
-        }
       }
     }
     // ── FIM DA GARANTIA ──────────────────────────────────────────────────────────
@@ -812,18 +959,12 @@ export function gerarHorarioAlgoritmico(
         const [iniCand, fimCand] = getSlotMinutes(targetTurno, idx);
 
         const localOcc = ocupacaoProfessoresPorDia.get(profDiaKey) || [];
-        if (localOcc.some(occ => {
-          // Ignorar falso conflito se o slot ocupado é uma aula coletiva compartilhada
-          // da qual este professor é o responsável (ele só aparece UMA vez no mapa).
-          const sharedKey = `${meta.professor_key}|${dia}|${occ.aula_index}`;
-          if (slotsCompartilhadosProfessor.has(sharedKey)) return false;
-          return minutesConflitam(
-            iniCand, fimCand,
-            occ.inicio_min, occ.fim_min,
-            targetTurno.id === occ.turno_id,
-            idx, occ.aula_index,
-          );
-        })) return false;
+        if (localOcc.some(occ => minutesConflitam(
+          iniCand, fimCand,
+          occ.inicio_min, occ.fim_min,
+          targetTurno.id === occ.turno_id,
+          idx, occ.aula_index,
+        ))) return false;
 
         const globalOcc = ocupacoesExistentesPorProfessorDia.get(profDiaKey) || [];
         if (globalOcc.some(occ =>
@@ -1011,8 +1152,140 @@ export function gerarHorarioAlgoritmico(
       }
     };
 
+    /**
+     * Recalcula quais blocos estão colocados, contando as aulas presentes.
+     *
+     * O vínculo bloco↔aula é frouxo de propósito: o reparo move aulas de lugar
+     * chamando `addAulaState` com metas reconstruídas, sem tocar no `placed` do
+     * bloco original. Contar as aulas é a única leitura confiável do estado, e é
+     * dela que a ruína depende para saber o que precisa ser recolocado.
+     */
+    const recomputarColocados = () => {
+      const disponivel = new Map<string, number>();
+      for (const a of aulasGeradas) {
+        if (a.aula_fixa_id) continue; // travamento não pertence a bloco nenhum
+        const k = `${a.turma_id}|${a.componente_id}|${a.tipo}`;
+        disponivel.set(k, (disponivel.get(k) ?? 0) + 1);
+      }
+      // Blocos maiores primeiro: um trecho de 2 aulas satisfaz um bloco geminado
+      // ou dois individuais, e consumi-lo pelo individual desmontaria a geminação.
+      for (const b of [...todosOsBlocos].sort((x, y) => y.size - x.size)) {
+        const k = `${b.turma_id}|${b.componente_id}|${b.tipo}`;
+        const n = disponivel.get(k) ?? 0;
+        if (n >= b.size) {
+          b.placed = true;
+          disponivel.set(k, n - b.size);
+        } else {
+          b.placed = false;
+        }
+      }
+    };
+
+    /**
+     * Semeia a tentativa com uma grade já pronta (a melhor conhecida até agora).
+     *
+     * Cada aula herdada é revalidada contra as restrições atuais antes de entrar —
+     * a grade pode vir de uma rodada anterior, e uma restrição de professor pode
+     * ter mudado no meio do caminho. O que não passa simplesmente não entra e vira
+     * pendência, que a busca recoloca.
+     */
+    const semearDaGrade = (base: HorarioAulaGeradaAlgoritmo[]) => {
+      const porChave = new Map<string, BlocoGeracao[]>();
+      for (const b of todosOsBlocos) {
+        if (b.placed) continue;
+        const k = `${b.turma_id}|${b.componente_id}|${b.tipo}`;
+        const lista = porChave.get(k);
+        if (lista) lista.push(b); else porChave.set(k, [b]);
+      }
+      for (const lista of porChave.values()) lista.sort((x, y) => y.size - x.size);
+
+      // Aulas herdadas agrupadas por turma/componente/dia — é assim que um bloco
+      // geminado se apresenta numa grade já montada: aulas consecutivas.
+      const grupos = new Map<string, HorarioAulaGeradaAlgoritmo[]>();
+      for (const a of base) {
+        if (a.aula_fixa_id) continue; // a Fase 0 já recolocou os travamentos
+        const k = `${a.turma_id}|${a.componente_id}|${a.tipo}|${a.turno_id}|${a.dia_semana}`;
+        const lista = grupos.get(k);
+        if (lista) lista.push(a); else grupos.set(k, [a]);
+      }
+
+      for (const [k, aulas] of grupos) {
+        const [turmaId, componenteId, tipo, turnoId] = k.split('|');
+        const alvo = turnosById.get(turnoId);
+        if (!alvo) continue;
+        const chave = `${turmaId}|${componenteId}|${tipo}`;
+        aulas.sort((x, y) => x.aula_index - y.aula_index);
+
+        let i = 0;
+        while (i < aulas.length) {
+          // Trecho de índices consecutivos
+          let fim = i;
+          while (fim + 1 < aulas.length && aulas[fim + 1].aula_index === aulas[fim].aula_index + 1) fim++;
+
+          let inicio = i;
+          while (inicio <= fim) {
+            const restante = fim - inicio + 1;
+            const bloco = (porChave.get(chave) || []).find(b => !b.placed && b.size <= restante);
+            if (!bloco) break;
+
+            const trecho = Array.from({ length: bloco.size }, (_, n) => aulas[inicio + n]);
+            const cabe = trecho.every(a => podeAlocarMetaEmSlot(bloco, alvo, a.dia_semana, a.aula_index));
+            if (!cabe) break; // restrição mudou desde que a grade foi gerada
+
+            for (const a of trecho) addAulaState(bloco, alvo, a.dia_semana, a.aula_index);
+            bloco.placed = true;
+            inicio += bloco.size;
+          }
+          i = fim + 1;
+        }
+      }
+    };
+
+    /**
+     * Ruína: desmonta a parte da grade que está em volta do problema.
+     *
+     * Sem isto a intensificação não sai do lugar — a grade herdada já é um ótimo
+     * local, e recolocar só as pendências nos buracos que sobraram falha pelo
+     * mesmo motivo que falhou antes. Desmontar as turmas e os professores
+     * envolvidos abre espaço para uma arrumação diferente das MESMAS aulas.
+     */
+    const ruinar = () => {
+      const pendentes = todosOsBlocos.filter(b => !b.placed);
+      if (pendentes.length === 0) return;
+
+      const turmasAlvo = new Set(pendentes.map(b => b.turma_id));
+      const profsAlvo = new Set(pendentes.map(b => b.professor_key).filter(Boolean) as string[]);
+
+      const modo = rng();
+      const aRemover: HorarioAulaGeradaAlgoritmo[] = [];
+      for (const a of aulasGeradas) {
+        if (a.aula_fixa_id) continue; // travamento é do usuário, não se mexe
+        if (modo < 0.4) {
+          if (turmasAlvo.has(a.turma_id)) aRemover.push(a);
+        } else if (modo < 0.8) {
+          const pk = a.professor_id ? teacherKeyMap.get(a.professor_id) : null;
+          if (pk && profsAlvo.has(pk)) aRemover.push(a);
+        } else if (rng() < 0.15) {
+          aRemover.push(a); // ruído: às vezes o gargalo está longe da pendência
+        }
+      }
+
+      for (const a of aRemover) removeAulaState(a);
+      recomputarColocados();
+    };
+
+    if (gradeBase && gradeBase.length > 0) {
+      semearDaGrade(gradeBase);
+      recomputarColocados();
+      // `preservarBase` é o modo do diagnóstico: semeia a grade e analisa o que
+      // faltou NELA. Ruinar ali produziria um arranjo diferente do que o usuário
+      // vê na tela, e as pendências listadas voltariam a não bater com as células
+      // vazias — que foi exatamente o defeito corrigido antes desta mudança.
+      if (!preservarBase) ruinar();
+    }
+
     for (const b of todosOsBlocos) {
-      if (b.placed) continue; // já alocado pela Fase 0 (aulas fixas)
+      if (b.placed) continue; // já colocado pela Fase 0, pela semeadura ou por um bloco anterior
       let alocado = false;
 
       // Determinar turnos a testar para este bloco
@@ -1043,7 +1316,7 @@ export function gerarHorarioAlgoritmico(
           if (alocado) break;
 
           const maxStart = targetTurno.aulas_por_dia - b.size;
-          const startSlots = Array.from({ length: maxStart + 1 }, (_, k) => k).sort(() => rng() - 0.5);
+          const startSlots = ordenarSlots(b, d, maxStart, rng);
 
           for (const i of startSlots) {
             let livre = true;
@@ -1202,11 +1475,19 @@ export function gerarHorarioAlgoritmico(
 
   // ── Loop de tentativas ───────────────────────────────────────────────────
   //
-  // Relaxamento progressivo:
+  // Relaxamento progressivo, medido sobre o ORÇAMENTO TOTAL da geração:
   //   • permitirUsoPlanejamento:  relaxa após 15% (SOFT — planejamento pode ser usado)
   //   • permitirUsoPersonalizado: relaxa após 15% (SOFT — personalizado pode ser usado)
   //   • forcarIndividuais:        relaxa após 25% (desfaz geminação)
   //   • ignorarDiasPreferidos:    relaxa após 70% (ignora preferência de concentração de dias)
+  //
+  // ATENÇÃO ao denominador. Até 08/2026 isto era `globalProgress + attempt /
+  // maxAttempts`, com `maxAttempts` valendo o tamanho do LOTE (100) — de modo que
+  // `curProg` varria 0→0,99 DENTRO DE CADA LOTE. Na prática as 100.000 tentativas
+  // eram 1.000 repetições desta mesma rampa, só com sementes diferentes: o motor
+  // nunca escalava a busca, e rodar três horas não procurava mais fundo do que
+  // rodar três minutos. Por isso a posição agora é absoluta (`offsetTentativa`) e
+  // o denominador é o orçamento inteiro.
   //
   // O que NUNCA é relaxado:
   //   • BAN (indisponivel)     → hard constraint permanente
@@ -1216,34 +1497,140 @@ export function gerarHorarioAlgoritmico(
   //   • conflitos de turma     → hard constraint permanente
   //   • restrições de série    → hard constraint permanente
   //
-  const baseAttempt = Math.round(globalProgress * 100000);
+  // Os limiares são ajustáveis por ambiente: comprimir a rampa (ex. 5/10/20)
+  // faz a geração chegar mais cedo à busca totalmente relaxada, o que encurta
+  // muito o tempo até desistir de uma grade inviável.
+  const LIMIAR_PLAN = Number(process.env.SHETO_RELAX_PLAN) || 0.15;
+  const LIMIAR_INDIV = Number(process.env.SHETO_RELAX_INDIV) || 0.25;
+  const LIMIAR_DIAS = Number(process.env.SHETO_RELAX_DIAS) || 0.70;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const curProg = globalProgress + (attempt / maxAttempts);
-    const permitirPlan = force || curProg > 0.15;
-    const permitirPersonalizado = force || curProg > 0.15;
-    const forcarIndiv = force || curProg > 0.25;
-    const ignorarDiasPref = force || curProg > 0.70;
+  /**
+   * Fração do orçamento gasta em reinícios do zero antes de a busca passar a
+   * melhorar a melhor grade encontrada. Baixo demais e ela se agarra cedo a um
+   * ótimo local ruim; alto demais e desperdiça o orçamento repetindo partidas.
+   */
+  const FASE_EXPLORACAO = Number(process.env.SHETO_FASE_EXPLORACAO) || 0.20;
 
-    const seed = baseAttempt + attempt; // inteiro único 0–99.999 por tentativa global
-    const rng = makeRng(seed);
+  const orcamento = totalTentativas > 0 ? totalTentativas : chunk;
 
-    const res = executarTentativa(permitirPlan, forcarIndiv, ignorarDiasPref, curProg, permitirPersonalizado, rng);
-    if (res.success) return { success: true, aulas: res.aulas, attemptsMade: attempt + 1 };
+  /**
+   * Chamada de diagnóstico: uma única tentativa sobre uma grade já escolhida, só
+   * para descrever o que faltou nela. Não explora, não desmonta nada.
+   */
+  const modoDiagnostico = computarDiagnostico && chunk === 1 && !!gradeHerdada && gradeHerdada.length > 0;
+
+  // Melhor tentativa do pedaço: serve para a parada por estagnação e para a
+  // grade parcial oferecida ao usuário quando a geração falha.
+  // A grade herdada já é a incumbente, com o custo que ela custa. Só é
+  // substituída por algo igual ou melhor.
+  const herdou = !!gradeHerdada && gradeHerdada.length > 0;
+  let melhorPendentes = herdou ? pendentesHerdados : Number.POSITIVE_INFINITY;
+  let melhorAulas: HorarioAulaGeradaAlgoritmo[] =
+    herdou && Number.isFinite(pendentesHerdados) ? gradeHerdada! : [];
+  let melhorIndice = offsetTentativa;
+  /**
+   * Estado completo da melhor tentativa, guardado para o diagnóstico.
+   *
+   * Antes o diagnóstico rodava uma tentativa de descarte à parte (semente fora
+   * do orçamento, todas as relaxações forçadas) e descrevia *aquela* — enquanto
+   * a grade mostrada ao usuário era a melhor tentativa. As duas discordavam:
+   * numa geração real, 9 células vazias na grade contra 18 pendências listadas,
+   * algumas em turmas cujo horário tinha fechado. Agora é a mesma tentativa.
+   */
+  let melhorEstado: ReturnType<typeof executarTentativa> | null = null;
+
+  for (let attempt = 0; attempt < chunk; attempt++) {
+    const indiceGlobal = offsetTentativa + attempt;
+    const curProg = indiceGlobal / orcamento;
+    const permitirPlan = force || curProg > LIMIAR_PLAN;
+    const permitirPersonalizado = force || curProg > LIMIAR_PLAN;
+    const forcarIndiv = force || curProg > LIMIAR_INDIV;
+    const ignorarDiasPref = force || curProg > LIMIAR_DIAS;
+
+    // Semente = índice global: única em toda a geração, inclusive entre as
+    // threads que processam pedaços diferentes ao mesmo tempo.
+    const rng = makeRng(indiceGlobal);
+
+    /**
+     * Exploração vira intensificação.
+     *
+     * Na primeira fatia do orçamento a busca parte do zero, para varrer regiões
+     * distintas e achar um bom ponto de apoio. Passado esse ponto ela para de
+     * recomeçar e passa a trabalhar EM CIMA da melhor grade conhecida: desmonta o
+     * pedaço problemático e remonta. Cada tentativa parte de 396 aulas prontas
+     * em vez de zero — é a diferença entre repetir quarenta mil vezes o mesmo
+     * esforço e acumulá-lo.
+     */
+    const base = melhorAulas.length > 0 ? melhorAulas : (gradeHerdada ?? []);
+    /**
+     * Grade recebida de fora (memória da escola ou outra thread) já entra em
+     * intensificação na primeira tentativa: a fase de exploração existe para
+     * encontrar um ponto de apoio, e aqui ele já veio pronto. Esperar 20% do
+     * orçamento para usá-lo desperdiçaria justamente o que a memória economiza.
+     */
+    const intensificar = base.length > 0 && (herdou || modoDiagnostico || curProg > FASE_EXPLORACAO);
+
+    const res = executarTentativa(
+      permitirPlan, forcarIndiv, ignorarDiasPref, curProg, permitirPersonalizado, rng,
+      intensificar ? base : null,
+      // Na intensificação a ordem por dificuldade é seguida à risca; na exploração
+      // ela é afrouxada para as tentativas não saírem todas iguais.
+      intensificar ? 1 : 4,
+      modoDiagnostico,
+    );
+
+    // Aprendizado: todo bloco que ficou de fora fica mais pesado e será tentado
+    // antes na próxima vez. É o que faz a busca convergir para o gargalo real.
+    for (const b of res.pendentes) {
+      const k = chaveBloco(b);
+      pesos.set(k, (pesos.get(k) ?? 0) + 1);
+    }
+
+    if (res.success) {
+      return {
+        success: true, aulas: res.aulas, attemptsMade: attempt + 1,
+        melhorPendentes: 0, melhorIndice: indiceGlobal,
+        pesos: Object.fromEntries(pesos),
+      };
+    }
+
+    /**
+     * `<=` e não `<`: aceitar soluções de custo IGUAL é o que permite atravessar
+     * platô. Com `<` a busca congela na primeira boa solução e passa o resto do
+     * orçamento desmontando e remontando exatamente a mesma grade.
+     */
+    if (res.pendentes.length <= melhorPendentes) {
+      melhorPendentes = res.pendentes.length;
+      melhorAulas = res.aulas;
+      melhorIndice = indiceGlobal;
+      melhorEstado = res;
+    }
   }
 
-  // Tentativa final de fallback — semente 100.000 (fora do range do loop)
-  const fallbackRng = makeRng(100000);
-  const finalFail = executarTentativa(true, true, true, 1, true, fallbackRng);
+  const semDiagnostico = {
+    success: false,
+    aulas: melhorAulas,
+    attemptsMade: chunk,
+    melhorPendentes: melhorPendentes === Number.POSITIVE_INFINITY ? 0 : melhorPendentes,
+    melhorIndice,
+    pesos: Object.fromEntries(pesos),
+    error: 'Algumas aulas não puderam ser alocadas devido a conflitos de professores ou restrições de horários.',
+  };
+
+  if (!computarDiagnostico || !melhorEstado) return semDiagnostico;
 
   /**
    * ── MOTOR DE DIAGNÓSTICO ────────────────────────────────────────────────────
-   * 
-   * IMPORTANTE: Não usamos o `ocupacaoTurmas` do finalFail (que é um estado
-   * aleatório de uma tentativa), pois ele causa falsos positivos de "turma lotada".
+   *
+   * Descreve a MELHOR tentativa — a mesma cuja grade é devolvida em `aulas`.
+   * Cada pendência listada corresponde a uma célula vazia da grade que o usuário
+   * vê, e vice-versa.
+   *
+   * IMPORTANTE: Não usamos o `ocupacaoTurmas` da tentativa (que é um estado
+   * aleatório), pois ele causa falsos positivos de "turma lotada".
    *
    * Em vez disso, para cada bloco pendente:
-   * 1. Usamos um fresh set APENAS com as aulas que o finalFail *conseguiu* alocar
+   * 1. Usamos um fresh set APENAS com as aulas que a tentativa *conseguiu* alocar
    *    (isso representa o estado mais preenchido possível sem aquele bloco).
    * 2. Testamos a sequência de `b.size` slots consecutivos reais (não individuais).
    * 3. Registramos o motivo real da primeira rejeição em cada sequência.
@@ -1500,8 +1887,15 @@ export function gerarHorarioAlgoritmico(
 
       const turmasLotadasReportadas = motivosCounter.get('falta_slot_turma')?.turmas || new Set();
 
+      /**
+       * A condição era `demanda > capacidade`, e por isso a seção ficava muda
+       * exatamente no caso mais grave: demanda IGUAL à capacidade. Aí a turma não
+       * tem uma única folga, e só uma arrumação perfeita fecha a grade — qualquer
+       * BAN ou folga de professor num slot que a turma precisa já derruba tudo.
+       * É a informação mais acionável do relatório e era a que não saía.
+       */
       for (const [turmaId, info] of capacityMap.entries()) {
-        if (turmasLotadasReportadas.has(info.nome) || (info.demandaPresencial > info.capacidade)) {
+        if (turmasLotadasReportadas.has(info.nome) || (info.demandaPresencial >= info.capacidade)) {
           const pendentesDaTurma = pendentes.filter(p => p.turma_id === turmaId && p.tipo === 'presencial');
 
           console.log(`\n  TURMA: ${info.nome}`);
@@ -1511,6 +1905,11 @@ export function gerarHorarioAlgoritmico(
 
           const diff = info.capacidade - info.demandaPresencial;
           console.log(`    Diferença (Capacidade - Demanda): ${diff > 0 ? '+' + diff : diff} slots ${diff < 0 ? '(EXCESSO DE CARGA!)' : ''}`);
+          if (diff === 0) {
+            console.log(`    FOLGA ZERO — a turma preenche todos os slots do turno. Só uma arrumação`);
+            console.log(`    perfeita fecha: qualquer BAN ou folga de professor num slot de que esta`);
+            console.log(`    turma precise torna a grade impossível, não apenas difícil.`);
+          }
           console.log(`    Slots já ocupados na grade gerada: ${info.alocados}`);
 
           const sobraram = info.capacidade - info.alocados;
@@ -1528,16 +1927,32 @@ export function gerarHorarioAlgoritmico(
       console.log(`───────────────────────────────────────────────────────────`);
     }
 
+    /**
+     * As descrições dizem o que FOI OBSERVADO na melhor tentativa, não o que está
+     * provado. O motor amostra dezenas de milhares de arranjos entre um número de
+     * combinações que não cabe em computador nenhum: "impedindo o alocamento" dava
+     * a entender que não havia saída, e mandava o operador desfazer restrições que
+     * talvez não fossem o gargalo.
+     */
     const descSugestoes: Record<string, { d: string, s: string }> = {
-      'excess_ban': { d: 'Restrição manual (BAN) impedindo o alocamento das aulas.', s: 'Reduza as restrições manuais (BAN) dos professores afetados, liberando mais dias.' },
-      'excess_folga': { d: 'Livre Docência (Folga) ocupando os slots preferenciais.', s: 'Verifique se as folgas da Livre Docência estão excessivas ou retire-as.' },
+      'excess_ban': { d: 'Restrição manual (BAN) foi o bloqueio mais frequente.', s: 'Reduza as restrições manuais (BAN) dos professores afetados, liberando mais dias.' },
+      'excess_folga': { d: 'Livre Docência (Folga) foi o bloqueio mais frequente.', s: 'Verifique se as folgas da Livre Docência estão excessivas ou retire-as.' },
       'choque_turno_oposto': { d: 'Choque com outras grades já publicadas (outro turno).', s: 'Verifique se o professor foi publicado em outro turno com o mesmo horário. Isso pode ser falso conflito se uma versão antiga do próprio turno está publicada.' },
-      'choque_turno_local': { d: 'Professor sem espaço livre na própria grade sendo gerada.', s: 'A carga total do professor pode exceder o número de slots disponíveis no turno.' },
-      'falta_slot_turma': { d: 'Turma sem slots disponíveis — carga excede a capacidade do turno.', s: 'Verifique a Matriz da Série. O total de aulas da turma pode estar excedendo aulas_por_dia × dias_por_semana.' },
+      // A sugestão antiga era "a carga total do professor pode exceder os slots
+      // disponíveis", e costumava ser falsa: na escola 17032717 o professor
+      // apontado tinha 35 aulas para 40 horários livres. O motivo real é outro —
+      // ele já está com outra turma nos horários que sobraram nesta.
+      'choque_turno_local': { d: 'Professor já está com outra turma nos horários que sobraram.', s: 'Não é excesso de carga: os horários vagos desta turma coincidem com aulas que o professor dá em outras turmas. Distribua as disciplinas dele entre mais professores, ou libere restrições para dar mais alternativas de encaixe.' },
+      // Dizia "carga excede a capacidade". Quando a carga é IGUAL à capacidade —
+      // o caso mais comum e o mais difícil — nada excede, e ainda assim a turma
+      // fica sem espaço: não sobra uma única folga para a busca manobrar.
+      'falta_slot_turma': { d: 'Turma sem horário livre para encaixar estas aulas.', s: 'Compare, na Matriz da Série, o total de aulas da turma com aulas por dia × dias da semana. Se forem iguais, a turma não tem nenhuma folga e só um encaixe perfeito fecha a grade — acrescentar uma aula ao dia ou um dia à semana costuma resolver.' },
       'geminacao_impossivel': { d: 'Geminação forçada de aulas não encontrou espaços consecutivos suficientes.', s: 'Desative a Geminação para as disciplinas afetadas ou reduza o tamanho do bloco.' },
       'restricao_serie': { d: 'A série impede alocação de aulas nesse slot.', s: 'Revise as restrições de série no módulo de Refino.' },
       'sem_professor': { d: 'Componente sem professor atribuído na turma.', s: 'Atribua um professor ao componente da turma afetada.' },
-      'heuristica_busca': { d: 'Existiam posições viáveis, mas a ordem de exploração da busca não conseguiu fechar a grade.', s: 'Ajuste a heurística de ordenação dos dias/slots ou aumente a diversidade aleatória da busca.' },
+      // A sugestão anterior mandava ajustar a heurística e a diversidade da busca:
+      // instrução para quem mexe no código, não para quem monta o horário.
+      'heuristica_busca': { d: 'Havia lugar livre, mas a busca não chegou a esta combinação.', s: 'Este é o caso em que gerar de novo tem mais chance de resolver: existe espaço para a aula, a busca é que não encontrou o caminho até ele. Se repetir e continuar sobrando, aí o problema está nos dados.' },
     };
 
     const causasIdentificadas = Array.from(motivosCounter.values()).map(m => ({
@@ -1552,22 +1967,14 @@ export function gerarHorarioAlgoritmico(
     return { causasIdentificadas, pendenciasDetalhadas };
   };
 
-  let diagnosticoFunc: DiagnosticoFalha | undefined = undefined;
-  if (!finalFail.success && finalFail.pendentes && finalFail.pendentes.length > 0) {
-    diagnosticoFunc = diagnosticarFalhas(
-      finalFail.pendentes,
-      finalFail.aulas,
-      finalFail.ocupacaoProfessoresPorDia!,
-      finalFail.todosOsBlocos!
-    );
-  }
-
   return {
-    success: false,
-    aulas: finalFail.aulas,
-    attemptsMade: maxAttempts,
-    error: 'Algumas aulas não puderam ser alocadas devido a conflitos de professores ou restrições de horários.',
-    diagnostico: diagnosticoFunc,
+    ...semDiagnostico,
+    diagnostico: diagnosticarFalhas(
+      melhorEstado.pendentes,
+      melhorEstado.aulas,
+      melhorEstado.ocupacaoProfessoresPorDia,
+      melhorEstado.todosOsBlocos
+    ),
   };
 }
 

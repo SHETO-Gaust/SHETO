@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import type { TurmaComDados, Serie, ProfessorComDados, ComponenteCurricular, Turno } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Edit, Trash2, Users, BookOpen, Pencil } from 'lucide-react';
+import { PlusCircle, Trash2, Users, BookOpen, Pencil, Lock } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getTurmas } from './actions';
@@ -12,6 +12,7 @@ import { CreateTurmaDialog } from './create-turma-dialog';
 import { AlocacaoProfessoresSheet } from './ensalamento-sheet';
 import { DeleteTurmaDialog } from './delete-turma-dialog';
 import { CargaHorariaProfessoresSheet } from './carga-horaria-professores-sheet';
+import { FixarAulasDialog } from './fixar-aulas-dialog';
 
 type Props = {
   initialTurmas: TurmaComDados[];
@@ -20,10 +21,11 @@ type Props = {
     series: (Serie & { turno: Pick<Turno, 'id' | 'nome'> | null; })[];
     professores: ProfessorComDados[];
     componentes: ComponenteCurricular[];
+    turnos: Turno[];
   };
 };
 
-type SheetType = 'alocacao' | 'carga-prof' | null;
+type SheetType = 'alocacao' | 'carga-prof' | 'fixar-aulas' | null;
 type DialogType = 'create-turma' | 'edit-turma' | 'delete-turma' | null;
 
 export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
@@ -97,6 +99,7 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
                             // "completo", e sim nada para alocar.
                             const semCarga = totalComponentes === 0;
                             const isCompleto = !semCarga && totalComponentes === componentesEnsalados;
+                            const aulasTravadas = (turma.aulas_fixas || []).length;
 
                             return (
                                 <Card key={turma.id} className="flex flex-col">
@@ -113,21 +116,33 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
                                             </Button>
                                         </div>
                                     </CardHeader>
-                                    <CardContent className="flex-grow space-y-3">
-                                        <div>
-                                            <p className="text-sm font-medium text-muted-foreground">
-                                                {semCarga
-                                                    ? "Série sem carga horária definida"
-                                                    : isCompleto
-                                                        ? "Alocação completa"
-                                                        : `Alocação: ${componentesEnsalados} de ${totalComponentes} disciplinas`}
-                                            </p>
-                                        </div>
+                                    <CardContent className="flex-grow space-y-2">
+                                        <p className="text-sm font-medium text-muted-foreground">
+                                            {semCarga
+                                                ? "Série sem carga horária definida"
+                                                : isCompleto
+                                                    ? "Alocação completa"
+                                                    : `Alocação: ${componentesEnsalados} de ${totalComponentes} disciplinas`}
+                                        </p>
+                                        {aulasTravadas > 0 && (
+                                            <Badge variant="outline" className="gap-1 border-primary/40 text-primary bg-primary/5">
+                                                <Lock className="h-3 w-3" />
+                                                {aulasTravadas} {aulasTravadas === 1 ? 'aula travada' : 'aulas travadas'}
+                                            </Badge>
+                                        )}
                                     </CardContent>
                                     <CardFooter className="flex gap-2">
                                         <Button className="flex-1" onClick={() => handleOpenSheet(turma, 'alocacao')}>
                                             <BookOpen className="mr-2 h-4 w-4" />
                                             Alocar Professores
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            title="Travar aulas em dia/horário fixo"
+                                            onClick={() => handleOpenSheet(turma, 'fixar-aulas')}
+                                        >
+                                            <Lock className="h-4 w-4" />
                                         </Button>
                                         <Button variant="destructive" size="icon" onClick={() => handleOpenDialog(turma, 'delete-turma')}>
                                             <Trash2 className="h-4 w-4" />
@@ -167,6 +182,14 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
                 setIsOpen={(open) => { if (!open) closeModals(); }}
                 turma={selectedTurma}
                 onTurmaDeleted={fetchAndUpdateTurmas}
+            />
+            <FixarAulasDialog
+                isOpen={activeSheet === 'fixar-aulas'}
+                setIsOpen={(open) => { if (!open) closeModals(); }}
+                turma={selectedTurma}
+                todasAsTurmas={turmas}
+                turnos={dependencies.turnos}
+                onSaved={fetchAndUpdateTurmas}
             />
         </>
       )}

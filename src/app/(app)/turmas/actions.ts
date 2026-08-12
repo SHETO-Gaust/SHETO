@@ -7,33 +7,16 @@ import { z } from 'zod';
 import { getProfessores } from '@/app/(app)/professores/actions';
 import type { TurmaComDados, Serie, ComponenteCurricular, ProfessorComDados, Turno } from '@/lib/types';
 import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
+import { lerTurmas, lerTurnos } from '@/lib/dados/leitura';
+import { invalidarCacheGeracao } from '@/lib/geracao/dados';
+import { resolverTurnoOposto } from '@/lib/turno-oposto';
 
 /* -------------------------------------------------------------------------- */
 /*                                  GET TURMAS                                */
 /* -------------------------------------------------------------------------- */
 export async function getTurmas(escolaId: string): Promise<{ data?: TurmaComDados[], error?: string }> {
     await requireEscolaEModulo(escolaId, 'turmas');
-  const supabase = await createClient();
-  try {
-    const { data: turmas, error: turmasError } = await supabase
-      .from('turmas')
-      .select(`
-        *,
-        serie:series(id, nome, turno_id, componentes:series_componentes(*, componente:componentes_curriculares(id, nome, sigla))),
-        professores:turmas_professores(*, professor:professores(id, nome_horario))
-      `)
-      .eq('escola_id', escolaId)
-      .order('nome', { referencedTable: 'series', ascending: true })
-      .order('nome', { ascending: true });
-
-    if (turmasError) throw turmasError;
-    if (!turmas) return { data: [] };
-
-    return { data: turmas as any[] };
-  } catch (error: any) {
-    console.error("Error fetching turmas:", error);
-    return { error: 'Não foi possível buscar as turmas.' };
-  }
+    return lerTurmas(escolaId);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -43,28 +26,33 @@ export async function getEnsalamentoDependencies(escolaId: string): Promise<{
     series: (Serie & { turno: Turno | null, componentes: { componente_id: string, aulas_presenciais: number, aulas_nao_presenciais: number, componente: { nome: string, sigla: string } }[] })[],
     professores: ProfessorComDados[],
     componentes: ComponenteCurricular[],
+    turnos: Turno[],
 }> {
     await requireEscolaEModulo(escolaId, 'turmas');
     const supabase = await createClient();
-    const [seriesResult, professoresResult, componentesResult] = await Promise.all([
+    const [seriesResult, professoresResult, componentesResult, turnosResult] = await Promise.all([
         supabase.from('series').select(`
-            *, 
-            turno:turnos(id, nome), 
+            *,
+            turno:turnos(id, nome),
             componentes:series_componentes(
-                componente_id, 
-                aulas_presenciais, 
+                componente_id,
+                aulas_presenciais,
                 aulas_nao_presenciais,
                 componente:componentes_curriculares(nome, sigla)
             )
         `).eq('escola_id', escolaId),
         getProfessores(escolaId),
-        supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId)
+        supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId),
+        // Os turnos completos (dias, aulas por dia, horários) alimentam a grade da
+        // tela de fixação; o `turno` embutido na série só traz id e nome.
+        lerTurnos(escolaId),
     ]);
 
     return {
         series: seriesResult.data as any[] || [],
         professores: professoresResult.data || [],
         componentes: componentesResult.data || [],
+        turnos: turnosResult.data || [],
     };
 }
 
@@ -172,4 +160,269 @@ export async function updateAlocacaoProfessores(formData: z.infer<typeof alocaca
     revalidatePath('/turmas');
     revalidatePath('/relatorios');
     return { success: true };
+}
+
+
+/* -------------------------------------------------------------------------- */
+/*                          AULAS FIXAS (TRAVAMENTO)                          */
+/* -------------------------------------------------------------------------- */
+
+const aulaFixaInputSchema = z.object({
+    id: z.string().optional(),          // presente = registro existente
+    componente_id: z.string(),
+    tipo_aula: z.enum(['presencial', 'nao_presencial']),
+    dia_semana: z.string(),
+    aula_index: z.coerce.number().min(0),
+});
+
+const aulasFixasSchema = z.object({
+    turma_id: z.string(),
+    aulas_fixas: z.array(aulaFixaInputSchema).default([]),
+});
+
+/**
+ * Contexto de validação de uma turma: turno em que ela funciona, turno oposto
+ * (para as aulas não presenciais) e a carga horária de cada componente.
+ */
+async function contextoDaTurma(supabase: any, turmaId: string) {
+    const { data: turma } = await supabase
+        .from('turmas')
+        .select('id, escola_id, serie_id, serie:series(id, nome, turno_id)')
+        .eq('id', turmaId)
+        .single();
+
+    if (!turma?.serie) return { erro: 'Turma não encontrada.' as const };
+
+    const [{ data: turnos }, { data: componentes }] = await Promise.all([
+        supabase.from('turnos').select('*').eq('escola_id', turma.escola_id),
+        supabase
+            .from('series_componentes')
+            .select('componente_id, aulas_presenciais, aulas_nao_presenciais')
+            .eq('serie_id', (turma.serie as any).id),
+    ]);
+
+    const turno = (turnos || []).find((t: Turno) => t.id === (turma.serie as any).turno_id) || null;
+    if (!turno) return { erro: 'A série desta turma não tem turno definido.' as const };
+
+    return {
+        turma,
+        turno,
+        turnoOposto: resolverTurnoOposto(turno, turnos || []),
+        componentes: (componentes || []) as { componente_id: string; aulas_presenciais: number; aulas_nao_presenciais: number }[],
+    };
+}
+
+export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasSchema>) {
+    await requireEscolaDoRecurso('turmas', formData.turma_id, 'turmas');
+    const supabase = await createClient();
+    const validated = aulasFixasSchema.safeParse(formData);
+    if (!validated.success) return { error: 'Dados inválidos.' };
+
+    const { turma_id, aulas_fixas } = validated.data;
+
+    const ctx = await contextoDaTurma(supabase, turma_id);
+    if ('erro' in ctx) return { error: ctx.erro };
+    const { turno, turnoOposto, componentes } = ctx;
+
+    // ── 1. Validar as fixações recebidas ────────────────────────────────────
+    if (aulas_fixas.length > 0) {
+        const carga = new Map<string, number>();
+        for (const c of componentes) {
+            carga.set(`${c.componente_id}|presencial`, c.aulas_presenciais);
+            carga.set(`${c.componente_id}|nao_presencial`, c.aulas_nao_presenciais);
+        }
+
+        const contagem = new Map<string, number>();
+        for (const f of aulas_fixas) {
+            const chave = `${f.componente_id}|${f.tipo_aula}`;
+            contagem.set(chave, (contagem.get(chave) || 0) + 1);
+        }
+        for (const [chave, n] of contagem.entries()) {
+            const total = carga.get(chave) ?? 0;
+            if (n > total) {
+                return { error: `Há ${n} aula(s) travada(s) de um componente que só tem ${total} aula(s) na carga horária. Reduza os travamentos ou aumente a carga na tela de Série.` };
+            }
+        }
+
+        for (const f of aulas_fixas) {
+            // Aula não presencial acontece no contraturno: os limites são os dele.
+            const turnoDaAula = f.tipo_aula === 'presencial' ? turno : turnoOposto;
+            if (!turnoDaAula) {
+                return { error: 'Não há turno oposto ativo para travar aulas não presenciais.' };
+            }
+            if (!(turnoDaAula.dias_semana || []).includes(f.dia_semana)) {
+                return { error: `O dia "${f.dia_semana}" não pertence ao turno ${turnoDaAula.nome}.` };
+            }
+            if (f.aula_index >= (turnoDaAula.aulas_por_dia || 0)) {
+                return { error: `A ${f.aula_index + 1}ª aula ultrapassa o limite do turno ${turnoDaAula.nome} (${turnoDaAula.aulas_por_dia} aulas/dia).` };
+            }
+        }
+
+        // Um slot, um componente. A uq_turma_slot_unico fecha a porta no banco,
+        // mas a mensagem de erro dela não diz nada a quem está na tela.
+        const slots = new Map<string, string>();
+        for (const f of aulas_fixas) {
+            const slot = `${f.tipo_aula}|${f.dia_semana}|${f.aula_index}`;
+            const jaTem = slots.get(slot);
+            if (jaTem && jaTem !== f.componente_id) {
+                return { error: `Dois componentes diferentes estão travados no mesmo horário (${f.dia_semana}, ${f.aula_index + 1}ª aula).` };
+            }
+            slots.set(slot, f.componente_id);
+        }
+    }
+
+    // ── 2. Remover o que saiu ───────────────────────────────────────────────
+    const { data: existentes } = await supabase
+        .from('turmas_aulas_fixas')
+        .select('id')
+        .eq('turma_id', turma_id);
+
+    const idsRecebidos = new Set(aulas_fixas.filter(f => f.id).map(f => f.id!));
+    const idsParaRemover = (existentes || []).map((f: any) => f.id).filter((id: string) => !idsRecebidos.has(id));
+
+    if (idsParaRemover.length > 0) {
+        const erroGuarda = await recusarSeUsadaEmHorario(supabase, idsParaRemover);
+        if (erroGuarda) return { error: erroGuarda };
+
+        const { error: removeErr } = await supabase
+            .from('turmas_aulas_fixas')
+            .delete()
+            .in('id', idsParaRemover);
+        if (removeErr) return { error: 'Erro ao remover os travamentos antigos.' };
+    }
+
+    // ── 3. Persistir ────────────────────────────────────────────────────────
+    // INSERT para as novas, UPDATE para as existentes. Nunca um upsert único:
+    // registros sem id chegam com id=undefined e violam o NOT NULL da PK.
+    const linha = (f: z.infer<typeof aulaFixaInputSchema>) => ({
+        turma_id,
+        componente_id: f.componente_id,
+        tipo_aula: f.tipo_aula,
+        dia_semana: f.dia_semana,
+        aula_index: f.aula_index,
+        updated_at: new Date().toISOString(),
+    });
+
+    const novas = aulas_fixas.filter(f => !f.id);
+    if (novas.length > 0) {
+        const { error: insertErr } = await supabase
+            .from('turmas_aulas_fixas')
+            .insert(novas.map(linha));
+        if (insertErr) {
+            if (insertErr.code === '23505') {
+                return { error: 'Dois componentes tentam ocupar o mesmo horário nesta turma.' };
+            }
+            console.error('Error inserting turmas_aulas_fixas:', insertErr);
+            return { error: 'Erro ao salvar os travamentos.' };
+        }
+    }
+
+    for (const f of aulas_fixas.filter(f => !!f.id)) {
+        const { error: updateErr } = await supabase
+            .from('turmas_aulas_fixas')
+            .update(linha(f))
+            .eq('id', f.id!);
+        if (updateErr) {
+            if (updateErr.code === '23505') {
+                return { error: 'Dois componentes tentam ocupar o mesmo horário nesta turma.' };
+            }
+            console.error('Error updating turmas_aulas_fixas:', updateErr);
+            return { error: 'Erro ao atualizar um travamento.' };
+        }
+    }
+
+    // O gerador lê as fixas do cache de 30s; sem isto a próxima geração poderia
+    // usar a versão anterior.
+    invalidarCacheGeracao();
+    revalidatePath('/turmas');
+    return { success: true };
+}
+
+/**
+ * Fixação já usada por um horário gerado não pode sumir: a grade publicada
+ * aponta para ela por `horario_aulas.aula_fixa_id`.
+ */
+async function recusarSeUsadaEmHorario(supabase: any, ids: string[]): Promise<string | null> {
+    const { data } = await supabase
+        .from('horario_aulas')
+        .select('id, aula_fixa_id')
+        .in('aula_fixa_id', ids)
+        .limit(1);
+
+    if (data && data.length > 0) {
+        return 'Um ou mais travamentos removidos já foram usados para gerar um horário. Exclua ou regenere o horário antes de removê-los.';
+    }
+    return null;
+}
+
+const copiarFixasSchema = z.object({
+    origem_turma_id: z.string(),
+    destino_turma_id: z.string(),
+});
+
+/**
+ * Replica os travamentos de uma turma em outra da mesma série, substituindo o
+ * que houver no destino. Substituir (em vez de mesclar) é o que mantém a
+ * operação previsível: depois dela as duas turmas estão iguais.
+ */
+export async function copiarAulasFixasTurma(formData: z.infer<typeof copiarFixasSchema>) {
+    const validated = copiarFixasSchema.safeParse(formData);
+    if (!validated.success) return { error: 'Dados inválidos.' };
+    const { origem_turma_id, destino_turma_id } = validated.data;
+
+    if (origem_turma_id === destino_turma_id) return { error: 'Origem e destino são a mesma turma.' };
+
+    await requireEscolaDoRecurso('turmas', origem_turma_id, 'turmas');
+    await requireEscolaDoRecurso('turmas', destino_turma_id, 'turmas');
+
+    const supabase = await createClient();
+
+    const { data: turmas } = await supabase
+        .from('turmas')
+        .select('id, serie_id')
+        .in('id', [origem_turma_id, destino_turma_id]);
+
+    const origem = (turmas || []).find((t: any) => t.id === origem_turma_id);
+    const destino = (turmas || []).find((t: any) => t.id === destino_turma_id);
+    if (!origem || !destino) return { error: 'Turma não encontrada.' };
+    if (origem.serie_id !== destino.serie_id) {
+        return { error: 'Só é possível copiar travamentos entre turmas da mesma série.' };
+    }
+
+    const [{ data: fixasOrigem }, { data: fixasDestino }] = await Promise.all([
+        supabase.from('turmas_aulas_fixas').select('*').eq('turma_id', origem_turma_id),
+        supabase.from('turmas_aulas_fixas').select('id').eq('turma_id', destino_turma_id),
+    ]);
+
+    const idsDestino = (fixasDestino || []).map((f: any) => f.id);
+    if (idsDestino.length > 0) {
+        const erroGuarda = await recusarSeUsadaEmHorario(supabase, idsDestino);
+        if (erroGuarda) return { error: erroGuarda };
+
+        const { error: delErr } = await supabase
+            .from('turmas_aulas_fixas')
+            .delete()
+            .in('id', idsDestino);
+        if (delErr) return { error: 'Erro ao limpar os travamentos da turma de destino.' };
+    }
+
+    const copias = (fixasOrigem || []).map((f: any) => ({
+        turma_id: destino_turma_id,
+        componente_id: f.componente_id,
+        tipo_aula: f.tipo_aula,
+        dia_semana: f.dia_semana,
+        aula_index: f.aula_index,
+    }));
+
+    if (copias.length > 0) {
+        const { error: insErr } = await supabase.from('turmas_aulas_fixas').insert(copias);
+        if (insErr) {
+            console.error('Error copying turmas_aulas_fixas:', insErr);
+            return { error: 'Erro ao copiar os travamentos.' };
+        }
+    }
+
+    invalidarCacheGeracao();
+    revalidatePath('/turmas');
+    return { success: true, copiadas: copias.length, apagadas: idsDestino.length };
 }

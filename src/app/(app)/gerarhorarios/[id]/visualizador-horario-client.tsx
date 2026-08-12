@@ -85,10 +85,33 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
     return Array.from(map.values()).sort((a, b) => a.nome_horario.localeCompare(b.nome_horario));
   }, [horario.aulas, horario.outras_aulas_publicadas]);
 
-  const diasAtivos = useMemo(() => 
+  const diasAtivos = useMemo(() =>
     DIAS_SEMANA_MAP.filter(d => horario.turno.dias_semana.includes(d.id)),
     [horario.turno.dias_semana]
   );
+
+  /**
+   * Aulas gravadas sem professor definido, agrupadas por turma/componente.
+   *
+   * Elas ocupam o slot da turma como qualquer outra aula — sem este resumo a
+   * grade parece completa, e a ausência só apareceria no dia em que ninguém
+   * entra na sala. Aparece em grades salvas com pendências.
+   */
+  const componentesSemProfessor = useMemo(() => {
+    const map = new Map<string, { turma: string; componente: string; aulas: number }>();
+    horario.aulas.forEach(aula => {
+      if (aula.professor_id) return;
+      const chave = `${aula.turma_id}|${aula.componente_id}`;
+      const atual = map.get(chave);
+      if (atual) atual.aulas++;
+      else map.set(chave, {
+        turma: aula.turma?.nome ?? '—',
+        componente: aula.componente?.sigla || aula.componente?.nome || '—',
+        aulas: 1,
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.turma.localeCompare(b.turma));
+  }, [horario.aulas]);
 
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [selectedProfessorId, setSelectedProfessorId] = useState<string>(forceTeacherId || '');
@@ -155,12 +178,42 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
 
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
 
+    /**
+     * Pendências desta turma. Elas não têm dia/horário — justamente por não
+     * terem sido alocadas — então não dá para apontar a célula exata de cada
+     * uma. O que a grade faz é marcar os slots vazios como VAGA e listar aqui
+     * quais componentes ficaram de fora, com o motivo que o motor apurou.
+     */
+    const nomeDaTurma = isProfessorView ? null : turmas.find(t => t.id === targetId)?.nome;
+    const pendenciasDaTurma = nomeDaTurma
+        ? (horario.pendencias ?? []).filter(p => p.turma_nome === nomeDaTurma)
+        : [];
+    const temPendencias = pendenciasDaTurma.length > 0;
+
     return (
         <div className="space-y-3 print:space-y-1 break-inside-avoid w-full">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2 print:text-black">
                 <div className={cn("w-2 h-2 rounded-full", tipo === 'nao_presencial' ? "bg-orange-400" : "bg-primary")} />
                 {label} ({turnoInfo.nome})
             </h3>
+
+            {temPendencias && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-destructive">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {pendenciasDaTurma.length} aula(s) não alocada(s) nesta turma
+                    </div>
+                    <ul className="space-y-0.5">
+                        {pendenciasDaTurma.map((p, i) => (
+                            <li key={i} className="text-[11px] leading-snug">
+                                <span className="font-semibold">{p.disciplina_nome}</span>
+                                {p.professor_nome && <span className="text-muted-foreground"> · {p.professor_nome}</span>}
+                                <span className="text-destructive"> — {p.motivo_real}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
             <div className="rounded-xl border bg-card overflow-hidden print:border-black print:rounded-none shadow-sm">
                 <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
@@ -205,12 +258,22 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                                         <div className="flex flex-col items-center justify-center gap-0.5">
                                             <div className={cn(
                                                 "font-bold text-[10px] leading-tight uppercase px-1 py-0.5 rounded w-full line-clamp-2 shadow-sm border",
-                                                aula.tipo === 'presencial' ? "bg-primary/10 text-primary border-primary/20" : "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800"
+                                                // Aula sem professor tem aparência própria: ela ocupa o slot da
+                                                // turma como qualquer outra, então sem marcação a grade parece
+                                                // completa e o buraco só aparece no dia em que a aula não acontece.
+                                                !aula.professor_id
+                                                    ? "bg-destructive/10 text-destructive border-destructive/30 border-dashed"
+                                                    : aula.tipo === 'presencial'
+                                                        ? "bg-primary/10 text-primary border-primary/20"
+                                                        : "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800"
                                             )}>
                                             {aula.componente.sigla || aula.componente.nome}
                                             </div>
-                                            <div className="text-[8px] text-muted-foreground font-bold truncate w-full uppercase">
-                                                {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROF.')}
+                                            <div className={cn(
+                                                "text-[8px] font-bold truncate w-full uppercase",
+                                                !aula.professor_id && !isProfessorView ? "text-destructive" : "text-muted-foreground"
+                                            )}>
+                                                {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROFESSOR')}
                                             </div>
                                         </div>
                                         ) : isLD ? (
@@ -222,6 +285,12 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                                             <div className="flex flex-col items-center justify-center gap-0.5 text-blue-600 dark:text-blue-400">
                                                 <PenSquare className="h-3 w-3 text-blue-500 dark:text-blue-400" />
                                                 <span className="text-[8px] font-black uppercase">Planejamento</span>
+                                            </div>
+                                        ) : temPendencias ? (
+                                            // Slot vago numa turma que ficou com aulas de fora. Sem esta marca
+                                            // o buraco é indistinguível de um intervalo previsto na grade.
+                                            <div className="border border-dashed border-destructive/40 bg-destructive/5 rounded px-1 py-1.5">
+                                                <span className="text-[8px] font-black uppercase text-destructive/70">Vaga</span>
                                             </div>
                                         ) : <span className="text-muted-foreground/10">-</span>}
                                     </td>
@@ -390,11 +459,19 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                                                     <td key={t.id} className="p-2 text-center border-r last:border-r-0">
                                                         {aula ? (
                                                             <div className="flex flex-col items-center justify-center gap-1">
-                                                                <div className="font-bold text-[10px] leading-tight uppercase px-2 py-1 rounded bg-primary/5 border border-primary/10 text-primary w-full shadow-sm">
+                                                                <div className={cn(
+                                                                    "font-bold text-[10px] leading-tight uppercase px-2 py-1 rounded border w-full shadow-sm",
+                                                                    aula.professor_id
+                                                                        ? "bg-primary/5 border-primary/10 text-primary"
+                                                                        : "bg-destructive/10 border-destructive/30 border-dashed text-destructive"
+                                                                )}>
                                                                     {aula.componente.sigla || aula.componente.nome}
                                                                 </div>
-                                                                <div className="text-[9px] text-muted-foreground font-bold uppercase truncate w-full">
-                                                                    {aula.professor?.nome_horario || 'SEM PROF.'}
+                                                                <div className={cn(
+                                                                    "text-[9px] font-bold uppercase truncate w-full",
+                                                                    aula.professor_id ? "text-muted-foreground" : "text-destructive"
+                                                                )}>
+                                                                    {aula.professor?.nome_horario || 'SEM PROFESSOR'}
                                                                 </div>
                                                             </div>
                                                         ) : <span className="text-muted-foreground/10">-</span>}
@@ -469,6 +546,30 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
               <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
           </div>
       </div>
+
+      {componentesSemProfessor.length > 0 && (
+        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle className="font-bold">
+            {componentesSemProfessor.reduce((s, c) => s + c.aulas, 0)} aula(s) sem professor definido
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2 text-sm">
+            <p>
+              Estes componentes ocupam o horário da turma, mas não têm professor vinculado —
+              na grade eles aparecem com borda tracejada e o rótulo <strong>SEM PROFESSOR</strong>.
+              Vincule o professor em <strong>Turmas</strong> e gere a grade de novo, ou ajuste pelo Refino.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {componentesSemProfessor.map((c, i) => (
+                <span key={i} className="text-xs bg-background border border-destructive/20 rounded-md px-2 py-1">
+                  <strong>{c.turma}</strong> · {c.componente}
+                  <span className="text-muted-foreground"> ({c.aulas} aula{c.aulas > 1 ? 's' : ''})</span>
+                </span>
+              ))}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card className="print:border-none print:shadow-none">
         {forceView !== 'teachers' && (

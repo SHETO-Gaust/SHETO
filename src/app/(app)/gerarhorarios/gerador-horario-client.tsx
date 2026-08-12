@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, AlertTriangle, Info, FolderDown, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getHorariosSalvos, getHorariosSalvosTodasTurnos, deleteHorario, gerarLoteHorario, salvarGradeFinal, converterPreProducaoParaRascunho, getHorarioDetalhado, getDisciplinasParaConfigGerminacao } from './actions';
+import { getHorariosSalvos, getHorariosSalvosTodasTurnos, deleteHorario, iniciarGeracao, getEstadoGeracao, cancelarGeracao, salvarGradeParcial, getHorarioDetalhado, getDisciplinasParaConfigGerminacao, type EstadoGeracao } from './actions';
 import { exportarTodosHorariosZIP } from '@/lib/export-horario';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -76,9 +76,11 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     const [isPending, startTransition] = useTransition();
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
-    const [genError, setGenError] = useState<string | null>(null);
-    const [diagnostico, setDiagnostico] = useState<DiagnosticoFalha | null>(null);
-    const [partialAulas, setPartialAulas] = useState<any[] | null>(null);
+    /**
+     * O painel de resultado da última geração. Ele persiste entre visitas (o
+     * desfecho mora no banco), então o usuário precisa poder dispensá-lo.
+     */
+    const [resultadoVisivel, setResultadoVisivel] = useState(false);
 
     const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
     const [dialogStep, setDialogStep] = useState<'name' | 'germination'>('name');
@@ -86,29 +88,43 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     const [disciplinasParaConfig, setDisciplinasParaConfig] = useState<{ id: string, nome: string, sigla: string, maxAulas: number }[]>([]);
     const [configGerminacao, setConfigGerminacao] = useState<ConfiguracaoGerminacao[]>([]);
     const [permitirMesmoProfDisciplinasMesmoDia, setPermitirMesmoProfDisciplinasMesmoDia] = useState(false);
-    const [processingTurnoLabel, setProcessingTurnoLabel] = useState('');
 
-    const activeTurnoIdForSaveRef = useRef<string>('');
-
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [currentAttempt, setCurrentAttempt] = useState(0);
-    const MAX_ATTEMPTS = 100000;
     /**
-     * Tentativas por chamada ao servidor.
+     * Estado da geração, lido do servidor.
      *
-     * Era 500, o que dava ~56s de processamento por requisição. O proxy da SEDUC
-     * corta em 60s: o lote que passou de 62s teve a conexão derrubada, o cliente
-     * recebeu a página de erro do proxy no lugar da resposta da Server Action e
-     * a geração morreu com "An unexpected response was received from the server"
-     * — depois de 13 minutos de trabalho jogados fora.
-     *
-     * Com 100, cada requisição fecha em ~11s, bem longe de qualquer gateway. O
-     * total de tentativas não muda; muda só o tamanho do pedaço enviado por vez
-     * (e a barra de progresso passa a andar 5x mais).
+     * Até 08/2026 o laço de tentativas rodava AQUI: o componente chamava uma
+     * Server Action por lote de 100 tentativas, centenas de vezes seguidas.
+     * Fechar a aba matava a geração e jogava fora horas de processamento, e cada
+     * lote era uma requisição longa exposta ao corte de 60s do proxy da SEDUC.
+     * Agora quem executa é o servidor; esta tela só observa e pode interromper.
      */
-    const BATCH_SIZE = 100;
-    /** Uma falha de rede num lote não pode custar a geração inteira. */
-    const MAX_TENTATIVAS_REDE = 3;
+    const [geracao, setGeracao] = useState<EstadoGeracao | null>(null);
+    const [isIniciando, setIsIniciando] = useState(false);
+    const [isCancelando, setIsCancelando] = useState(false);
+    /**
+     * O diálogo de progresso deixou de ser uma prisão: como a geração não depende
+     * mais desta página, fechá-lo é inofensivo e libera a tela para consultar as
+     * grades já salvas. O aviso na barra do topo continua indicando que ela corre.
+     */
+    const [dialogProgressoOculto, setDialogProgressoOculto] = useState(false);
+
+    /** Intervalo do poll. Cada consulta é um SELECT de uma linha. */
+    const POLL_MS = 3000;
+
+    // Tudo que a tela mostra sobre a geração vem da linha do job — não há mais
+    // estado local de progresso a manter em sincronia.
+    const isProcessing = geracao?.emAndamento ?? false;
+    const progressoRelativo = geracao?.orcamento ? geracao.tentativas / geracao.orcamento : 0;
+    const genError = !isProcessing && resultadoVisivel ? geracao?.erro ?? null : null;
+    const diagnostico = (!isProcessing && resultadoVisivel ? geracao?.diagnostico : null) as DiagnosticoFalha | null;
+    const temGradeParcial = !isProcessing && resultadoVisivel && (geracao?.temGradeParcial ?? false);
+    /**
+     * Prova de inviabilidade. Ausente em grades geradas antes desta versão, daí o
+     * acesso opcional — o painel simplesmente não mostra a seção nesses casos.
+     */
+    const certificado = diagnostico?.certificado ?? null;
+    const provado = certificado?.veredito === 'impossivel';
+
     const [isBaixandoTodos, setIsBaixandoTodos] = useState(false);
     const [baixarProgresso, setBaixarProgresso] = useState<{ atual: number; total: number } | null>(null);
 
@@ -116,9 +132,6 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     const loadHorarios = async (turnoId: string) => {
         setIsLoadingHorarios(true);
-        setGenError(null);
-        setDiagnostico(null);
-        setPartialAulas(null);
         if (turnoId === 'todos') {
             const { data, error } = await getHorariosSalvosTodasTurnos(escolaId);
             if (error) {
@@ -142,15 +155,64 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Leitura inicial: é isto que reencontra uma geração que continuou rodando
+    // no servidor enquanto a página estava fechada.
+    useEffect(() => {
+        getEstadoGeracao(escolaId).then(({ data }) => {
+            if (data) {
+                setGeracao(data);
+                setResultadoVisivel(!data.emAndamento && Boolean(data.erro || data.diagnostico));
+            }
+        });
+    }, [escolaId]);
+
+    /**
+     * Poll do andamento.
+     *
+     * Re-armado a cada mudança de `geracao`, de modo que ele começa sozinho
+     * quando uma geração é iniciada e para sozinho quando ela termina.
+     */
+    useEffect(() => {
+        if (!geracao?.emAndamento) return;
+
+        const timer = setTimeout(async () => {
+            const { data } = await getEstadoGeracao(escolaId);
+            if (!data) return;
+            setGeracao(data);
+
+            if (data.emAndamento) return;
+
+            // A geração terminou enquanto olhávamos: mostrar o desfecho.
+            setResultadoVisivel(Boolean(data.erro || data.diagnostico));
+            await loadHorarios(selectedTurnoId);
+
+            if (data.status === 'concluido') {
+                toast({
+                    title: 'Grade gerada',
+                    description: data.horariosGerados.length > 1
+                        ? `${data.horariosGerados.length} grades foram salvas como rascunho.`
+                        : 'A grade foi salva como rascunho.',
+                });
+            } else if (data.status === 'cancelado') {
+                toast({ title: 'Geração interrompida', description: data.erro ?? undefined });
+            } else if (data.status === 'interrompido') {
+                toast({ title: 'Geração interrompida', description: 'O servidor foi reiniciado durante o processamento.', variant: 'destructive' });
+            } else {
+                toast({ title: 'Não foi possível fechar a grade', description: 'Veja o diagnóstico na tela.', variant: 'destructive' });
+            }
+        }, POLL_MS);
+
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [geracao, escolaId, selectedTurnoId]);
+
     const handleTurnoChange = async (turnoId: string) => {
         setSelectedTurnoId(turnoId);
         await loadHorarios(turnoId);
     };
 
     const handleGerarHorarioClick = async () => {
-        setGenError(null);
-        setDiagnostico(null);
-        setPartialAulas(null);
+        setResultadoVisivel(false);
         const nextVersion = horarios.length + 1;
         setNomeHorarioInput(`Horário V${nextVersion}`);
 
@@ -173,157 +235,76 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         setIsConfigDialogOpen(true);
     };
 
+    /**
+     * Dispara a geração no servidor.
+     *
+     * Repare no que NÃO acontece mais aqui: o laço de centenas de chamadas em
+     * sequência. Esta função registra o job e sai; o resto é o poll acima.
+     */
     const handleStartProcessing = async () => {
         if (!nomeHorarioInput.trim()) {
             toast({ title: 'O nome do horário é obrigatório', variant: 'destructive' });
             return;
         }
 
-        setIsConfigDialogOpen(false);
-        setIsProcessing(true);
-        setCurrentAttempt(0);
-        setGenError(null);
-        setDiagnostico(null);
-        setPartialAulas(null);
-
         const turnosParaGerar = selectedTurnoId === 'todos'
             ? turnosAtivos
             : turnosAtivos.filter(t => t.id === selectedTurnoId);
 
-        const isMulti = turnosParaGerar.length > 1;
-
-        // IDs dos horários salvos como pré-produção (convertidos para rascunho ao final)
-        const idsPreProducao: string[] = [];
-
-        try {
-            for (const turno of turnosParaGerar) {
-                activeTurnoIdForSaveRef.current = turno.id;
-                setProcessingTurnoLabel(isMulti ? turno.nome : '');
-                setCurrentAttempt(0);
-
-                let attempts = 0;
-                let foundSolution = false;
-                let finalAulas: any[] = [];
-
-                while (attempts < MAX_ATTEMPTS && !foundSolution) {
-                    const progress = attempts / MAX_ATTEMPTS;
-
-                    // Um lote pode falhar por motivo transitório (proxy cortando a
-                    // conexão, rede da escola oscilando). Perder a geração inteira
-                    // por causa disso é o que já custou 13 minutos de processamento:
-                    // aqui o lote é refeito antes de desistir.
-                    let result: any;
-                    let ultimoErroDeRede: unknown = null;
-                    for (let t = 1; t <= MAX_TENTATIVAS_REDE; t++) {
-                        try {
-                            result = await gerarLoteHorario(
-                                escolaId,
-                                turno.id,
-                                configGerminacao,
-                                BATCH_SIZE,
-                                progress,
-                                permitirMesmoProfDisciplinasMesmoDia
-                            ) as any;
-                            ultimoErroDeRede = null;
-                            break;
-                        } catch (erroRede) {
-                            ultimoErroDeRede = erroRede;
-                            console.error(`Lote falhou (tentativa ${t}/${MAX_TENTATIVAS_REDE}):`, erroRede);
-                            if (t < MAX_TENTATIVAS_REDE) {
-                                setProcessingTurnoLabel(
-                                    `${isMulti ? turno.nome + ' — ' : ''}reconectando (${t}/${MAX_TENTATIVAS_REDE})`
-                                );
-                                await new Promise(r => setTimeout(r, 2000 * t));
-                            }
-                        }
-                    }
-                    if (ultimoErroDeRede) throw ultimoErroDeRede;
-                    setProcessingTurnoLabel(isMulti ? turno.nome : '');
-
-                    if (result.error && !result.aulas) {
-                        setGenError(result.error);
-                        if (result.diagnostico) setDiagnostico(result.diagnostico);
-                        setIsProcessing(false);
-                        return;
-                    }
-
-                    if (result.success) {
-                        finalAulas = result.aulas;
-                        foundSolution = true;
-                        attempts += (result.attemptsMade || BATCH_SIZE);
-                        setCurrentAttempt(attempts);
-                        break;
-                    }
-
-                    if (attempts + BATCH_SIZE >= MAX_ATTEMPTS) {
-                        setGenError(result.error || "Limite de tentativas atingido.");
-                        if (result.diagnostico) setDiagnostico(result.diagnostico);
-                        setPartialAulas(result.aulas || []);
-                    }
-
-                    attempts += BATCH_SIZE;
-                    setCurrentAttempt(attempts);
-                    await new Promise(r => setTimeout(r, 10));
-                }
-
-                if (foundSolution) {
-                    const nomeFinal = isMulti
-                        ? `${nomeHorarioInput} - ${turno.nome}`
-                        : nomeHorarioInput;
-                    // Em geração multi-turno, salvar como 'pre_producao' para que o
-                    // gerador dos turnos seguintes enxergue as ocupações NP deste turno
-                    // e evite conflitos cruzados. Convertido para 'em_rascunho' ao final.
-                    const statusSalvar = isMulti ? 'pre_producao' : 'em_rascunho';
-                    const saveRes = await salvarGradeFinal(escolaId, turno.id, nomeFinal, finalAulas, statusSalvar);
-                    if (saveRes.error) {
-                        toast({ title: `Erro ao salvar ${turno.nome}`, description: saveRes.error, variant: 'destructive' });
-                    } else {
-                        if (isMulti && saveRes.data?.id) idsPreProducao.push(saveRes.data.id);
-                        toast({ title: `Grade gerada: ${turno.nome}`, description: `Sucesso após ${attempts} tentativas.` });
-                    }
-                } else {
-                    toast({ title: 'Problema Detectado', description: `Não foi possível fechar a grade do turno ${turno.nome}.`, variant: 'destructive' });
-                }
-            }
-
-            // Converter todos os pré-produção gerados nesta sessão para rascunho
-            if (idsPreProducao.length > 0) {
-                await converterPreProducaoParaRascunho(idsPreProducao);
-            }
-
-            await loadHorarios(selectedTurnoId);
-        } catch (err) {
-            console.error(err);
-            // A mensagem real precisa aparecer na tela: a geração roda por
-            // centenas de lotes e, sem ela, uma falha no meio do processo é
-            // indistinguível de qualquer outra — sobra "deu erro no servidor".
-            const detalhe = err instanceof Error ? err.message : String(err);
-            setGenError(`Erro no servidor durante o processamento: ${detalhe}`);
-            toast({
-                title: 'Erro Crítico',
-                description: detalhe,
-                variant: 'destructive',
-            });
-        } finally {
-            setIsProcessing(false);
-            setProcessingTurnoLabel('');
+        if (turnosParaGerar.length === 0) {
+            toast({ title: 'Nenhum turno ativo para gerar', variant: 'destructive' });
+            return;
         }
+
+        setIsConfigDialogOpen(false);
+        setIsIniciando(true);
+        setResultadoVisivel(false);
+        setDialogProgressoOculto(false);
+
+        const { data, error } = await iniciarGeracao(
+            escolaId,
+            turnosParaGerar.map(t => t.id),
+            nomeHorarioInput.trim(),
+            configGerminacao,
+            permitirMesmoProfDisciplinasMesmoDia
+        );
+
+        setIsIniciando(false);
+
+        if (error || !data) {
+            toast({ title: 'Não foi possível iniciar a geração', description: error, variant: 'destructive' });
+            // Pode ser um job que já estava rodando: mostrar o estado real.
+            const atual = await getEstadoGeracao(escolaId);
+            if (atual.data) setGeracao(atual.data);
+            return;
+        }
+
+        setGeracao(data);
+    };
+
+    const handleInterromper = async () => {
+        if (!geracao) return;
+        setIsCancelando(true);
+        const { error } = await cancelarGeracao(geracao.id);
+        setIsCancelando(false);
+        if (error) {
+            toast({ title: 'Erro ao interromper', description: error, variant: 'destructive' });
+            return;
+        }
+        // O orquestrador só reage na virada da rodada; o poll mostra quando parou.
+        setGeracao(prev => (prev ? { ...prev, cancelamentoSolicitado: true } : prev));
     };
 
     const handleForcarSalvamento = async () => {
-        if (!partialAulas || !nomeHorarioInput) return;
-        const turnoIdToSave = selectedTurnoId === 'todos'
-            ? activeTurnoIdForSaveRef.current
-            : selectedTurnoId;
+        if (!geracao?.temGradeParcial) return;
 
         startTransition(async () => {
-            const result = await salvarGradeFinal(escolaId, turnoIdToSave, `${nomeHorarioInput} (Com Pendências)`, partialAulas);
+            const result = await salvarGradeParcial(geracao.id, nomeHorarioInput || 'Horário');
             if (result.error) {
                 toast({ title: 'Erro ao salvar', description: result.error, variant: 'destructive' });
             } else {
-                setGenError(null);
-                setDiagnostico(null);
-                setPartialAulas(null);
+                setResultadoVisivel(false);
+                setGeracao(prev => (prev ? { ...prev, temGradeParcial: false } : prev));
                 toast({ title: 'Grade Salva!', description: 'A grade foi salva mesmo com aulas pendentes. Ajuste manualmente os horários vagos.' });
                 await loadHorarios(selectedTurnoId);
             }
@@ -426,8 +407,27 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     {(genError || diagnostico) && (
                         <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 animate-in fade-in slide-in-from-top-4 duration-500">
                             <AlertCircle className="h-5 w-5" />
+                            {/* O desfecho vem do banco e sobrevive a recarregar a página: sem
+                                um jeito de dispensar, ele ficaria na tela para sempre. */}
+                            <button
+                                type="button"
+                                onClick={() => setResultadoVisivel(false)}
+                                aria-label="Dispensar este resultado"
+                                className="absolute right-4 top-4 text-destructive/60 hover:text-destructive text-xs font-bold uppercase tracking-wider"
+                            >
+                                Dispensar
+                            </button>
+                            {/* O motor é uma busca por amostragem: ele testa dezenas de
+                                milhares de arranjos entre um número de combinações que não
+                                cabe em nenhum computador. Dizer "impossível" atribuía a ele
+                                uma conclusão que ele não tem como alcançar, e mandava o
+                                usuário mexer nos dados achando que não havia saída. */}
                             <AlertTitle className="text-xl font-bold">
-                                {diagnostico ? 'Geração Incompleta: Diagnóstico Encontrado' : 'Impossível fechar a grade sem conflitos'}
+                                {provado
+                                    ? 'Esta grade é impossível com os dados atuais'
+                                    : diagnostico
+                                        ? 'Geração incompleta: o que ficou de fora'
+                                        : `Não foi possível fechar a grade em ${(geracao?.tentativas ?? 0).toLocaleString()} tentativas`}
                             </AlertTitle>
                             <AlertDescription className="mt-4 space-y-6">
                                 {!diagnostico && (
@@ -436,11 +436,52 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                     </div>
                                 )}
 
+                                {/*
+                                    Prova de inviabilidade, quando existe. Fica no topo e em
+                                    destaque porque muda o que o usuário deve fazer: aqui gerar
+                                    de novo não adianta, é preciso corrigir o cadastro. Sem esta
+                                    separação, "não consegui" e "não existe" viravam a mesma
+                                    mensagem e o operador não tinha como saber qual era qual.
+                                */}
+                                {certificado?.veredito === 'impossivel' && (
+                                    <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-5 space-y-4">
+                                        <p className="text-sm font-bold text-destructive">
+                                            Não é questão de tentar mais vezes — nenhuma combinação fecharia. Corrija o que está abaixo.
+                                        </p>
+                                        {certificado.causas.map((c, i) => (
+                                            <div key={i} className="bg-background/80 rounded-lg p-4 space-y-1.5">
+                                                <p className="font-semibold text-sm">{c.titulo}</p>
+                                                <p className="text-xs text-muted-foreground leading-relaxed">{c.detalhe}</p>
+                                                {c.correcao && (
+                                                    <p className="text-xs font-medium text-orange-900 dark:text-orange-300 flex items-start gap-1.5 pt-1">
+                                                        <Settings2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                                        {c.correcao}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {certificado?.veredito === 'indeterminado' && certificado.observacoes.length > 0 && (
+                                    <div className="rounded-xl border bg-background/60 p-4 space-y-2">
+                                        <p className="text-sm font-semibold">Por que está difícil</p>
+                                        {certificado.observacoes.map((o, i) => (
+                                            <p key={i} className="text-xs text-muted-foreground leading-relaxed">{o}</p>
+                                        ))}
+                                        <p className="text-xs text-muted-foreground leading-relaxed pt-1">
+                                            As verificações de viabilidade <strong>não</strong> encontraram prova de que a grade
+                                            seja impossível — ela provavelmente existe, só é difícil de achar. Gerar de novo tem
+                                            chance real de fechar.
+                                        </p>
+                                    </div>
+                                )}
+
                                 {diagnostico && (
                                     <div className="space-y-6">
                                         <div>
                                             <h4 className="text-sm font-bold text-destructive flex items-center gap-2 mb-3">
-                                                <AlertTriangle className="h-4 w-4" /> Causas Prováveis (Ordenadas por Frequência)
+                                                <AlertTriangle className="h-4 w-4" /> O que mais bloqueou (do mais frequente para o menos)
                                             </h4>
                                             <div className="grid grid-cols-1 gap-3">
                                                 {diagnostico.causasIdentificadas.map((causa, idx) => (
@@ -479,7 +520,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
                                         <div>
                                             <h4 className="text-sm font-bold text-destructive flex items-center gap-2 mb-3">
-                                                <Info className="h-4 w-4" /> Evidências Concretas ({diagnostico.pendenciasDetalhadas.length} aulas não alocadas)
+                                                <Info className="h-4 w-4" /> Aulas que ficaram de fora ({diagnostico.pendenciasDetalhadas.length})
                                             </h4>
                                             <div className="max-h-60 overflow-y-auto rounded-xl border bg-background/50 shadow-inner pr-2">
                                                 <table className="w-full text-xs text-left">
@@ -489,7 +530,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                                             <th className="px-3 py-2.5 font-semibold">Componente</th>
                                                             <th className="px-3 py-2.5 font-semibold">Professor</th>
                                                             <th className="px-3 py-2.5 font-semibold">Tipo</th>
-                                                            <th className="px-3 py-2.5 font-semibold w-1/3">Motivo Real</th>
+                                                            <th className="px-3 py-2.5 font-semibold w-1/3">O que bloqueou</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-border/50">
@@ -513,22 +554,28 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                                 </table>
                                             </div>
                                         </div>
+
+                                        {}
+
                                     </div>
                                 )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                                    <div className="p-4 border rounded-xl bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-900 space-y-3">
-                                        <p className="text-sm font-bold text-orange-900 dark:text-orange-300 flex items-center gap-2">
-                                            <AlertTriangle className="h-4 w-4" /> Opção: Salvar com Pendências
-                                        </p>
-                                        <p className="text-xs text-orange-800 dark:text-orange-400 leading-relaxed">
-                                            Você pode salvar a grade incompleta e depois realizar ajustes manuais para as aulas não alocadas. Elas aparecerão como "Vagas" na grade em vermelho.
-                                        </p>
-                                        <Button onClick={handleForcarSalvamento} variant="default" className="w-full bg-orange-600 hover:bg-orange-700 h-10" disabled={isPending}>
-                                            {isPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
-                                            Salvar Grade Incompleta
-                                        </Button>
-                                    </div>
+                                    {temGradeParcial && (
+                                        <div className="p-4 border rounded-xl bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-900 space-y-3">
+                                            <p className="text-sm font-bold text-orange-900 dark:text-orange-300 flex items-center gap-2">
+                                                <AlertTriangle className="h-4 w-4" /> Opção: Salvar com Pendências
+                                                {geracao?.turnoParcialNome ? ` — ${geracao.turnoParcialNome}` : ''}
+                                            </p>
+                                            <p className="text-xs text-orange-800 dark:text-orange-400 leading-relaxed">
+                                                Você pode salvar a grade incompleta e depois realizar ajustes manuais para as aulas não alocadas. Elas aparecerão como "Vagas" na grade em vermelho.
+                                            </p>
+                                            <Button onClick={handleForcarSalvamento} variant="default" className="w-full bg-orange-600 hover:bg-orange-700 h-10" disabled={isPending}>
+                                                {isPending ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
+                                                Salvar Grade Incompleta
+                                            </Button>
+                                        </div>
+                                    )}
 
                                     <div className="p-4 border rounded-xl bg-background space-y-3">
                                         <p className="text-sm font-bold flex items-center gap-2">
@@ -551,6 +598,28 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                         </Alert>
                     )}
 
+                    {/* Uma geração por unidade de cada vez — a regra é do banco, e o
+                        motivo precisa ficar visível para quem encontra o botão travado. */}
+                    {isProcessing && (
+                        <Alert className="border-primary/30 bg-primary/5">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <AlertTitle className="font-bold">Já existe uma geração em andamento</AlertTitle>
+                            <AlertDescription className="text-sm space-y-3">
+                                <p>
+                                    {geracao?.turnoAtualNome
+                                        ? <>Processando o turno <span className="font-semibold">{geracao.turnoAtualNome}</span>. </>
+                                        : null}
+                                    Ela continua rodando no servidor mesmo com esta página fechada.
+                                </p>
+                                {dialogProgressoOculto && (
+                                    <Button size="sm" variant="outline" onClick={() => setDialogProgressoOculto(false)}>
+                                        Ver andamento
+                                    </Button>
+                                )}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
                     <div className="flex flex-col md:flex-row gap-4">
                         <Link href="/relatorios" className="flex-1">
                             <Button size="lg" variant="outline" className="w-full h-14 text-lg font-medium border-2 hover:bg-muted transition-all">
@@ -561,15 +630,15 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                         <Button
                             size="lg"
                             onClick={handleGerarHorarioClick}
-                            disabled={isProcessing}
+                            disabled={isProcessing || isIniciando}
                             className="flex-1 h-14 text-lg font-bold shadow-xl hover:scale-[1.02] transition-transform active:scale-95"
                         >
-                            {isProcessing ? (
+                            {isProcessing || isIniciando ? (
                                 <Loader2 className="mr-3 h-6 w-6 animate-spin" />
                             ) : (
                                 <Zap className="mr-3 h-6 w-6" />
                             )}
-                            Gerar Nova Grade
+                            {isProcessing ? 'Geração em andamento' : 'Gerar Nova Grade'}
                         </Button>
                     </div>
                 </CardContent>
@@ -851,28 +920,31 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 </DialogContent>
             </Dialog>
 
-            {/* DIALOG DE PROGRESSO EM TEMPO REAL */}
-            <Dialog open={isProcessing}>
-                <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-md">
+            {/* DIALOG DE PROGRESSO — alimentado pela linha do job no servidor */}
+            <Dialog open={isProcessing && !dialogProgressoOculto} onOpenChange={(aberto) => { if (!aberto) setDialogProgressoOculto(true); }}>
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader className="items-center text-center space-y-4">
                         <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center animate-pulse">
                             <Zap className="h-8 w-8 text-primary" />
                         </div>
                         <DialogTitle className="text-xl font-black">Processando Grade Horária</DialogTitle>
                         <DialogDescription className="text-sm">
-                            {processingTurnoLabel
-                                ? <>Processando turno <span className="font-semibold">{processingTurnoLabel}</span>...</>
+                            {geracao?.turnoAtualNome
+                                ? <>Processando o turno <span className="font-semibold">{geracao.turnoAtualNome}</span>
+                                    {geracao.totalTurnos > 1 ? ` (${geracao.turnosConcluidos + 1} de ${geracao.totalTurnos})` : ''}...</>
                                 : 'O sistema está executando milhares de simulações para encontrar uma organização sem choques de professores ou horários.'
                             }
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="py-8 space-y-6">
+                    <div className="py-6 space-y-6">
                         <div className="flex justify-between items-baseline mb-2">
                             <span className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Tentativa Atual</span>
-                            <span className="text-lg font-black text-primary">{currentAttempt.toLocaleString()} / {MAX_ATTEMPTS.toLocaleString()}</span>
+                            <span className="text-lg font-black text-primary">
+                                {(geracao?.tentativas ?? 0).toLocaleString()} / {(geracao?.orcamento ?? 0).toLocaleString()}
+                            </span>
                         </div>
-                        <Progress value={(currentAttempt / MAX_ATTEMPTS) * 100} className="h-3" />
+                        <Progress value={geracao?.orcamento ? (geracao.tentativas / geracao.orcamento) * 100 : 0} className="h-3" />
 
                         <div className="bg-muted/50 border border-slate-100 dark:border-slate-700 p-4 rounded-xl space-y-2">
                             <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
@@ -880,19 +952,46 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                 Status do Motor Lógico:
                             </div>
                             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed italic">
-                                {currentAttempt < 20000
+                                {progressoRelativo < 0.15
                                     ? "Analisando disponibilidade ideal dos professores..."
-                                    : currentAttempt < 60000
+                                    : progressoRelativo < 0.70
                                         ? "Otimizando janelas e horários de planejamento..."
                                         : "Relaxando restrições secundárias para garantir carga horária total..."}
                             </p>
                         </div>
                     </div>
 
-                    <div className="text-center">
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">
-                            Não feche esta janela enquanto o processamento estiver ativo.
+                    <div className="space-y-3">
+                        {/* O oposto do aviso que ficava aqui ("não feche esta janela"):
+                            agora fechar a página não interrompe mais nada. */}
+                        <p className="text-center text-[11px] text-muted-foreground leading-relaxed">
+                            Pode fechar esta página — a geração continua rodando no servidor.
+                            Ao voltar, o andamento aparece de novo.
                         </p>
+
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="outline" className="w-full h-10" disabled={isCancelando || geracao?.cancelamentoSolicitado}>
+                                    {(isCancelando || geracao?.cancelamentoSolicitado)
+                                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Interrompendo...</>
+                                        : 'Interromper geração'}
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Interromper a geração?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        As tentativas já processadas serão perdidas. As grades de turnos que
+                                        já fecharam são mantidas e ficam salvas como rascunho.
+                                        A parada leva alguns segundos até a rodada atual terminar.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Continuar gerando</AlertDialogCancel>
+                                    <AlertDialogAction onClick={handleInterromper}>Interromper</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
                     </div>
                 </DialogContent>
             </Dialog>
