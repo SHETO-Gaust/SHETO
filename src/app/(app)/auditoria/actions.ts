@@ -8,11 +8,18 @@ import { requireAdmin } from '@/lib/auth/guards';
 
 export type AuditoriaRow = {
     escola: Escola;
-    turnos: (Turno & { 
+    turnos: (Turno & {
         rascunhos_count: number;
+        /**
+         * Grades presas em `pre_producao`. Esse status é transitório — a geração
+         * "Todos os Turnos" o usa para o turno seguinte enxergar as ocupações do
+         * anterior, e `converterPreProducao` o troca por `em_rascunho` ao fim do
+         * job. O que sobra aqui é órfão de geração interrompida.
+         */
+        pre_producao_count: number;
         publicado: boolean;
     })[];
-    status_global: 'sem_dados' | 'em_rascunho' | 'publicado';
+    status_global: 'sem_dados' | 'em_rascunho' | 'publicado' | 'pre_producao';
 };
 
 export type ResumoLimpeza = {
@@ -25,6 +32,8 @@ export type ResumoLimpeza = {
 
 export type AuditoriaStats = {
     totalRascunhos: number;
+    /** Grades órfãs de geração interrompida — nenhuma tela as mostrava. */
+    totalPreProducao: number;
     totalPublicados: number;
     semDados: number;
     totalEscolas: number;
@@ -45,6 +54,11 @@ export async function getAuditoriaStats(): Promise<AuditoriaStats> {
             .from('horarios')
             .select('*', { count: 'exact', head: true })
             .eq('status', 'em_rascunho');
+
+        const { count: totalPreProducao } = await supabase
+            .from('horarios')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'pre_producao');
 
         const { data: allEscolas } = await supabase.from('escolas').select('id, regional');
         const totalEscolas = allEscolas?.length || 0;
@@ -100,6 +114,7 @@ export async function getAuditoriaStats(): Promise<AuditoriaStats> {
 
         return {
             totalRascunhos: totalRascunhos || 0,
+            totalPreProducao: totalPreProducao || 0,
             totalPublicados: escolasPublicadasSet.size,
             semDados: semDados < 0 ? 0 : semDados,
             totalEscolas,
@@ -109,7 +124,8 @@ export async function getAuditoriaStats(): Promise<AuditoriaStats> {
     } catch (e: any) {
         console.error('Erro em getAuditoriaStats:', e);
         return {
-            totalRascunhos: 0, totalPublicados: 0, semDados: 0, totalEscolas: 0, regionalStats: [],
+            totalRascunhos: 0, totalPreProducao: 0, totalPublicados: 0, semDados: 0,
+            totalEscolas: 0, regionalStats: [],
             erro: e?.message || 'Falha ao apurar as estatísticas de auditoria.',
         };
     }
@@ -147,7 +163,7 @@ export async function getAuditoriaData({
         }
 
         if (status && status !== 'all') {
-            if (status === 'publicado' || status === 'em_rascunho') {
+            if (status === 'publicado' || status === 'em_rascunho' || status === 'pre_producao') {
                 const { data: hData } = await supabase.from('horarios').select('turnos!inner(escola_id)').eq('status', status);
                 const ids = Array.from(new Set((hData || []).map((d: any) => d.turnos.escola_id)));
                 if (ids.length === 0) {
@@ -204,19 +220,30 @@ export async function getAuditoriaData({
                     const horariosDoTurno = horarios.filter(h => h.turno_id === turno.id);
                     const publicado = horariosDoTurno.some(h => h.status === 'publicado');
                     const rascunhos_count = horariosDoTurno.filter(h => h.status === 'em_rascunho').length;
+                    const pre_producao_count = horariosDoTurno.filter(h => h.status === 'pre_producao').length;
 
                     return {
                         ...turno,
                         publicado,
-                        rascunhos_count
+                        rascunhos_count,
+                        pre_producao_count
                     } as AuditoriaRow['turnos'][0];
                 });
 
-            let status_global: 'sem_dados' | 'em_rascunho' | 'publicado' = 'sem_dados';
+            /**
+             * `pre_producao` precisa de um estado próprio. Antes ele caía no
+             * default e a escola aparecia como "Sem Dados" tendo grade no banco
+             * — enquanto o card "Sem Dados" NÃO a contava, porque
+             * `escolasComDados` olha qualquer status. A mesma tela afirmava as
+             * duas coisas.
+             */
+            let status_global: AuditoriaRow['status_global'] = 'sem_dados';
             if (turnosDaEscola.some(t => t.publicado)) {
                 status_global = 'publicado';
             } else if (turnosDaEscola.some(t => t.rascunhos_count > 0)) {
                 status_global = 'em_rascunho';
+            } else if (turnosDaEscola.some(t => t.pre_producao_count > 0)) {
+                status_global = 'pre_producao';
             }
 
             return {

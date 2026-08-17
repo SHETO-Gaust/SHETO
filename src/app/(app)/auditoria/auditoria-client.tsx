@@ -423,6 +423,7 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                             <SelectItem value="all">Todas as Situações</SelectItem>
                             <SelectItem value="publicado">Com Horário Publicado</SelectItem>
                             <SelectItem value="em_rascunho">Apenas Rascunhos</SelectItem>
+                            <SelectItem value="pre_producao">Geração Interrompida</SelectItem>
                             <SelectItem value="sem_dados">Sem Movimentação</SelectItem>
                         </SelectContent>
                     </Select>
@@ -471,20 +472,48 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                                             <Badge className="bg-green-500 hover:bg-green-600 text-white font-black text-[9px] uppercase tracking-tighter">Oficializado</Badge>
                                         ) : row.status_global === 'em_rascunho' ? (
                                             <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-950/30 dark:hover:bg-orange-950/50 font-black text-[9px] uppercase tracking-tighter">Em Rascunho</Badge>
+                                        ) : row.status_global === 'pre_producao' ? (
+                                            <Badge variant="outline" className="text-purple-600 border-purple-300 bg-purple-50 dark:text-purple-400 dark:border-purple-800 dark:bg-purple-950/30 font-black text-[9px] uppercase tracking-tighter" title="Grade presa em pré-produção: a geração foi interrompida antes de convertê-la em rascunho.">Geração Interrompida</Badge>
                                         ) : (
                                             <Badge variant="outline" className="text-muted-foreground/40 font-black text-[9px] uppercase tracking-tighter">Sem Dados</Badge>
                                         )}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-wrap gap-1.5">
-                                            {row.turnos.map(t => (
-                                                <Badge key={t.id} variant="outline" className={cn(
-                                                    "text-[9px] uppercase font-bold px-2 py-0.5 h-6",
-                                                    t.publicado ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-950/30 dark:border-green-700 dark:text-green-400" : t.rascunhos_count > maxDrafts ? "bg-red-50 border-red-500 text-red-700 dark:bg-red-950/30 dark:border-red-700 dark:text-red-400" : ""
-                                                )}>
-                                                    {t.nome} <span className="ml-1 opacity-70">({t.rascunhos_count})</span>
-                                                </Badge>
-                                            ))}
+                                            {/*
+                                              O número solto entre parênteses era a contagem de RASCUNHOS, mas
+                                              nada na tela dizia isso e a coluna se chama "Turnos Ativos". Uma
+                                              escola com a grade publicada e sem rascunho aparecia como
+                                              "Integral (0)" — lida, com razão, como escola zerada. Cada
+                                              informação agora vem rotulada.
+                                            */}
+                                            {row.turnos.map(t => {
+                                                const semGrade = !t.publicado && t.rascunhos_count === 0 && t.pre_producao_count === 0;
+                                                return (
+                                                    <Badge key={t.id} variant="outline" className={cn(
+                                                        "text-[9px] uppercase font-bold px-2 py-0.5 h-6",
+                                                        t.publicado ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-950/30 dark:border-green-700 dark:text-green-400" : t.rascunhos_count > maxDrafts ? "bg-red-50 border-red-500 text-red-700 dark:bg-red-950/30 dark:border-red-700 dark:text-red-400" : ""
+                                                    )}>
+                                                        {t.nome}
+                                                        {t.publicado && (
+                                                            <span className="ml-1" title="Horário publicado neste turno">✓ pub.</span>
+                                                        )}
+                                                        {t.rascunhos_count > 0 && (
+                                                            <span className="ml-1 opacity-70" title="Rascunhos acumulados">
+                                                                {t.rascunhos_count} rasc.
+                                                            </span>
+                                                        )}
+                                                        {t.pre_producao_count > 0 && (
+                                                            <span className="ml-1 text-purple-600 dark:text-purple-400" title="Grades presas em pré-produção: a geração foi interrompida antes de convertê-las em rascunho.">
+                                                                {t.pre_producao_count} presa(s) ⚠
+                                                            </span>
+                                                        )}
+                                                        {semGrade && (
+                                                            <span className="ml-1 opacity-50 font-normal normal-case">sem grade</span>
+                                                        )}
+                                                    </Badge>
+                                                );
+                                            })}
                                             {row.turnos.length === 0 && <span className="text-[10px] text-muted-foreground italic">Nenhum turno ativo configurado</span>}
                                         </div>
                                     </TableCell>
