@@ -29,6 +29,12 @@ export type AuditoriaStats = {
     semDados: number;
     totalEscolas: number;
     regionalStats: { regional: string; publicados: number; pendentes: number; }[];
+    /**
+     * Preenchido quando a apuração falhou. Sem isto, um erro de leitura zerava
+     * todos os cards e a tela ficava indistinguível de "não há nada publicado
+     * no estado inteiro" — exatamente o desfecho mais alarmante e mais falso.
+     */
+    erro?: string;
 };
 
 export async function getAuditoriaStats(): Promise<AuditoriaStats> {
@@ -47,23 +53,41 @@ export async function getAuditoriaStats(): Promise<AuditoriaStats> {
             .from('horarios')
             .select('turnos!inner(escola_id)')
             .eq('status', 'publicado');
-            
-        const escolasPublicadasSet = new Set((pubData || []).map((d: any) => d.turnos.escola_id));
+
+        /**
+         * `escolas.id` é bigint. Lido direto da coluna, o node-postgres devolve
+         * STRING ("1344"); vindo por select embutido, o shim serializa com
+         * `to_jsonb` e ele chega como NÚMERO (1344). São a mesma escola e não
+         * casam em `Set.has`, que compara por identidade.
+         *
+         * Era isso que zerava a coluna "publicados" do painel por regional:
+         * as escolas com horário publicado caíam todas em "pendentes". O card
+         * "Publicados" acima escapava porque usa `.size`, sem comparar — o que
+         * fazia a tela se contradizer sozinha.
+         *
+         * Normalizar para string nas duas pontas resolve, e a coerção fica em um
+         * lugar só.
+         */
+        const escolasPublicadasSet = new Set(
+            (pubData || []).map((d: any) => String(d.turnos.escola_id))
+        );
 
         const { data: allData } = await supabase
             .from('horarios')
             .select('turnos!inner(escola_id)');
-        const escolasComDados = new Set((allData || []).map((d: any) => d.turnos.escola_id)).size;
-        
+        const escolasComDados = new Set(
+            (allData || []).map((d: any) => String(d.turnos.escola_id))
+        ).size;
+
         const semDados = totalEscolas - escolasComDados;
 
         const regionalMap = new Map<string, { publicados: number, pendentes: number }>();
         allEscolas?.forEach(escola => {
             const reg = escola.regional || 'NÃO DEFINIDA';
             if (!regionalMap.has(reg)) regionalMap.set(reg, { publicados: 0, pendentes: 0 });
-            
+
             const stats = regionalMap.get(reg)!;
-            if (escolasPublicadasSet.has(escola.id)) {
+            if (escolasPublicadasSet.has(String(escola.id))) {
                 stats.publicados++;
             } else {
                 stats.pendentes++;
@@ -82,9 +106,12 @@ export async function getAuditoriaStats(): Promise<AuditoriaStats> {
             regionalStats
         };
 
-    } catch (e) {
+    } catch (e: any) {
         console.error('Erro em getAuditoriaStats:', e);
-        return { totalRascunhos: 0, totalPublicados: 0, semDados: 0, totalEscolas: 0, regionalStats: [] };
+        return {
+            totalRascunhos: 0, totalPublicados: 0, semDados: 0, totalEscolas: 0, regionalStats: [],
+            erro: e?.message || 'Falha ao apurar as estatísticas de auditoria.',
+        };
     }
 }
 

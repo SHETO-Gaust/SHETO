@@ -236,6 +236,19 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
 
     return (
         <div className={cn("space-y-6 transition-opacity", isPending ? "opacity-70" : "opacity-100")}>
+            {stats.erro && (
+                <div className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                    <AlertCircle className="h-5 w-5 shrink-0 text-destructive mt-0.5" />
+                    <div className="space-y-1">
+                        <p className="font-bold text-sm">Os números abaixo não foram apurados</p>
+                        <p className="text-xs text-muted-foreground">
+                            A leitura falhou e os cards estão zerados por isso — não porque a rede esteja sem
+                            horários. Causa: {stats.erro}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card className="bg-primary/5 border-primary/20">
