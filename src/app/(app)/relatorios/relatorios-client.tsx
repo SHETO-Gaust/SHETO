@@ -34,6 +34,17 @@ export function RelatoriosClient({ escolaId, turnos }: RelatoriosClientProps) {
   const [reportData, setReportData] = useState<any>(null);
   const { toast } = useToast();
 
+  /**
+   * Trocar de turno tem de apagar o relatório. Sem isto o mapa do Matutino
+   * continuava na tela depois de selecionar o Noturno — o usuário lê os números
+   * como se fossem do turno que acabou de escolher.
+   */
+  const handleTurnoChange = (turnoId: string) => {
+    setSelectedTurnoId(turnoId);
+    setReportData(null);
+    setActiveReport(null);
+  };
+
   const handleGenerateReport = async (reportType: ReportType) => {
     if (!selectedTurnoId) {
         toast({ title: 'Selecione um turno primeiro', variant: 'destructive' });
@@ -68,7 +79,7 @@ export function RelatoriosClient({ escolaId, turnos }: RelatoriosClientProps) {
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <RadioGroup value={selectedTurnoId || ''} onValueChange={setSelectedTurnoId} className="space-y-3">
+                <RadioGroup value={selectedTurnoId || ''} onValueChange={handleTurnoChange} className="space-y-3">
                     {turnos.map(turno => (
                         <div key={turno.id} className={`flex items-center space-x-3 p-3 rounded-lg border transition-all cursor-pointer hover:bg-muted/50 ${selectedTurnoId === turno.id ? 'border-primary bg-primary/5' : 'border-transparent'}`}>
                             <RadioGroupItem value={turno.id} id={`turno-${turno.id}`} />
