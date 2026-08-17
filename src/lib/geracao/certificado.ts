@@ -61,17 +61,119 @@ function periodoDaAula(turno: Turno, idx: number): string {
     return idx < 5 ? 'matutino' : 'vespertino';
 }
 
-/** Slot vedado ao professor por restrição que o motor nunca relaxa. */
-function bloqueadoParaSempre(prof: ProfessorComDados | undefined, turno: Turno, dia: string, idx: number): boolean {
-    if (!prof) return false;
+/**
+ * Motivos que vedam um slot ao professor de forma permanente — o motor nunca
+ * relaxa nenhum deles. `planejamento` e os tipos `personalizado*` ficam de fora
+ * de propósito: são soft constraints, o motor pode usá-los como último recurso.
+ */
+export type MotivoImpedimento = 'indisponivel' | 'reuniao_fluxo' | 'livre_docencia';
+
+export const ROTULO_IMPEDIMENTO: Record<MotivoImpedimento, string> = {
+    indisponivel: 'Bloqueio (indisponível)',
+    reuniao_fluxo: 'Reunião de fluxo',
+    livre_docencia: 'Livre docência',
+};
+
+/**
+ * Por que o slot está vedado ao professor, ou `null` se ele pode assumir aula ali.
+ *
+ * Fonte única da regra: o certificado, o Mapa de Disponibilidade e
+ * `scripts/comparar-ambientes.sql` precisam dar exatamente o mesmo número, senão
+ * o relatório promete professor que o motor não pode usar.
+ */
+export function motivoImpedimento(
+    prof: ProfessorComDados | undefined,
+    turno: Turno,
+    dia: string,
+    idx: number,
+): MotivoImpedimento | null {
+    if (!prof) return null;
     const st = (prof.restricoes as any)?.[turno.id]?.[dia]?.[idx];
-    if (st === 'indisponivel' || st === 'reuniao_fluxo') return true;
+    if (st === 'indisponivel') return 'indisponivel';
+    if (st === 'reuniao_fluxo') return 'reuniao_fluxo';
+    // Só vale quando o professor TEM preferência declarada; `null`/`true` = dispensou.
     if (prof.sem_preferencia_livre_docencia === false) {
-        if (st === 'livre_docencia') return true;
+        if (st === 'livre_docencia') return 'livre_docencia';
         const periodo = periodoDaAula(turno, idx);
-        if ((prof.livre_docencia || []).some(ld => ld.dia === dia && ld.periodo === periodo)) return true;
+        if ((prof.livre_docencia || []).some(ld => ld.dia === dia && ld.periodo === periodo)) return 'livre_docencia';
     }
-    return false;
+    return null;
+}
+
+/** Slot vedado ao professor por restrição que o motor nunca relaxa. */
+export function bloqueadoParaSempre(prof: ProfessorComDados | undefined, turno: Turno, dia: string, idx: number): boolean {
+    return motivoImpedimento(prof, turno, dia, idx) !== null;
+}
+
+/**
+ * Turmas que preenchem exatamente os horários do turno — não podem ficar sem
+ * aula em nenhum slot, e por isso definem a exigência real de cobertura.
+ *
+ * `===` e não `>=`, de propósito. A turma cuja matriz NÃO CABE no turno também
+ * precisaria de todos os horários, mas ela já é denunciada como `carga_turma`
+ * ("tem mais aulas do que horários"), que é a causa raiz e a que o usuário
+ * precisa corrigir. Incluí-la aqui faz o certificado despejar um
+ * `horario_sem_cobertura` por slot em cima de um problema já relatado — o
+ * oposto do princípio deste arquivo, que é dar a causa mínima.
+ *
+ * Cheguei a usar `>=` por simetria e os testes sintéticos mostraram o estrago:
+ * duas turmas com carga acima da capacidade geravam quatro causas redundantes.
+ *
+ * Compartilhada com o Mapa de Disponibilidade: se as duas telas calcularem
+ * "sem folga" de formas diferentes, uma promete o que a outra nega.
+ */
+export function calcularTurmasSemFolga<T extends { serie?: { componentes?: any[] } }>(
+    turmas: T[],
+    capacidade: number,
+): T[] {
+    if (capacidade <= 0) return [];
+    return turmas.filter(t => {
+        const demanda = (t.serie?.componentes || []).reduce(
+            (s: number, c: any) => s + (c.aulas_presenciais || 0), 0);
+        return demanda === capacidade;
+    });
+}
+
+/**
+ * Quantas turmas conseguem ter aula ao mesmo tempo, dado quem pode atender cada
+ * uma. É o tamanho do emparelhamento máximo do grafo turma → professores.
+ *
+ * Existe porque contar professores livres não responde à pergunta: cinco
+ * professores livres que só dão aula na mesma turma atendem UMA turma, não
+ * cinco. Contagem simples produz falso-verde; esta função, não.
+ */
+export function tamanhoMaximoEmparelhamento(adj: Map<string, Set<string>>): number {
+    return emparelhar(adj).par.size;
+}
+
+/**
+ * Quem pode assumir cada turma naquele horário: `turma.id` → professores possíveis.
+ *
+ * Entram só os professores vinculados à turma num componente com aula presencial
+ * e sem impedimento permanente no slot. A chave é o **id** e não o nome: o nome
+ * da turma é único por série, não por turno, então duas turmas "A" de séries
+ * diferentes colidiriam e o grafo perderia uma delas.
+ */
+export function adjacenciaDoSlot(
+    turmas: any[],
+    profsPorId: Map<string, ProfessorComDados>,
+    turno: Turno,
+    dia: string,
+    idx: number,
+): Map<string, Set<string>> {
+    const adj = new Map<string, Set<string>>();
+    for (const t of turmas) {
+        const possiveis = new Set<string>();
+        for (const v of t.professores || []) {
+            const comp = (t.serie?.componentes || []).find((c: any) => c.componente_id === v.componente_id);
+            if (!comp || (comp.aulas_presenciais || 0) === 0) continue;
+            if (!bloqueadoParaSempre(profsPorId.get(v.professor_id), turno, dia, idx)) {
+                possiveis.add(v.professor_id);
+            }
+        }
+        adj.set(t.id, possiveis);
+    }
+    return adj;
 }
 
 export function certificar(dados: DadosCertificado): Certificado {
@@ -180,36 +282,44 @@ export function certificar(dados: DadosCertificado): Certificado {
     // Para as que precisam preencher tudo, cada horário exige um professor
     // DIFERENTE por turma — um emparelhamento perfeito. Se ele não existe em
     // algum horário, está provado que a grade não fecha.
-    const turmasSemFolga = dados.turmasDoTurno.filter(t => {
-        const demanda = (t.serie?.componentes || []).reduce((s: number, c: any) => s + (c.aulas_presenciais || 0), 0);
-        return demanda === capacidade;
-    });
+    const turmasSemFolga = calcularTurmasSemFolga(dados.turmasDoTurno, capacidade);
 
     if (turmasSemFolga.length > 1) {
+        /**
+         * O grafo é indexado por id, mas a mensagem fala por nome — e o nome da
+         * turma é único por SÉRIE, não por turno. Onde ele se repete, "as turmas
+         * A, A" não diz nada ao usuário; qualifica-se com a série para
+         * desambiguar. Só nos casos repetidos, para não poluir o normal.
+         */
+        const vezesPorNome = new Map<string, number>();
+        for (const t of turmasSemFolga as any[]) {
+            vezesPorNome.set(t.nome, (vezesPorNome.get(t.nome) ?? 0) + 1);
+        }
+        const rotuloDaTurma = new Map<string, string>(
+            (turmasSemFolga as any[]).map(t => [
+                t.id,
+                (vezesPorNome.get(t.nome) ?? 0) > 1 && t.serie?.nome
+                    ? `${t.nome} (${t.serie.nome})`
+                    : t.nome,
+            ])
+        );
+
         for (const d of dias) {
             for (let i = 0; i < aulasPorDia; i++) {
-                const adj = new Map<string, Set<string>>();
-                for (const t of turmasSemFolga) {
-                    const possiveis = new Set<string>();
-                    for (const v of t.professores || []) {
-                        const comp = (t.serie?.componentes || []).find((c: any) => c.componente_id === v.componente_id);
-                        if (!comp || (comp.aulas_presenciais || 0) === 0) continue;
-                        if (!bloqueadoParaSempre(profsPorId.get(v.professor_id), turno, d, i)) {
-                            possiveis.add(v.professor_id);
-                        }
-                    }
-                    adj.set(t.nome, possiveis);
-                }
+                const adj = adjacenciaDoSlot(turmasSemFolga, profsPorId, turno, d, i);
 
                 const violacao = encontrarViolacaoHall(adj);
                 if (violacao) {
+                    const nomesTurma = [...violacao.turmas]
+                        .map(id => rotuloDaTurma.get(id) ?? id)
+                        .sort();
                     const nomesProf = [...violacao.professores]
                         .map(id => profsPorId.get(id)?.nome_horario ?? id)
                         .sort();
                     causas.push({
                         tipo: 'horario_sem_cobertura',
                         titulo: `Não há professores suficientes em ${rotuloDia(d)}, ${i + 1}ª aula`,
-                        detalhe: `As turmas ${[...violacao.turmas].sort().join(', ')} precisam ter aula nesse ` +
+                        detalhe: `As turmas ${nomesTurma.join(', ')} precisam ter aula nesse ` +
                             `horário — nenhuma delas tem folga na grade — e juntas só podem ser atendidas por ` +
                             `${nomesProf.length} professor(es): ${nomesProf.join(', ')}. ` +
                             `São ${violacao.turmas.size} turmas para ${nomesProf.length} professor(es).`,
@@ -280,27 +390,7 @@ const rotuloDia = (d: string) => DIAS[d] ?? d;
 function encontrarViolacaoHall(
     adj: Map<string, Set<string>>
 ): { turmas: Set<string>; professores: Set<string> } | null {
-    const par = new Map<string, string>();   // professor -> turma
-    const parInv = new Map<string, string>(); // turma -> professor
-
-    const aumentar = (turma: string, visto: Set<string>): boolean => {
-        for (const prof of adj.get(turma) ?? []) {
-            if (visto.has(prof)) continue;
-            visto.add(prof);
-            const ocupante = par.get(prof);
-            if (!ocupante || aumentar(ocupante, visto)) {
-                par.set(prof, turma);
-                parInv.set(turma, prof);
-                return true;
-            }
-        }
-        return false;
-    };
-
-    const semPar: string[] = [];
-    for (const turma of adj.keys()) {
-        if (!aumentar(turma, new Set())) semPar.push(turma);
-    }
+    const { par, semPar } = emparelhar(adj);
     if (semPar.length === 0) return null;
 
     // Busca alternada a partir de uma turma sem par: o alcance é o violador.
@@ -323,4 +413,35 @@ function encontrarViolacaoHall(
     }
 
     return { turmas: turmasAlcancadas, professores: profsAlcancados };
+}
+
+/**
+ * Emparelhamento máximo turma ↔ professor por caminhos aumentantes.
+ * Devolve o pareamento e as turmas que ficaram sem par — a partir delas o Hall
+ * encontra o conjunto culpado, e o tamanho de `par` é a cobertura real do slot.
+ */
+function emparelhar(adj: Map<string, Set<string>>): {
+    par: Map<string, string>;   // professor -> turma
+    semPar: string[];
+} {
+    const par = new Map<string, string>();
+
+    const aumentar = (turma: string, visto: Set<string>): boolean => {
+        for (const prof of adj.get(turma) ?? []) {
+            if (visto.has(prof)) continue;
+            visto.add(prof);
+            const ocupante = par.get(prof);
+            if (!ocupante || aumentar(ocupante, visto)) {
+                par.set(prof, turma);
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const semPar: string[] = [];
+    for (const turma of adj.keys()) {
+        if (!aumentar(turma, new Set())) semPar.push(turma);
+    }
+    return { par, semPar };
 }
