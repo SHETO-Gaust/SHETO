@@ -82,8 +82,8 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
 
     if (userProfile.role === 'admin') {
         return (
-            <div className="flex items-center gap-4 w-full">
-                <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 w-full">
+                <div className="flex items-center gap-2">
                     {isPending
                         ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                         : <Building2 className="h-5 w-5 text-muted-foreground" />
@@ -95,9 +95,9 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
                                 role="combobox"
                                 aria-expanded={open}
                                 disabled={isPending}
-                                className="max-w-[260px] justify-between gap-2 font-normal border-none shadow-none px-2 truncate"
+                                className="h-auto min-h-9 justify-between gap-2 whitespace-normal py-1 text-left font-normal border-none shadow-none px-2"
                             >
-                                <span className="truncate text-sm">
+                                <span className="text-sm">
                                     {currentSchoolId === 'null' || !currentSchoolId
                                         ? 'Visualização Geral (Admin)'
                                         : (currentSchool?.escolar ?? 'Selecione uma escola...')}
@@ -188,10 +188,10 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
     }
 
     return (
-        <div className="flex items-center gap-4 p-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 p-2">
             <div className="flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-muted-foreground" />
-                <span className="font-medium text-sm text-foreground truncate uppercase">{currentSchoolName}</span>
+                <span className="font-medium text-sm text-foreground uppercase">{currentSchoolName}</span>
             </div>
             {currentSchool && (
                 <div className="hidden lg:flex items-center gap-x-4 gap-y-1 text-xs text-muted-foreground border-l pl-4 flex-wrap">
