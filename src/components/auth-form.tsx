@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Mail, Lock } from 'lucide-react';
+import { Loader2, Mail, Lock, CalendarDays } from 'lucide-react';
 import { signIn } from '@/app/login/actions';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -71,6 +71,26 @@ export function AuthForm() {
           Entrar
         </Button>
       </form>
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+          <span className="w-full border-t border-gray-200" />
+        </div>
+        <div className="relative flex justify-center">
+          <span className="bg-white px-3 text-xs uppercase tracking-wider text-gray-400">ou</span>
+        </div>
+      </div>
+
+      <Button
+        asChild
+        variant="outline"
+        className="w-full h-12 rounded-full border-sky-500 bg-white text-sky-600 font-semibold text-base hover:bg-sky-50 hover:text-sky-700"
+      >
+        <Link href="/horarios">
+          <CalendarDays className="h-4 w-4" />
+          Acessar horários
+        </Link>
+      </Button>
     </div>
   );
 }
