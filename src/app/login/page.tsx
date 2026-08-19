@@ -20,7 +20,7 @@ export default async function LoginPage() {
     <AuthShell>
       <Suspense
         fallback={
-          <div className="flex h-[228px] items-center justify-center">
+          <div className="flex h-[340px] items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-sky-500" />
           </div>
         }
