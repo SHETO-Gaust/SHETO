@@ -7,6 +7,7 @@ import { getTurmas } from '@/app/(app)/turmas/actions';
 import { getProfessores } from '@/app/(app)/professores/actions';
 import { getTurnos } from '@/app/(app)/turno/actions';
 import { requireEscolaEModulo } from '@/lib/auth/guards';
+import { capacidadeSemanalDaSerie } from '@/lib/capacidade-serie';
 import {
     motivoImpedimento,
     ROTULO_IMPEDIMENTO,
@@ -37,7 +38,7 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
       supabase.from('componentes_curriculares').select('id', { count: 'exact', head: true }).eq('escola_id', escolaId),
       getProfessores(escolaId),
       getTurmas(escolaId),
-      supabase.from('series').select('id, nome, turno_id, series_componentes(aulas_presenciais, aulas_nao_presenciais, componente_id)').eq('escola_id', escolaId),
+      supabase.from('series').select('id, nome, turno_id, restricoes, series_componentes(aulas_presenciais, aulas_nao_presenciais, componente_id)').eq('escola_id', escolaId),
     ]);
 
     // Cada leitura precisa ser conferida. Sem isto, uma falha de banco virava
@@ -73,7 +74,9 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
     // 2. Séries
     const seriesIncompletas = seriesDoTurno.filter(s => {
         const total = (s.series_componentes as any[]).reduce((acc, curr) => acc + (curr.aulas_presenciais || 0), 0);
-        const esperado = (selectedTurno?.aulas_por_dia || 0) * (selectedTurno?.dias_semana?.length || 0);
+        // Mesma conta de `getSeries`: sem descontar as restricoes da serie, uma
+        // serie corretamente preenchida apareceria aqui como "carga divergente".
+        const esperado = capacidadeSemanalDaSerie(selectedTurno as any, (s as any).restricoes);
         return total !== esperado;
     });
     checklist.push({
