@@ -133,11 +133,11 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                 
                 <TabsContent value="dados" className="pt-4 space-y-4">
                     <FormField control={form.control} name="nome" render={({ field }) => (
-                        <FormItem><FormLabel>Nome da Série</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem data-tutorial="serie-sheet-nome"><FormLabel>Nome da Série</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )}/>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField control={form.control} name="nivel_ensino_id" render={({ field }) => (
-                            <FormItem><FormLabel>Nível de Ensino</FormLabel>
+                            <FormItem data-tutorial="serie-sheet-nivel"><FormLabel>Nível de Ensino</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                                     <SelectContent>{dependencies.niveisEnsino.map(n => <SelectItem key={n.id} value={n.id}>{n.nome}</SelectItem>)}</SelectContent>
@@ -145,7 +145,7 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                             </FormItem>
                         )}/>
                         <FormField control={form.control} name="turno_id" render={({ field }) => (
-                            <FormItem><FormLabel>Turno</FormLabel>
+                            <FormItem data-tutorial="serie-sheet-turno"><FormLabel>Turno</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl>
                                     <SelectContent>{dependencies.turnos.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
@@ -202,7 +202,7 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
             </Tabs>
           </form>
         </Form>
-        <SheetFooter className="mt-auto border-t pt-4 bg-background">
+        <SheetFooter data-tutorial="serie-sheet-rodape" className="mt-auto border-t pt-4 bg-background">
           <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
           <Button 
             type="submit" 

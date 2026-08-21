@@ -18,6 +18,8 @@ import { UserX, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { SchoolSelector } from '@/components/school-selector';
+import { TutorialProvider } from '@/components/tutorial/tutorial-provider';
+import { TutorialButton } from '@/components/tutorial/tutorial-button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/login/actions';
@@ -146,6 +148,14 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider>
+      {/*
+        Dentro do SidebarProvider de proposito: o overlay do tutorial usa
+        useSidebar() para abrir a sidebar mobile antes de destacar um item de menu.
+      */}
+      <TutorialProvider
+        tutoriaisVistos={(userProfile as Profile).tutoriais_vistos ?? []}
+        escolaSelecionada={Boolean((userProfile as Profile).ue)}
+      >
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center justify-center p-3">
@@ -171,6 +181,7 @@ export default async function AppLayout({
             <SchoolSelector userProfile={userProfile as any} allEscolas={allEscolas} />
           </div>
           <div className="ml-auto flex items-center gap-4 shrink-0">
+            <TutorialButton />
             <UserNav user={user} profile={userProfile as any} />
           </div>
         </header>
@@ -187,6 +198,7 @@ export default async function AppLayout({
           </Link>
         </footer>
       </SidebarInset>
+      </TutorialProvider>
     </SidebarProvider>
   );
 }

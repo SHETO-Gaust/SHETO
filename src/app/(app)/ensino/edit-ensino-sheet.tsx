@@ -130,7 +130,7 @@ export function EditEnsinoSheet({ isOpen, setIsOpen, nivelEnsino, escolaId, onNi
               control={form.control}
               name="nome"
               render={({ field }) => (
-                <FormItem>
+                <FormItem data-tutorial="ensino-sheet-nome">
                   <FormLabel>Nome da Etapa</FormLabel>
                   <FormControl><Input {...field} placeholder="Ex: Ensino Médio" /></FormControl>
                   <FormMessage />
@@ -151,7 +151,7 @@ export function EditEnsinoSheet({ isOpen, setIsOpen, nivelEnsino, escolaId, onNi
           </form>
         </Form>
 
-        <SheetFooter className="mt-auto border-t pt-4 bg-background">
+        <SheetFooter data-tutorial="ensino-sheet-rodape" className="mt-auto border-t pt-4 bg-background">
           <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
             Cancelar
           </Button>

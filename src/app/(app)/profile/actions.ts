@@ -85,3 +85,33 @@ export async function updateSelectedSchool(_userId: string, schoolId: string | n
 
     return { success: true };
 }
+
+/**
+ * Marca um tutorial de tela como ja apresentado ao usuario da sessao.
+ *
+ * Chamada no instante em que o tutorial abre, e nao no ultimo passo: cada tela
+ * se apresenta uma unica vez por usuario, e dali em diante tanto faz se a pessoa
+ * concluiu, pulou ou fechou. O botao de interrogacao continua disponivel para
+ * quem quiser rever.
+ */
+export async function marcarTutorialVisto(tutorialId: string) {
+    // Igual a updateSelectedSchool: a sessao e a fonte de verdade, nunca um id
+    // vindo do cliente, para ninguem marcar tutorial no perfil de outra pessoa.
+    const perfil = await requireAuth();
+    const supabase = await createClient();
+
+    const vistos = perfil.tutoriais_vistos ?? [];
+    if (vistos.includes(tutorialId)) return { success: true };
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({ tutoriais_vistos: [...vistos, tutorialId] })
+        .eq('id', perfil.id);
+
+    if (error) {
+        console.error('Error marking tutorial as seen:', error);
+        return { error: 'Não foi possível registrar o tutorial como visto.' };
+    }
+
+    return { success: true };
+}

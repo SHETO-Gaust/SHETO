@@ -78,12 +78,12 @@ export function EnsinoClient({ initialNiveisEnsino, escolaId }: EnsinoClientProp
   return (
     <>
       <div className="flex justify-end mb-4">
-        <Button onClick={() => handleEdit(null)}>
+        <Button data-tutorial="ensino-btn-adicionar" onClick={() => handleEdit(null)}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Etapa
         </Button>
       </div>
-      <div className="rounded-md border">
+      <div data-tutorial="ensino-tabela" className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>

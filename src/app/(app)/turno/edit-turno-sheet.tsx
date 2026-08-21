@@ -142,7 +142,7 @@ export function EditTurnoSheet({ isOpen, setIsOpen, turno, escolaId, onTurnoUpda
                 control={form.control}
                 name="nome"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem data-tutorial="turno-sheet-nome">
                     <FormLabel>Nome do Turno</FormLabel>
                     <FormControl><Input {...field} placeholder="Ex: Manhã Regular" /></FormControl>
                     <FormMessage />
@@ -255,7 +255,7 @@ export function EditTurnoSheet({ isOpen, setIsOpen, turno, escolaId, onTurnoUpda
               </div>
             </div>
 
-            <SheetFooter className="pt-4 border-t mt-auto">
+            <SheetFooter data-tutorial="turno-sheet-rodape" className="pt-4 border-t mt-auto">
               <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
                 Cancelar
               </Button>

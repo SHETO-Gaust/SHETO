@@ -68,8 +68,9 @@ export function VisualizadorOperacionalClient({ escolaId }: Props) {
 
   if (viewState === 'portal') {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-12 max-w-4xl mx-auto">
+        <div data-tutorial="visualizar-portal" className="grid grid-cols-1 md:grid-cols-2 gap-8 py-12 max-w-4xl mx-auto">
             <Card 
+                data-tutorial="visualizar-por-professor"
                 className="group hover:border-primary transition-all cursor-pointer shadow-xl hover:shadow-2xl border-2"
                 onClick={() => setViewState('professores')}
             >
@@ -85,6 +86,7 @@ export function VisualizadorOperacionalClient({ escolaId }: Props) {
             </Card>
 
             <Card 
+                data-tutorial="visualizar-por-turma"
                 className="group hover:border-primary transition-all cursor-pointer shadow-xl hover:shadow-2xl border-2"
                 onClick={() => setViewState('turmas')}
             >

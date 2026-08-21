@@ -142,7 +142,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, turma, 
                 control={form.control}
                 name="serie_id"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem data-tutorial="turmas-dialog-serie">
                     <FormLabel>Modelo de Série</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
@@ -170,7 +170,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, turma, 
                 control={form.control}
                 name="nome"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem data-tutorial="turmas-dialog-nome">
                     <FormLabel>Nome/Letra da Turma</FormLabel>
                     <FormControl>
                       <Input {...field} value={field.value || ''} placeholder="Ex: A, B, C..." />
@@ -181,7 +181,7 @@ export function CreateTurmaDialog({ isOpen, setIsOpen, escolaId, series, turma, 
               />
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t">
+            <div data-tutorial="turmas-dialog-rodape" className="flex justify-end gap-3 pt-4 border-t">
               <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
                 Cancelar
               </Button>

@@ -82,7 +82,7 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
 
     if (userProfile.role === 'admin') {
         return (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 w-full">
+            <div data-tutorial="seletor-escola" className="flex flex-wrap items-center gap-x-4 gap-y-1 w-full">
                 <div className="flex items-center gap-2">
                     {isPending
                         ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -188,7 +188,7 @@ export function SchoolSelector({ userProfile, allEscolas }: SchoolSelectorProps)
     }
 
     return (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 p-2">
+        <div data-tutorial="seletor-escola" className="flex flex-wrap items-center gap-x-4 gap-y-1 p-2">
             <div className="flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-muted-foreground" />
                 <span className="font-medium text-sm text-foreground uppercase">{currentSchoolName}</span>
