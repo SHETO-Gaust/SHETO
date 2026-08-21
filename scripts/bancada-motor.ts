@@ -28,7 +28,7 @@ const PADRAO: Caso[] = [
  * violar. Um motor mais rápido que produz grade inválida não vale nada, e o
  * número de pendências sozinho não denuncia isso.
  */
-function validar(aulas: any[], dados: any): string[] {
+function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string[] {
     const erros: string[] = [];
     const turnos = new Map<string, any>(dados.allTurnos.map((t: any) => [t.id, t]));
     const profs = new Map<string, any>(dados.allProfessores.map((p: any) => [p.id, p]));
@@ -86,11 +86,102 @@ function validar(aulas: any[], dados: any): string[] {
     }
 
     void turnos;
+    void configGerminacao;
     return [...new Set(erros)];
+}
+
+/**
+ * Lê da grade, por fora do motor, quais geminações não foram cumpridas.
+ *
+ * Não é uma validação de "certo/errado": numa escola apertada pode genuinamente
+ * não haver arranjo que caiba, e isso não é defeito. O defeito é o motor não
+ * DIZER — por isso quem chama compara esta lista com o `geminacoesQuebradas`
+ * que ele devolveu. Divergência entre as duas é a rachadura silenciosa
+ * voltando.
+ *
+ * Cumprir significa duas coisas ao mesmo tempo: existe uma sequência DO tamanho
+ * pedido, e nenhuma passa dele — uma sequência de 3 não cumpre "geminar 2x".
+ */
+function auditarGeminacao(aulas: any[], dados: any, configGerminacao: any[]): { pedidas: number; quebradas: string[] } {
+    if (configGerminacao.length === 0) return { pedidas: 0, quebradas: [] };
+
+    const porGrupoDia = new Map<string, number[]>();
+    for (const a of aulas) {
+        const k = `${a.turma_id}|${a.componente_id}|${a.tipo}|${a.turno_id}|${a.dia_semana}`;
+        if (!porGrupoDia.has(k)) porGrupoDia.set(k, []);
+        porGrupoDia.get(k)!.push(a.aula_index);
+    }
+
+    const sequencias = new Map<string, number[]>();
+    for (const [k, indices] of porGrupoDia) {
+        const grupo = k.split('|').slice(0, 3).join('|');
+        indices.sort((x, y) => x - y);
+        let i = 0;
+        while (i < indices.length) {
+            let fim = i;
+            while (fim + 1 < indices.length && indices[fim + 1] === indices[fim] + 1) fim++;
+            if (!sequencias.has(grupo)) sequencias.set(grupo, []);
+            sequencias.get(grupo)!.push(fim - i + 1);
+            i = fim + 1;
+        }
+    }
+
+    let pedidas = 0;
+    const quebradas: string[] = [];
+
+    for (const t of dados.turmasDoTurno) {
+        for (const c of t.serie.componentes || []) {
+            const cfg = configGerminacao.find((g: any) => g.componente_id === c.componente_id);
+            if (!cfg?.geminar || cfg.tamanho_bloco <= 1) continue;
+
+            for (const [tipo, n] of [
+                ['presencial', c.aulas_presenciais || 0],
+                ['nao_presencial', c.aulas_nao_presenciais || 0],
+            ] as [string, number][]) {
+                const alvo = Math.min(cfg.tamanho_bloco, n);
+                if (alvo <= 1) continue;
+                pedidas++;
+
+                const runs = sequencias.get(`${t.id}|${c.componente_id}|${tipo}`) || [];
+                if (!runs.includes(alvo) || runs.some(x => x > alvo)) {
+                    const sigla = c.componente?.sigla || c.componente_id;
+                    quebradas.push(`${t.nome}/${sigla}=[${runs.join(',')}] esperava bloco de ${alvo}`);
+                }
+            }
+        }
+    }
+
+    return { pedidas, quebradas };
+}
+
+/**
+ * Configuração de geminação equivalente ao padrão da tela.
+ *
+ * A bancada mandava `[]`, ou seja, media um motor sem geminação nenhuma — o
+ * caminho de código onde o defeito vivia nunca era exercitado. O padrão da tela
+ * (`gerador-horario-client.tsx`) é ligar para disciplina com 3 ou mais aulas
+ * semanais, bloco de 2; repetir isso aqui mede o que a escola realmente roda.
+ */
+function geminacaoPadrao(dados: any): { componente_id: string; geminar: boolean; tamanho_bloco: number }[] {
+    const total = new Map<string, number>();
+    for (const t of dados.turmasDoTurno) {
+        for (const c of t.serie.componentes || []) {
+            const n = (c.aulas_presenciais || 0) + (c.aulas_nao_presenciais || 0);
+            total.set(c.componente_id, Math.max(total.get(c.componente_id) ?? 0, n));
+        }
+    }
+    return [...total].map(([componente_id, n]) => ({
+        componente_id,
+        geminar: n >= 3,
+        tamanho_bloco: 2,
+    }));
 }
 
 async function medir(caso: Caso, orcamento: number, repeticoes: number) {
     const dados = await carregarDadosDaGeracao(caso.escola, caso.turno, ['publicado', 'em_rascunho', 'pre_producao']);
+    // `SHETO_SEM_GEMINACAO=1` volta ao comportamento antigo da bancada (sem
+    // geminação), para isolar o custo dela numa comparação.
+    const configGerminacao = process.env.SHETO_SEM_GEMINACAO === '1' ? [] : geminacaoPadrao(dados);
 
     const resultados: { pendentes: number; aulas: number; ms: number; fechou: boolean }[] = [];
 
@@ -102,13 +193,25 @@ async function medir(caso: Caso, orcamento: number, repeticoes: number) {
         const res = await gerarHorarioEmWorker(
             [
                 dados.turnoData as any, dados.turmasDoTurno, dados.allProfessores, dados.allTurnos,
-                [], false, dados.ocupacoes,
+                configGerminacao, false, dados.ocupacoes,
                 orcamento, r * orcamento, dados.aulasFixas, false, orcamento, false,
             ] as any,
             () => { }
         );
         const ms = Date.now() - t0;
-        const problemas = validar(res.aulas, dados);
+        const problemas = validar(res.aulas, dados, configGerminacao);
+
+        // A conta da geminação tem de fechar dos dois lados. Declarar de menos é
+        // a perda silenciosa; declarar de mais assustaria o operador à toa.
+        const gem = auditarGeminacao(res.aulas, dados, configGerminacao);
+        const declaradas = (res as any).geminacoesQuebradas?.length ?? 0;
+        if (gem.quebradas.length !== declaradas) {
+            problemas.push(
+                `geminacao mal declarada: a grade perdeu ${gem.quebradas.length}, ` +
+                `o motor declarou ${declaradas} — ${gem.quebradas.slice(0, 2).join(' ; ')}`
+            );
+        }
+
         resultados.push({
             pendentes: res.success ? 0 : res.melhorPendentes,
             aulas: res.aulas.length,
@@ -118,6 +221,7 @@ async function medir(caso: Caso, orcamento: number, repeticoes: number) {
         process.stdout.write(
             `  rep ${r + 1}/${repeticoes}: ${res.success ? 'FECHOU' : `${res.melhorPendentes} pendentes`}` +
             ` | ${res.aulas.length} aulas | ${(ms / 1000).toFixed(1)}s` +
+            ` | geminacao ${gem.pedidas - gem.quebradas.length}/${gem.pedidas}` +
             ` | ${problemas.length === 0 ? 'grade valida' : `INVALIDA (${problemas.length}): ${problemas.slice(0, 3).join(' ; ')}`}\n`
         );
     }

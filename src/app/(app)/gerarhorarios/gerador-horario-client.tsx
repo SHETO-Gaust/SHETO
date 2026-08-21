@@ -117,6 +117,17 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     const progressoRelativo = geracao?.orcamento ? geracao.tentativas / geracao.orcamento : 0;
     const genError = !isProcessing && resultadoVisivel ? geracao?.erro ?? null : null;
     const diagnostico = (!isProcessing && resultadoVisivel ? geracao?.diagnostico : null) as DiagnosticoFalha | null;
+    /**
+     * Job que terminou bem mas tem recado — hoje, a geminação que não coube.
+     *
+     * O campo `erro` é o único canal de texto do job até esta tela, e ele carrega
+     * duas coisas diferentes: falha de verdade e aviso sobre uma grade que
+     * fechou. Sem separar as duas, um aviso de geminação aparecia sob o título
+     * "Não foi possível fechar a grade em N tentativas" — sobre uma grade que
+     * tinha sido gerada e salva. Um job 'concluido' sem diagnóstico nunca é
+     * falha: as grades saíram, e o texto é um adendo.
+     */
+    const apenasAviso = !isProcessing && geracao?.status === 'concluido' && !!genError && !diagnostico;
     const temGradeParcial = !isProcessing && resultadoVisivel && (geracao?.temGradeParcial ?? false);
     /**
      * Prova de inviabilidade. Ausente em grades geradas antes desta versão, daí o
@@ -405,15 +416,28 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 <CardContent className="space-y-6">
 
                     {(genError || diagnostico) && (
-                        <Alert variant="destructive" className="bg-destructive/5 border-destructive/20 animate-in fade-in slide-in-from-top-4 duration-500">
-                            <AlertCircle className="h-5 w-5" />
+                        <Alert
+                            variant={apenasAviso ? 'default' : 'destructive'}
+                            className={cn(
+                                'animate-in fade-in slide-in-from-top-4 duration-500',
+                                apenasAviso
+                                    ? 'bg-amber-50/60 border-amber-300 dark:bg-amber-950/20 dark:border-amber-900'
+                                    : 'bg-destructive/5 border-destructive/20'
+                            )}
+                        >
+                            <AlertCircle className={cn('h-5 w-5', apenasAviso && 'text-amber-600 dark:text-amber-500')} />
                             {/* O desfecho vem do banco e sobrevive a recarregar a página: sem
                                 um jeito de dispensar, ele ficaria na tela para sempre. */}
                             <button
                                 type="button"
                                 onClick={() => setResultadoVisivel(false)}
                                 aria-label="Dispensar este resultado"
-                                className="absolute right-4 top-4 text-destructive/60 hover:text-destructive text-xs font-bold uppercase tracking-wider"
+                                className={cn(
+                                    'absolute right-4 top-4 text-xs font-bold uppercase tracking-wider',
+                                    apenasAviso
+                                        ? 'text-amber-700/70 hover:text-amber-800 dark:text-amber-500/70 dark:hover:text-amber-400'
+                                        : 'text-destructive/60 hover:text-destructive'
+                                )}
                             >
                                 Dispensar
                             </button>
@@ -423,15 +447,20 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                 uma conclusão que ele não tem como alcançar, e mandava o
                                 usuário mexer nos dados achando que não havia saída. */}
                             <AlertTitle className="text-xl font-bold">
-                                {provado
-                                    ? 'Esta grade é impossível com os dados atuais'
-                                    : diagnostico
-                                        ? 'Geração incompleta: o que ficou de fora'
-                                        : `Não foi possível fechar a grade em ${(geracao?.tentativas ?? 0).toLocaleString()} tentativas`}
+                                {apenasAviso
+                                    ? 'Grade gerada, com um aviso'
+                                    : provado
+                                        ? 'Esta grade é impossível com os dados atuais'
+                                        : diagnostico
+                                            ? 'Geração incompleta: o que ficou de fora'
+                                            : `Não foi possível fechar a grade em ${(geracao?.tentativas ?? 0).toLocaleString()} tentativas`}
                             </AlertTitle>
                             <AlertDescription className="mt-4 space-y-6">
                                 {!diagnostico && (
-                                    <div className="text-sm bg-background/90 p-5 rounded-xl border-2 border-destructive/20 shadow-inner whitespace-pre-line leading-relaxed font-mono">
+                                    <div className={cn(
+                                        'text-sm bg-background/90 p-5 rounded-xl border-2 shadow-inner whitespace-pre-line leading-relaxed font-mono',
+                                        apenasAviso ? 'border-amber-300/60 dark:border-amber-900/60' : 'border-destructive/20'
+                                    )}>
                                         {genError}
                                     </div>
                                 )}
@@ -843,9 +872,11 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                             <div className="space-y-4">
                                 <Alert className="bg-primary/5 border-primary/20">
                                     <Info className="h-4 w-4 text-primary" />
-                                    <AlertTitle className="text-xs uppercase font-bold text-primary">Regra Sugerida</AlertTitle>
+                                    <AlertTitle className="text-xs uppercase font-bold text-primary">Como funciona</AlertTitle>
                                     <AlertDescription className="text-xs">
-                                        Por padrão, o sistema gemina aulas de disciplinas com 3 ou mais horas semanais para evitar que o professor mude de sala muitas vezes no mesmo dia.
+                                        Geminar cria <strong>um único bloco</strong> de aulas seguidas por turma, no mesmo dia. As demais aulas da disciplina ficam separadas ao longo da semana — geminar &quot;2x&quot; numa disciplina de 4 aulas dá 1 bloco de 2 + 2 aulas avulsas, e não dois blocos.
+                                        <br />
+                                        Por padrão vem ligado para disciplinas com 3 ou mais aulas semanais, para o professor não mudar de sala tantas vezes no mesmo dia.
                                     </AlertDescription>
                                 </Alert>
 
@@ -873,7 +904,9 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                                 </div>
                                                 {config?.geminar && (
                                                     <div className="flex items-center gap-4 pt-2 border-t border-dashed">
-                                                        <Label className="text-xs text-muted-foreground">Tamanho do Bloco:</Label>
+                                                        <Label className="text-xs text-muted-foreground">
+                                                            Aulas seguidas no bloco:
+                                                        </Label>
                                                         <div className="flex gap-2">
                                                             {[2, 3, 4, 5].filter(n => n <= disc.maxAulas).map(n => (
                                                                 <Button
