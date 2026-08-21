@@ -414,7 +414,7 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 flex">
+          <div data-tutorial="turmas-dialog-travar" className="flex-1 min-h-0 flex">
             {/* ── Disciplinas da turma ── */}
             <aside className="w-64 shrink-0 border-r flex flex-col">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-4 pt-4 pb-2 shrink-0">
@@ -543,7 +543,7 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
             </div>
           </div>
 
-          <DialogFooter className="px-6 py-4 border-t sm:justify-between gap-3">
+          <DialogFooter data-tutorial="turmas-travar-rodape" className="px-6 py-4 border-t sm:justify-between gap-3">
             <div className="flex items-center gap-2">
               {turmasIrmas.length > 0 && (
                 <Select value={origemCopia} onValueChange={setOrigemCopia}>

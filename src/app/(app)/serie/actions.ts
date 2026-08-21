@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
 import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
+import { capacidadeSemanalDaSerie } from '@/lib/capacidade-serie';
 
 
 /* -------------------------------------------------------------------------- */
@@ -37,7 +38,9 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
         const componentesDaSerie = seriesComponentes?.filter(sc => sc.serie_id === serie.id) || [];
         const total_aulas_presenciais_distribuidas = componentesDaSerie.reduce((sum, item) => sum + item.aulas_presenciais, 0);
         const total_aulas_nao_presenciais_distribuidas = componentesDaSerie.reduce((sum, item) => sum + item.aulas_nao_presenciais, 0);
-        const total_aulas_presenciais_semanais = (serie.turno?.aulas_por_dia || 0) * (serie.turno?.dias_semana?.length || 0);
+        // Desconta os slots que a serie marcou como proibido: o motor ja os pula,
+        // entao a grade bruta do turno prometeria aulas que nao cabem.
+        const total_aulas_presenciais_semanais = capacidadeSemanalDaSerie(serie.turno as any, serie.restricoes);
 
         return {
             ...serie,

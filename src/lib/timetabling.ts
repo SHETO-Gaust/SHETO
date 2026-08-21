@@ -1,4 +1,5 @@
 
+import { capacidadeSemanalDaSerie } from './capacidade-serie';
 import {
   type Turno,
   type TurmaComDados,
@@ -1867,8 +1868,10 @@ export function gerarHorarioAlgoritmico(
 
       for (const b of todosOsBlocos) {
         if (!capacityMap.has(b.turma_id)) {
-          // assume base turno
-          let cap = turno.aulas_por_dia * turno.dias_semana.length;
+          // Capacidade real da turma: a grade do turno menos os slots que a serie
+          // marcou como proibido — que este mesmo motor pula ao alocar. Sem o
+          // desconto, a auditoria abaixo diria que sobra espaco onde nao sobra.
+          let cap = capacidadeSemanalDaSerie(turno, b.serie_restricoes);
           capacityMap.set(b.turma_id, { nome: b.turma_nome, capacidade: cap, demandaPresencial: 0, demandaNp: 0, alocados: 0, componentes: new Map() });
         }
         const info = capacityMap.get(b.turma_id)!;
