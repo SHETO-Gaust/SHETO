@@ -242,20 +242,20 @@ export function ProfessoresClient({
     <TooltipProvider>
       <div className="flex justify-end items-center gap-2 mb-4">
         <ExportarRestricoes professores={professores} turnosDaEscola={turnosDaEscola} />
-        <Button onClick={() => openSheet(null, 'edit')}>
+        <Button data-tutorial="professores-btn-adicionar" onClick={() => openSheet(null, 'edit')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Professor
         </Button>
       </div>
-      <div className="rounded-md border">
+      <div data-tutorial="professores-tabela" className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
-              <TableHead>Disciplinas</TableHead>
+              <TableHead data-tutorial="professores-coluna-disciplinas">Disciplinas</TableHead>
               <TableHead>Turnos</TableHead>
               <TableHead className="text-center">Aulas</TableHead>
-              <TableHead className="w-[240px] text-right">Ações</TableHead>
+              <TableHead data-tutorial="professores-coluna-acoes" className="w-[240px] text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -324,7 +324,7 @@ export function ProfessoresClient({
                     <div className="flex items-center justify-end gap-1">
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className={cn(prof.email ? "text-primary" : "text-muted-foreground/30")} disabled={!prof.email || isSendingMail === prof.id} onClick={() => handleRequestMail(prof.id)}>
+                                <Button data-tutorial="professores-btn-email" variant="ghost" size="icon" className={cn(prof.email ? "text-primary" : "text-muted-foreground/30")} disabled={!prof.email || isSendingMail === prof.id} onClick={() => handleRequestMail(prof.id)}>
                                     {isSendingMail === prof.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
                                 </Button>
                             </TooltipTrigger>
@@ -346,6 +346,7 @@ export function ProfessoresClient({
                                     variant="ghost"
                                     size="icon"
                                     className={cn(isPendente && "hover:bg-orange-50 dark:hover:bg-orange-950/30")}
+                                    data-tutorial="professores-btn-restricoes"
                                     onClick={() => openSheet(prof, 'restricoes')}
                                 >
                                     <CalendarX className={cn("h-4 w-4", isPendente && "animate-pendente")} />

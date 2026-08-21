@@ -135,18 +135,18 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
   return (
     <>
       <div className="flex justify-end mb-4">
-        <Button onClick={() => handleEdit(null)}>
+        <Button data-tutorial="turno-btn-adicionar" onClick={() => handleEdit(null)}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Turno
         </Button>
       </div>
-      <div className="rounded-md border">
+      <div data-tutorial="turno-tabela" className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Turno</TableHead>
-              <TableHead className="w-[120px]">Status</TableHead>
-              <TableHead className="w-[80px] text-right">Ações</TableHead>
+              <TableHead data-tutorial="turno-coluna-status" className="w-[120px]">Status</TableHead>
+              <TableHead data-tutorial="turno-coluna-acoes" className="w-[80px] text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -213,7 +213,7 @@ export function TurnoClient({ initialTurnos, escolaId }: TurnoClientProps) {
         </Table>
       </div>
 
-      <div className="mt-12">
+      <div data-tutorial="turno-grade" className="mt-12">
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <Clock className="h-5 w-5 text-primary" />
             Configuração da Grade Horária

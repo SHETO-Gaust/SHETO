@@ -116,7 +116,7 @@ export function EditComponenteSheet({ isOpen, setIsOpen, componente, escolaId, o
               control={form.control}
               name="nome"
               render={({ field }) => (
-                <FormItem>
+                <FormItem data-tutorial="componentes-sheet-nome">
                   <FormLabel>Nome do Componente</FormLabel>
                   <FormControl><Input {...field} placeholder="Ex: Matemática" /></FormControl>
                   <FormMessage />
@@ -127,7 +127,7 @@ export function EditComponenteSheet({ isOpen, setIsOpen, componente, escolaId, o
               control={form.control}
               name="sigla"
               render={({ field }) => (
-                <FormItem>
+                <FormItem data-tutorial="componentes-sheet-sigla">
                   <FormLabel>Sigla</FormLabel>
                   <FormControl><Input {...field} placeholder="Ex: MAT" /></FormControl>
                   <FormMessage />
@@ -137,7 +137,7 @@ export function EditComponenteSheet({ isOpen, setIsOpen, componente, escolaId, o
           </form>
         </Form>
 
-        <SheetFooter className="mt-auto border-t pt-4 bg-background">
+        <SheetFooter data-tutorial="componentes-sheet-rodape" className="mt-auto border-t pt-4 bg-background">
           <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
             Cancelar
           </Button>

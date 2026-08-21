@@ -369,7 +369,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Passo 1: Selecione o Turno</CardTitle>
+                    <CardTitle data-tutorial="gerar-passo-turno">Passo 1: Selecione o Turno</CardTitle>
                     <CardDescription>Escolha o turno para o qual você deseja gerar ou visualizar um horário.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -628,6 +628,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                             </Button>
                         </Link>
                         <Button
+                            data-tutorial="gerar-btn-gerar"
                             size="lg"
                             onClick={handleGerarHorarioClick}
                             disabled={isProcessing || isIniciando}
@@ -648,7 +649,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div>
-                            <CardTitle>
+                            <CardTitle data-tutorial="gerar-historico">
                                 Histórico de Grades — {isTodos ? 'Todos os Turnos' : selectedTurno?.nome}
                             </CardTitle>
                             <CardDescription className="mt-1">

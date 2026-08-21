@@ -16,6 +16,8 @@ export type Profile = {
   modules?: string[];
   ue?: string | null; // uuid da escola
   escolas_favoritas?: string[];
+  /** IDs dos tutoriais de tela ja concluidos. Vazio = ainda sera obrigado a ver. */
+  tutoriais_vistos?: string[];
   active: boolean;
   escolas?: Partial<Escola> | null;
   created_at: string; // timestamp with time zone

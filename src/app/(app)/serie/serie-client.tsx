@@ -72,18 +72,18 @@ export function SerieClient({ initialSeries, escolaId, dependencies }: SerieClie
   return (
     <>
       <div className="flex justify-end mb-4 gap-2">
-        <Button onClick={() => handleOpenSheet(null, 'edit')}>
+        <Button data-tutorial="serie-btn-adicionar" onClick={() => handleOpenSheet(null, 'edit')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Série
         </Button>
       </div>
 
       {series.length === 0 ? (
-        <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
+        <div data-tutorial="serie-lista" className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
           Nenhum modelo de série cadastrado. Clique em "Adicionar Série" para começar.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div data-tutorial="serie-lista" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {series.map((serie) => {
             const aulasPresenciaisRestantes = serie.total_aulas_presenciais_semanais - serie.total_aulas_presenciais_distribuidas;
             const progressoPresencial = serie.total_aulas_presenciais_semanais > 0 ? (serie.total_aulas_presenciais_distribuidas / serie.total_aulas_presenciais_semanais) * 100 : 0;

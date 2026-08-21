@@ -74,7 +74,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Configurar Ausência</CardTitle>
+          <CardTitle data-tutorial="substituicoes-form" className="text-lg">Configurar Ausência</CardTitle>
           <CardDescription>Informe o professor que faltou e em qual turno.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -109,7 +109,7 @@ export function SubstituicoesClient({ escolaId, turnos, professores }: Props) {
           </div>
 
           <div className="flex items-end">
-            <Button className="w-full" onClick={handleBuscar} disabled={!turnoId || !dia || !professorId || isSearching}>
+            <Button data-tutorial="substituicoes-btn-buscar" className="w-full" onClick={handleBuscar} disabled={!turnoId || !dia || !professorId || isSearching}>
               {isSearching ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Search className="mr-2 h-4 w-4" />}
               Analisar Impacto
             </Button>

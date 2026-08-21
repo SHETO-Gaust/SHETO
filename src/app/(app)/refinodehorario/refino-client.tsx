@@ -298,7 +298,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
     return (
         <div className="flex flex-col h-full space-y-4">
             <div className="flex flex-wrap gap-4 p-4 border rounded-lg bg-muted/50/50 items-center">
-                <div className="w-[300px]">
+                <div data-tutorial="refino-select-horario" className="w-[300px]">
                     <Select value={horarioId} onValueChange={setHorarioId}>
                         <SelectTrigger><SelectValue placeholder="Selecione um horário publicado..." /></SelectTrigger>
                         <SelectContent>
@@ -309,7 +309,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                     </Select>
                 </div>
 
-                <div className="w-[300px]">
+                <div data-tutorial="refino-select-professor" className="w-[300px]">
                     <Select value={professorId} onValueChange={setProfessorId} disabled={!horarioId || loadingData}>
                         <SelectTrigger>
                            {loadingData ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <SelectValue placeholder="Selecione o professor..." />}
@@ -422,7 +422,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                     </div>
 
                     {/* Right: Painel Impacto */}
-                    <div className="w-full md:w-[380px] shrink-0 border rounded-xl shadow-sm bg-background flex flex-col overflow-hidden max-h-[800px]">
+                    <div data-tutorial="refino-painel-impacto" className="w-full md:w-[380px] shrink-0 border rounded-xl shadow-sm bg-background flex flex-col overflow-hidden max-h-[800px]">
                         <div className="bg-[#f8fafc] dark:bg-muted/30 text-foreground px-4 py-3 font-semibold text-sm border-b uppercase tracking-wide flex items-center justify-between">
                             <span>Painel de Impacto</span>
                             {impacto?.status === 'possibilidades' && (

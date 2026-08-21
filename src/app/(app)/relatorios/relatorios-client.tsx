@@ -72,7 +72,7 @@ export function RelatoriosClient({ escolaId, turnos }: RelatoriosClientProps) {
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <Card className="lg:col-span-1 border-primary/10">
+        <Card data-tutorial="relatorios-turno" className="lg:col-span-1 border-primary/10">
             <CardHeader className="pb-4">
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" /> 1. Turno de Análise
@@ -90,7 +90,7 @@ export function RelatoriosClient({ escolaId, turnos }: RelatoriosClientProps) {
             </CardContent>
         </Card>
 
-        <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div data-tutorial="relatorios-cards" className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
             {reportCards.map(report => (
                 <Card key={report.id} className={`group hover:border-primary/50 transition-all cursor-pointer ${activeReport === report.id ? 'border-primary ring-1 ring-primary/20 shadow-md' : 'bg-muted/30'}`} onClick={() => handleGenerateReport(report.id as ReportType)}>
                     <CardHeader>

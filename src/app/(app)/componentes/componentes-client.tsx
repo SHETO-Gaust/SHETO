@@ -74,17 +74,17 @@ export function ComponentesClient({ initialComponentes, escolaId }: ComponentesC
   return (
     <>
       <div className="flex justify-end mb-4">
-        <Button onClick={() => handleEdit(null)}>
+        <Button data-tutorial="componentes-btn-adicionar" onClick={() => handleEdit(null)}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Componente
         </Button>
       </div>
-      <div className="rounded-md border">
+      <div data-tutorial="componentes-tabela" className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Nome do Componente</TableHead>
-              <TableHead className="w-[150px]">Sigla</TableHead>
+              <TableHead data-tutorial="componentes-coluna-sigla" className="w-[150px]">Sigla</TableHead>
               <TableHead className="w-[80px] text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>

@@ -190,13 +190,13 @@ export function EditProfessorSheet({
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex-1 space-y-6 py-6 overflow-y-auto pr-2">
+              <div data-tutorial="professores-sheet-dados" className="flex-1 space-y-6 py-6 overflow-y-auto pr-2">
                 <div className="space-y-6">
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Identificação e Contato</h4>
 
                     <FormField control={form.control} name="cpf" render={({ field }) => (
-                      <FormItem>
+                      <FormItem data-tutorial="professores-sheet-cpf">
                         <FormLabel className="flex items-center gap-2"><CreditCard className="h-3.5 w-3.5" /> CPF (Obrigatório)</FormLabel>
                         <FormControl>
                           <Input
@@ -211,7 +211,7 @@ export function EditProfessorSheet({
                     )} />
 
                     <FormField control={form.control} name="nome_completo" render={({ field }) => (
-                      <FormItem>
+                      <FormItem data-tutorial="professores-sheet-nome">
                         <FormLabel>Nome Completo</FormLabel>
                         <FormControl><Input {...field} /></FormControl>
                         <FormMessage />
@@ -318,7 +318,7 @@ export function EditProfessorSheet({
                 </div>
               </div>
 
-              <SheetFooter className="mt-auto border-t pt-4 bg-background">
+              <SheetFooter data-tutorial="professores-sheet-rodape" className="mt-auto border-t pt-4 bg-background">
                 <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancelar</Button>
                 <Button type="submit" disabled={loading} className="min-w-[180px] font-bold">
                   {loading

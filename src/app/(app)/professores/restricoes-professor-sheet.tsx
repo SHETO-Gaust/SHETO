@@ -273,13 +273,14 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
 
           {/* Barra de ferramentas */}
           <div className="pt-2 space-y-2">
-            <div className="flex flex-wrap gap-2">
+            <div data-tutorial="restricoes-paleta" className="flex flex-wrap gap-2">
               {/* Fixed tools */}
               {fixedTools.map(tool => {
                 const isActive = selectedTool === tool.id;
                 return (
                   <button
                     key={tool.id}
+                    data-tutorial={`restricoes-etiqueta-${tool.id}`}
                     type="button"
                     onClick={() => setSelectedTool(prev => prev === tool.id ? null : tool.id)}
                     className={cn(
@@ -384,6 +385,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                 const isActive = selectedTool === 'limpar';
                 return (
                   <button
+                    data-tutorial="restricoes-etiqueta-limpar"
                     type="button"
                     onClick={() => setSelectedTool(prev => prev === 'limpar' ? null : 'limpar')}
                     className={cn(
@@ -452,7 +454,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
 
           {/* Grade de horários */}
           {professorTurnos.length > 0 ? (
-            <Tabs defaultValue={professorTurnos[0].id} className="w-full">
+            <Tabs defaultValue={professorTurnos[0].id} className="w-full" data-tutorial="restricoes-grade">
               <TabsList className="bg-muted w-full justify-start overflow-x-auto h-auto p-1">
                 {professorTurnos.map(turno => (
                   <TabsTrigger key={turno.id} value={turno.id} className="px-6 py-2.5 uppercase font-bold text-xs">{turno.nome}</TabsTrigger>
@@ -566,7 +568,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
           </div>
         )}
 
-        <SheetFooter className="mt-auto border-t pt-4 pb-4 bg-background flex flex-col sm:flex-row items-center justify-between gap-4 px-6">
+        <SheetFooter data-tutorial="restricoes-rodape" className="mt-auto border-t pt-4 pb-4 bg-background flex flex-col sm:flex-row items-center justify-between gap-4 px-6">
           <div className="flex items-center gap-4 p-2.5 px-4 rounded-full border bg-muted/50 shadow-sm w-full sm:w-auto flex-wrap">
             <div className="flex items-center gap-2.5">
               <Switch
@@ -580,7 +582,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
 
             <div className="h-4 w-px bg-border hidden sm:block" />
 
-            <div className={cn("flex items-center gap-2 transition-opacity", semPreferencia && "opacity-30 pointer-events-none")}>
+            <div data-tutorial="restricoes-ld-personalizada" className={cn("flex items-center gap-2 transition-opacity", semPreferencia && "opacity-30 pointer-events-none")}>
               <Checkbox
                 id="livre-docencia-personalizada"
                 checked={livreDocenciaPersonalizada}

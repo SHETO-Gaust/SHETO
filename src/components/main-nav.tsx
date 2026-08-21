@@ -84,6 +84,7 @@ export function MainNav({ profile }: { profile: Profile | null }) {
           <SidebarMenuItem key={link.href}>
             <Link href={link.href} passHref>
               <SidebarMenuButton
+                data-tutorial={`nav${link.href.replace(/\//g, '-')}`}
                 className={cn('justify-start')}
                 isActive={pathname.startsWith(link.href)}
                 tooltip={link.label}
@@ -110,6 +111,7 @@ export function MainNav({ profile }: { profile: Profile | null }) {
                 <SidebarMenuItem key={link.href}>
                   <Link href={link.href} passHref>
                     <SidebarMenuButton
+                      data-tutorial={`nav${link.href.replace(/\//g, '-')}`}
                       className={cn('justify-start')}
                       isActive={pathname.startsWith(link.href)}
                       tooltip={link.label}

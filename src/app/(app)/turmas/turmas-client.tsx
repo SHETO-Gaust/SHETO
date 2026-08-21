@@ -72,22 +72,22 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
   return (
     <>
       <div className="flex justify-end mb-4 gap-2">
-        <Button variant="outline" onClick={() => setActiveSheet('carga-prof')}>
+        <Button data-tutorial="turmas-btn-carga" variant="outline" onClick={() => setActiveSheet('carga-prof')}>
           <Users className="mr-2 h-4 w-4" />
           Carga Horária Professores
         </Button>
-        <Button onClick={() => handleOpenDialog(null, 'create-turma')}>
+        <Button data-tutorial="turmas-btn-adicionar" onClick={() => handleOpenDialog(null, 'create-turma')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Turma
         </Button>
       </div>
 
       {turmas.length === 0 ? (
-        <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
+        <div data-tutorial="turmas-lista" className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
           Nenhuma turma cadastrada. Clique em "Adicionar Turma" para começar.
         </div>
       ) : (
-        <div className="space-y-8">
+        <div data-tutorial="turmas-lista" className="space-y-8">
             {Object.values(turmasAgrupadas).map(group => (
                 <div key={group.serie.id}>
                     <h2 className="text-xl font-bold mb-4">{group.serie.nome}</h2>
@@ -137,6 +137,7 @@ export function TurmasClient({ initialTurmas, escolaId, dependencies }: Props) {
                                             Alocar Professores
                                         </Button>
                                         <Button
+                                            data-tutorial="turmas-btn-travar"
                                             variant="outline"
                                             size="icon"
                                             title="Travar aulas em dia/horário fixo"
