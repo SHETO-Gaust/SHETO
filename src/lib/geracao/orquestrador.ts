@@ -19,6 +19,7 @@
 import { NUM_WORKERS, gerarHorarioEmWorker } from '@/lib/timetabling-pool';
 import { registrarLog, registrarLogs } from '@/lib/log-geracao';
 import type { Turno } from '@/lib/types';
+import type { GeminacaoQuebrada } from '@/lib/timetabling';
 import { carregarDadosDaGeracao, inepDaEscola, mensagemDeErro } from './dados';
 import { gravarMemoria, registrarPadroes } from './memoria';
 import { certificar } from './certificado';
@@ -125,9 +126,30 @@ export function dispararJob(job: GeracaoJob): void {
 }
 
 type ResultadoTurno =
-    | { tipo: 'sucesso'; aulas: any[]; tentativas: number; pesos: Record<string, number> }
+    | {
+        tipo: 'sucesso';
+        aulas: any[];
+        tentativas: number;
+        pesos: Record<string, number>;
+        /**
+         * Grade fechada, mas sem uma ou mais geminações pedidas.
+         *
+         * Sucesso parcial existe e precisa de nome próprio: a grade não tem
+         * buraco nenhum — todas as aulas estão lá — só que a disciplina saiu
+         * espalhada em vez de geminada. Sem este campo a perda chegaria à tela
+         * como um sucesso comum, que é exatamente como ela vinha passando.
+         */
+        geminacoesQuebradas: GeminacaoQuebrada[];
+    }
     | { tipo: 'falha'; tentativas: number; erro: string; diagnostico?: any; aulasParciais: any[]; pesos: Record<string, number> }
     | { tipo: 'cancelado'; tentativas: number; aulasParciais: any[] };
+
+/** Frase pronta sobre as geminações perdidas, para log e para a tela. */
+function descreverGeminacoes(quebradas: GeminacaoQuebrada[]): string {
+    return quebradas
+        .map(g => `${g.turma_nome}/${g.componente_nome} (${g.tamanho}x)`)
+        .join(', ');
+}
 
 async function executarJob(job: GeracaoJob): Promise<void> {
     const inep = await inepDaEscola(job.escola_id);
@@ -147,6 +169,14 @@ async function executarJob(job: GeracaoJob): Promise<void> {
     const turnosConcluidos: string[] = [];
     let tentativasAcumuladas = 0;
     let ultimaFalha: { erro: string; diagnostico?: any } | null = null;
+    /**
+     * Turnos que fecharam a grade mas não cumpriram alguma geminação pedida.
+     *
+     * Sobe até a mensagem final do job porque não há outro lugar onde o usuário
+     * veria isso: a grade está completa, não há pendência, não há diagnóstico de
+     * falha — e a disciplina que ele mandou geminar saiu espalhada pela semana.
+     */
+    const avisosGeminacao: string[] = [];
 
     for (const [indice, turnoId] of job.turno_ids.entries()) {
         const dados = await carregarDadosDaGeracao(job.escola_id, turnoId, ['publicado', 'pre_producao']);
@@ -276,10 +306,21 @@ async function executarJob(job: GeracaoJob): Promise<void> {
             await registrarHorarioGerado(job.id, salvo.data.id);
             if (isMulti) idsPreProducao.push(salvo.data.id);
         }
+        if (resultado.geminacoesQuebradas.length > 0) {
+            avisosGeminacao.push(
+                `No turno "${turno.nome}", ${resultado.geminacoesQuebradas.length} geminação(ões) ` +
+                    `não couberam e as aulas ficaram separadas: ` +
+                    `${descreverGeminacoes(resultado.geminacoesQuebradas)}.`
+            );
+        }
+
         registrarLog(
             inep,
             `TURNO OK | job=${job.id} | "${turno.nome}" | grade fechada com ${resultado.aulas.length} aulas ` +
-                `em ${resultado.tentativas} tentativa(s)`
+                `em ${resultado.tentativas} tentativa(s)` +
+                (resultado.geminacoesQuebradas.length
+                    ? ` | ATENCAO: ${resultado.geminacoesQuebradas.length} geminacao(oes) nao cumprida(s)`
+                    : '')
         );
     }
 
@@ -295,12 +336,19 @@ async function executarJob(job: GeracaoJob): Promise<void> {
         return;
     }
 
-    await finalizarJob(job.id, 'concluido', {
-        // Numa geração multi-turno em que parte dos turnos falhou, o desfecho é
-        // "concluído", mas o motivo da falha parcial não pode sumir da tela.
-        erro: turnosConcluidos.length < job.turno_ids.length
+    // Numa geração multi-turno em que parte dos turnos falhou, o desfecho é
+    // "concluído", mas o motivo da falha parcial não pode sumir da tela. O mesmo
+    // vale para a geminação que não coube: a grade fechou, e é justamente por
+    // isso que o aviso precisa vir junto — não haveria outro sinal.
+    const partesDaMensagem = [
+        turnosConcluidos.length < job.turno_ids.length
             ? `Grades geradas: ${turnosConcluidos.join(', ')}. ${ultimaFalha?.erro ?? ''}`.trim()
-            : null,
+            : '',
+        ...avisosGeminacao,
+    ].filter(Boolean);
+
+    await finalizarJob(job.id, 'concluido', {
+        erro: partesDaMensagem.length > 0 ? partesDaMensagem.join(' ') : null,
         diagnostico: ultimaFalha?.diagnostico,
     });
     registrarLog(
@@ -331,6 +379,14 @@ async function gerarTurno(ctx: {
 
     let melhorGlobal = Number.POSITIVE_INFINITY;
     let melhorAulas: any[] = [];
+    /**
+     * Geminações que a melhor grade conhecida deixou de cumprir.
+     *
+     * Anda junto de `melhorAulas` porque é uma propriedade DAQUELA grade, não da
+     * busca: trocar a grade sem trocar este número faria a tela descrever a
+     * geminação de uma grade que já foi substituída.
+     */
+    let melhorGeminacoes: GeminacaoQuebrada[] = [];
     /**
      * Pesos aprendidos, somados entre as threads a cada rodada.
      *
@@ -444,16 +500,38 @@ async function gerarTurno(ctx: {
             const duracaoRodada = Date.now() - inicioRodada;
             offset += tentativasDaRodada;
 
-            // Vence o pedaço de menor offset: com várias threads achando soluções na
-            // mesma rodada, escolher pelo índice mantém o resultado reproduzível.
-            const vencedor = resultados.findIndex(r => r.success);
-            if (vencedor !== -1) {
-                const r = resultados[vencedor];
+            /**
+             * Vence o pedaço de menor offset — com várias threads achando soluções
+             * na mesma rodada, escolher pelo índice mantém o resultado
+             * reproduzível. Entre as que fecharam, porém, uma grade com a
+             * geminação inteira vale mais do que uma sem: as duas têm zero
+             * pendências, e sem este critério a escolha entre elas era o acaso da
+             * ordem das threads.
+             */
+            const fechados = resultados
+                .map((r, i) => ({ r, i }))
+                .filter(({ r }) => r.success);
+
+            if (fechados.length > 0) {
+                const vencedor = fechados.reduce((a, b) =>
+                    b.r.geminacoesQuebradas.length < a.r.geminacoesQuebradas.length ? b : a
+                );
+                const r = vencedor.r;
+
+                if (r.geminacoesQuebradas.length > 0) {
+                    registrarLog(
+                        inep,
+                        `GEMINACAO NAO CUMPRIDA | job=${job.id} | "${turno.nome}" | grade fechada sem ` +
+                            `${r.geminacoesQuebradas.length} geminacao(oes): ${descreverGeminacoes(r.geminacoesQuebradas)}`
+                    );
+                }
+
                 return {
                     tipo: 'sucesso',
                     aulas: r.aulas,
-                    tentativas: pedacos[vencedor] + r.attemptsMade,
+                    tentativas: pedacos[vencedor.i] + r.attemptsMade,
                     pesos: pesosGlobais,
+                    geminacoesQuebradas: r.geminacoesQuebradas,
                 };
             }
 
@@ -472,12 +550,24 @@ async function gerarTurno(ctx: {
             if (maisPerto.melhorPendentes < melhorGlobal) {
                 melhorGlobal = maisPerto.melhorPendentes;
                 melhorAulas = maisPerto.aulas;
+                melhorGeminacoes = maisPerto.geminacoesQuebradas;
                 ultimaMelhora = Date.now();
             } else if (maisPerto.melhorPendentes === melhorGlobal && maisPerto.aulas.length > 0) {
-                // Empate: adota a grade mesmo assim. São arranjos diferentes com o
-                // mesmo custo, e trocar de um para outro é o que faz a busca andar
-                // pelo platô em vez de ficar remoendo a mesma configuração.
-                melhorAulas = maisPerto.aulas;
+                /**
+                 * Empate em pendências: adota a grade mesmo assim. São arranjos
+                 * diferentes com o mesmo custo, e trocar de um para outro é o que
+                 * faz a busca andar pelo platô em vez de remoer a mesma
+                 * configuração.
+                 *
+                 * A exceção é a geminação: trocar por um arranjo que cumpre MENOS
+                 * geminações não é andar pelo platô, é descer. Dentro de um pedaço
+                 * o motor já sabe disso (ver `custoDe`); aqui, entre pedaços, o
+                 * critério precisa ser repetido.
+                 */
+                if (maisPerto.geminacoesQuebradas.length <= melhorGeminacoes.length) {
+                    melhorAulas = maisPerto.aulas;
+                    melhorGeminacoes = maisPerto.geminacoesQuebradas;
+                }
             }
             if (maisPerto.error) erroFinal = maisPerto.error;
 
@@ -576,16 +666,36 @@ async function gerarTurno(ctx: {
 
             // Pode acontecer: a semeadura recoloca as pendências num arranjo que a
             // busca não tinha visitado. Grade fechada vale mais que relatório.
-            if (doVencedor.success) return { tipo: 'sucesso', aulas: doVencedor.aulas, tentativas: offset, pesos: pesosGlobais };
+            if (doVencedor.success) {
+                if (doVencedor.geminacoesQuebradas.length > 0) {
+                    registrarLog(
+                        inep,
+                        `GEMINACAO NAO CUMPRIDA | job=${job.id} | "${turno.nome}" | grade fechada sem ` +
+                            `${doVencedor.geminacoesQuebradas.length} geminacao(oes): ` +
+                            descreverGeminacoes(doVencedor.geminacoesQuebradas)
+                    );
+                }
+                return {
+                    tipo: 'sucesso',
+                    aulas: doVencedor.aulas,
+                    tentativas: offset,
+                    pesos: pesosGlobais,
+                    geminacoesQuebradas: doVencedor.geminacoesQuebradas,
+                };
+            }
 
             diagnosticoFinal = doVencedor.diagnostico;
             melhorAulas = doVencedor.aulas;
+            melhorGeminacoes = doVencedor.geminacoesQuebradas;
             if (doVencedor.error) erroFinal = doVencedor.error;
 
             registrarLog(
                 inep,
                 `DIAGNOSTICO | job=${job.id} | "${turno.nome}" | ${melhorAulas.length} aula(s) | ` +
-                    `${diagnosticoFinal?.pendenciasDetalhadas?.length ?? 0} pendencia(s)`
+                    `${diagnosticoFinal?.pendenciasDetalhadas?.length ?? 0} pendencia(s)` +
+                    (melhorGeminacoes.length
+                        ? ` | ${melhorGeminacoes.length} geminacao(oes) nao cumprida(s): ${descreverGeminacoes(melhorGeminacoes)}`
+                        : '')
             );
         }
 
