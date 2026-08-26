@@ -8,8 +8,8 @@
  *
  * O teto é o mesmo do motor:
  *   - com geminação pedida, o tamanho do bloco;
- *   - sem geminação pedida, 2 — ou o que a carga OBRIGA (`ceil(aulas / dias)`),
- *     quando ela obriga mais.
+ *   - sem geminação pedida, 2. Sempre 2, sem exceção — três aulas seguidas da
+ *     mesma matéria que ninguém pediu é grade que a escola não usa.
  *
  * Como a grade salva não guarda a configuração de geminação usada, o teto
  * assumido aqui é o de quem NÃO pediu geminação. Uma sequência acusada pode,
@@ -21,6 +21,15 @@ carregarEnv({ path: '.env.local' });
 carregarEnv();
 
 import { getPool } from '../src/lib/db/pool';
+
+/**
+ * Maior sequência aceitável sem geminação pedida.
+ *
+ * Não é preferência: a escola não consegue usar uma grade em que a mesma
+ * matéria cai três vezes seguidas sem ninguém ter pedido. Grade assim é
+ * inválida, não é grade pior.
+ */
+const TETO_SEM_GEMINACAO = 2;
 
 type Linha = {
     turma: string; dia: string; aula_index: number;
@@ -88,8 +97,7 @@ async function main() {
             const tam = fim - i + 1;
             histograma.set(tam, (histograma.get(tam) ?? 0) + 1);
 
-            const inevitavel = Math.ceil(inicio.aulas_semana / Math.max(inicio.dias_turno, 1));
-            const teto = Math.max(2, inevitavel);
+            const teto = TETO_SEM_GEMINACAO;
             if (tam > teto) {
                 achados.push({
                     tam, teto,

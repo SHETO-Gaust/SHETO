@@ -101,8 +101,75 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
         if (!achou) erros.push(`travamento perdido: turma ${f.turma_id} ${f.dia_semana}/${f.aula_index}`);
     }
 
+    /**
+     * Sequência da mesma disciplina acima do teto.
+     *
+     * Isto é hard constraint, não estética: uma turma com três aulas seguidas
+     * de Matemática que ninguém pediu é uma grade que a escola não consegue
+     * usar. Enquanto esta verificação não existia, a bancada contava como
+     * "FECHOU" grades com quatro aulas emendadas — media sucesso onde havia
+     * falha, que é o pior desfecho possível para um instrumento de medida.
+     *
+     * O teto é o do motor, e o critério é UM só: emenda que o usuário pediu
+     * pode ter qualquer tamanho; emenda que ele não pediu para em 2. Pedir tem
+     * duas formas, e as duas valem:
+     *   - marcar geminação na tela (o teto vira o tamanho do bloco);
+     *   - travar as aulas em `turmas_aulas_fixas` (o teto vira o tamanho da
+     *     sequência travada — quem fixou quatro aulas seguidas quer quatro).
+     *
+     * A chave inclui o turno: `aula_index` recomeça do zero em cada turno, e
+     * juntar dois turnos no mesmo dia faria a 1ª aula de um parecer vizinha da
+     * última do outro.
+     */
+    const chaveGrupo = (a: any) => `${a.turma_id}|${a.componente_id}|${a.tipo}|${a.turno_id}|${a.dia_semana}`;
+
+    /** Maior sequência travada de cada grupo — é o piso do teto daquele dia. */
+    const travadoPorGrupo = new Map<string, number>();
+    const fixasPorGrupo = new Map<string, number[]>();
+    for (const f of dados.aulasFixas) {
+        const k = `${f.turma_id}|${f.componente_id}|${f.tipo_aula}|${dados.turnoData.id}|${f.dia_semana}`;
+        const lista = fixasPorGrupo.get(k);
+        if (lista) lista.push(f.aula_index); else fixasPorGrupo.set(k, [f.aula_index]);
+    }
+    for (const [k, indices] of fixasPorGrupo) {
+        indices.sort((x: number, y: number) => x - y);
+        let maior = 0, i = 0;
+        while (i < indices.length) {
+            let fim = i;
+            while (fim + 1 < indices.length && indices[fim + 1] === indices[fim] + 1) fim++;
+            maior = Math.max(maior, fim - i + 1);
+            i = fim + 1;
+        }
+        travadoPorGrupo.set(k, maior);
+    }
+
+    const indicesPorGrupoDia = new Map<string, number[]>();
+    for (const a of aulas) {
+        const k = chaveGrupo(a);
+        const lista = indicesPorGrupoDia.get(k);
+        if (lista) lista.push(a.aula_index); else indicesPorGrupoDia.set(k, [a.aula_index]);
+    }
+    for (const [k, indices] of indicesPorGrupoDia) {
+        const [, componenteId] = k.split('|');
+        const cfg = configGerminacao.find((g: any) => g.componente_id === componenteId);
+        const pedidoNaTela = cfg?.geminar && cfg.tamanho_bloco > 1 ? cfg.tamanho_bloco : 2;
+        const teto = Math.max(pedidoNaTela, travadoPorGrupo.get(k) ?? 0);
+
+        indices.sort((x, y) => x - y);
+        let i = 0;
+        while (i < indices.length) {
+            let fim = i;
+            while (fim + 1 < indices.length && indices[fim + 1] === indices[fim] + 1) fim++;
+            const tam = fim - i + 1;
+            if (tam > teto) {
+                const aulasDaSeq = indices.slice(i, fim + 1).map(x => x + 1).join(',');
+                erros.push(`sequencia de ${tam} (teto ${teto}): ${k} nas aulas ${aulasDaSeq}`);
+            }
+            i = fim + 1;
+        }
+    }
+
     void turnos;
-    void configGerminacao;
     return [...new Set(erros)];
 }
 

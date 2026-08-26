@@ -596,29 +596,6 @@ export function gerarHorarioAlgoritmico(
   const limitesGeminacao = new Map<string, number>();
   const requisitosGeminacao: RequisitoGeminacao[] = [];
 
-  /**
-   * Menor sequência que a aritmética OBRIGA, por `turma|componente|tipo`.
-   *
-   * Uma disciplina com 8 aulas semanais num turno de 5 dias vai emendar pelo
-   * menos duas num dia, queira o usuário ou não. O teto de sequência de quem
-   * NÃO pediu geminação é levantado até aqui — sem esse piso, a regra "no
-   * máximo 2" tornaria essa turma impossível de fechar, e o motor gastaria a
-   * geração inteira numa restrição que os próprios dados contradizem.
-   */
-  const minimoPorDia = new Map<string, number>();
-  for (const t of turmas) {
-    for (const c of t.serie.componentes) {
-      for (const tipo of ['presencial', 'nao_presencial'] as const) {
-        const bruto = tipo === 'presencial' ? (c.aulas_presenciais || 0) : (c.aulas_nao_presenciais || 0);
-        if (bruto <= 0) continue;
-        const alvo = tipo === 'presencial' ? turno : turnoNP;
-        const dias = (alvo.dias_semana || []).length;
-        if (dias <= 0) continue;
-        minimoPorDia.set(`${t.id}|${c.componente_id}|${tipo}`, Math.ceil(bruto / dias));
-      }
-    }
-  }
-
   for (const t of turmas) {
     for (const c of t.serie.componentes) {
       const cfg = configGerminacao.find(g => g.componente_id === c.componente_id);
@@ -928,24 +905,26 @@ export function gerarHorarioAlgoritmico(
      * Com geminação pedida é o tamanho do bloco: "2x" significa 2, nem 1 nem 3.
      *
      * Sem geminação pedida o teto é 1 — quem não pediu para emendar não deveria
-     * receber aulas emendadas. Só quando o relaxamento entra, porque a grade não
-     * fecha de outro jeito, o teto sobe para 2, e para por aí. Antes não havia
-     * teto NENHUM para essas disciplinas: era o que produzia quatro aulas
-     * seguidas da mesma matéria numa turma sem ninguém ter pedido.
+     * receber aulas emendadas. Quando o relaxamento entra, porque a grade não
+     * fecha de outro jeito, sobe para 2 e PARA AÍ. Três aulas seguidas da mesma
+     * matéria sem ninguém ter pedido não é uma grade pior, é uma grade que a
+     * escola não pode usar — então não é resultado, é falha, e tem de sair como
+     * pendência para o usuário ver.
      *
-     * O piso de `minimoPorDia` nunca é violado: proibir o que a carga obriga
-     * não deixaria a grade mais bonita, deixaria a grade impossível.
+     * Não há piso que levante este teto. Houve um, calculado como
+     * `ceil(aulas / dias)`, e ele estava errado duas vezes: respondia "quantas
+     * aulas por dia", que não é a mesma pergunta que "quantas seguidas", e por
+     * isso liberava 3 onde 2 bastava. Num dia de N horários cabem ceil(2N/3)
+     * aulas da mesma disciplina sem nenhuma sequência passar de 2 — quatro num
+     * dia de cinco, seis num dia de nove. Nenhuma carga da rede chega perto
+     * disso, então o teto de 2 nunca é o que impede uma grade de fechar.
      */
     const limiteDeSequencia = (
       turmaId: string,
       compId: string,
       tipo: 'presencial' | 'nao_presencial',
-    ): number => {
-      const chave = `${turmaId}|${compId}|${tipo}`;
-      const pedido = limitesGeminacao.get(chave);
-      if (pedido !== undefined) return pedido;
-      return Math.max(permitirParAvulso ? 2 : 1, minimoPorDia.get(chave) ?? 1);
-    };
+    ): number =>
+      limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`) ?? (permitirParAvulso ? 2 : 1);
 
     /**
      * HARD CONSTRAINT — TAMANHO DA SEQUÊNCIA
@@ -1356,7 +1335,22 @@ export function gerarHorarioAlgoritmico(
               excluirIdx: aulaOcupante.aula_index,
             });
 
-            if (mov.moved) {
+            /**
+             * Confere DE NOVO, agora que o ocupante já saiu do caminho.
+             *
+             * `pendenteCabeNoSlotLiberado` foi calculado antes de o ocupante
+             * ser realocado, e a realocação pode ter mudado a resposta: quando
+             * ele é da MESMA disciplina da pendência e aterrissa colado no slot
+             * liberado, colocar a pendência ali forma uma sequência maior que o
+             * teto. O teto de cada uma foi respeitado no momento em que foi
+             * verificado, e mesmo assim a grade saía com três aulas seguidas —
+             * a Estratégia B sempre revalidou; esta não revalidava.
+             */
+            const aindaCabe = mov.moved && podeAlocarMetaEmSlot(
+              b, targetTurno, aulaOcupante.dia_semana, aulaOcupante.aula_index,
+            );
+
+            if (aindaCabe) {
               addAulaState(b, targetTurno, aulaOcupante.dia_semana, aulaOcupante.aula_index);
               if (typeof process !== 'undefined' && (process.env.NODE_ENV !== 'production' || process.env.TIMETABLE_DEBUG === '1')) {
                 console.log(`[REPAIR] Swap na mesma turma resolveu pendência: ${b.turma_nome} | ${b.componente_nome} | slot liberado ${aulaOcupante.dia_semana}-${aulaOcupante.aula_index}`);
@@ -1364,6 +1358,21 @@ export function gerarHorarioAlgoritmico(
               b.placed = true;
               resolveu = true;
               break;
+            }
+
+            // O ocupante mudou de lugar mas o swap não valeu: tira-o do destino
+            // antes que a linha abaixo o devolva ao slot original, senão ele
+            // ficaria nos dois ao mesmo tempo.
+            if (mov.moved) {
+              removeAulaState({
+                turma_id: aulaOcupante.turma_id,
+                componente_id: aulaOcupante.componente_id,
+                professor_id: aulaOcupante.professor_id,
+                dia_semana: mov.novoDia!,
+                aula_index: mov.novoIdx!,
+                tipo: aulaOcupante.tipo,
+                turno_id: mov.novoTurnoId!,
+              });
             }
           }
 
@@ -1382,6 +1391,21 @@ export function gerarHorarioAlgoritmico(
             const slotKey = slotKeyOf(b.turma_id, targetTurno.id, d, idx);
             if (ocupacaoTurmas.has(slotKey)) continue;
             if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') continue;
+            /**
+             * Teto de sequência, que faltava nesta estratégia inteira.
+             *
+             * Ela procura um slot VAZIO da turma e conferia tudo — slot livre,
+             * restrição de série, BAN, reunião de fluxo, folga, planejamento —
+             * menos se a aula ficaria emendada em outras da mesma disciplina.
+             * Das três saídas que colocam a pendência aqui, só a que desloca um
+             * conflito de professor revalidava; as outras duas gravavam direto.
+             *
+             * Era por aqui que saía a sequência de três medida na bancada: a
+             * escola 1120 fechava a grade e entregava Matemática nas três
+             * últimas aulas de quarta, sem ninguém ter pedido geminação. Uma
+             * linha antes de todas as saídas resolve as três de uma vez.
+             */
+            if (runExcederiaLimite(b.turma_id, b.componente_id, b.tipo, targetTurno.id, d, idx, b.size)) continue;
 
             const prof = b.professor_id ? professoresById.get(b.professor_id) : undefined;
             if (isBanHardBlocked(prof, targetTurno.id, d, idx)) continue;
@@ -1944,10 +1968,7 @@ export function gerarHorarioAlgoritmico(
     turmaId: string,
     compId: string,
     tipo: string,
-  ): number => {
-    const chave = `${turmaId}|${compId}|${tipo}`;
-    return limitesGeminacao.get(chave) ?? Math.max(2, minimoPorDia.get(chave) ?? 1);
-  };
+  ): number => limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`) ?? 2;
 
   /**
    * Corta da grade as aulas que fazem uma sequência passar do teto.
