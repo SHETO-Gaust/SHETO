@@ -17,9 +17,10 @@
 
 import type { Turno, ProfessorComDados } from '@/lib/types';
 import { resolverTurnoOposto } from '@/lib/turno-oposto';
+import { getSlotMinutes, minutesConflitam } from '@/lib/horario-slots';
 
 export type CausaInviabilidade = {
-    tipo: 'carga_turma' | 'carga_professor' | 'horario_sem_cobertura';
+    tipo: 'carga_turma' | 'carga_professor' | 'horario_sem_cobertura' | 'turno_sem_horario';
     titulo: string;
     detalhe: string;
     correcao: string;
@@ -35,6 +36,14 @@ export type Certificado = {
     causas: CausaInviabilidade[];
     /** Observações que não provam nada mas explicam a dificuldade. */
     observacoes: string[];
+};
+
+/** Aula do professor em outra grade, pronta para o teste de sobreposição. */
+type OcupacaoExterna = {
+    turnoId: string;
+    aulaIndex: number;
+    inicio: number;
+    fim: number;
 };
 
 type DadosCertificado = {
@@ -238,41 +247,117 @@ export function certificar(dados: DadosCertificado): Certificado {
         }
     }
 
-    // Slots que o professor já gastou em grades publicadas de outros turnos.
-    const ocupadoAlhures = new Map<string, number>();
+    /**
+     * Aulas que o professor já tem em grades salvas de OUTROS turnos, indexadas
+     * por dia e já convertidas em minutos reais.
+     *
+     * Guarda os slots, não a contagem de linhas. `horario_aulas` traz uma linha
+     * por versão salva da grade — dois rascunhos e uma pré-produção do mesmo
+     * turno são a MESMA aula três vezes — e somar linhas multiplicava a ocupação
+     * pelo número de versões. Foi assim que um professor com 20 aulas no
+     * contraturno apareceu com 80 horários ocupados e `livres` negativo: uma
+     * acusação que nenhum dado poderia sustentar.
+     */
+    const turnosPorId = new Map<string, Turno>(dados.allTurnos.map(t => [t.id, t]));
+    const ocupacoesPorProfDia = new Map<string, OcupacaoExterna[]>();
     for (const o of dados.ocupacoes) {
         if (!o.professor_id) continue;
-        ocupadoAlhures.set(o.professor_id, (ocupadoAlhures.get(o.professor_id) ?? 0) + 1);
+        // Em aula não presencial do contraturno, `turno_id` é o turno FÍSICO e
+        // `horario.turno_id` é o turno da grade. Os minutos vêm do físico.
+        const turnoFisicoId = o.turno_id || o.horario?.turno_id;
+        const [inicio, fim] = getSlotMinutes(turnosPorId.get(turnoFisicoId), o.aula_index);
+        const chave = `${o.professor_id}|${o.dia_semana}`;
+        const lista = ocupacoesPorProfDia.get(chave);
+        const ocupacao: OcupacaoExterna = { turnoId: turnoFisicoId, aulaIndex: o.aula_index, inicio, fim };
+        if (lista) lista.push(ocupacao); else ocupacoesPorProfDia.set(chave, [ocupacao]);
     }
 
     const apertados: string[] = [];
+    /** Turnos que travaram alguém só por não terem os horários preenchidos. */
+    const turnosSemHorario = new Map<string, string>();
+    const professoresAfetados = new Map<string, string[]>();
     for (const [profId, carga] of cargaPorProf) {
         if (carga === 0) continue;
         const prof = profsPorId.get(profId);
         if (!prof) continue;
 
+        /**
+         * Varre os horários DESTE turno, e não as aulas do professor em outros:
+         * o que interessa é quantos slots daqui sobram para ele. Cada slot conta
+         * uma vez só, e a colisão com o contraturno é por sobreposição de
+         * minutos — a mesma regra de `timetabling.ts`. Comparar por índice fazia
+         * a 1ª aula da manhã consumir a 1ª aula da tarde, que acontece horas
+         * depois; comparar por minutos só desconta o que de fato colide.
+         */
         let bloqueados = 0;
+        let ocupados = 0;
+        /** Parte de `ocupados` que só existe porque falta horário em algum turno. */
+        let ocupadosNoEscuro = 0;
+        const turnosNoEscuro = new Set<string>();
         for (const d of dias) {
+            const externas = ocupacoesPorProfDia.get(`${profId}|${d}`) ?? [];
             for (let i = 0; i < aulasPorDia; i++) {
-                if (bloqueadoParaSempre(prof, turno, d, i)) bloqueados++;
+                if (bloqueadoParaSempre(prof, turno, d, i)) { bloqueados++; continue; }
+                const [inicio, fim] = getSlotMinutes(turno, i);
+                const colisao = externas.find(o => minutesConflitam(
+                    inicio, fim, o.inicio, o.fim, turno.id === o.turnoId, i, o.aulaIndex));
+                if (!colisao) continue;
+                ocupados++;
+                // `minutesConflitam` assume choque quando não conhece os minutos de
+                // um dos lados. O slot realmente fica vedado — o motor usa a mesma
+                // regra —, mas a culpa é do turno sem horário, não da carga do
+                // professor, e é isso que precisa aparecer na tela.
+                if (turno.id !== colisao.turnoId &&
+                    (inicio < 0 || fim < 0 || colisao.inicio < 0 || colisao.fim < 0)) {
+                    ocupadosNoEscuro++;
+                    turnosNoEscuro.add(inicio < 0 || fim < 0 ? turno.id : colisao.turnoId);
+                }
             }
         }
-        const livres = capacidade - bloqueados - (ocupadoAlhures.get(profId) ?? 0);
+        // Nunca negativo: `bloqueados` e `ocupados` são slots distintos do turno.
+        const livres = capacidade - bloqueados - ocupados;
 
         if (carga > livres) {
+            // Sem os slots tomados no escuro a carga caberia: a causa raiz é o
+            // turno sem horário. Acusar o professor mandaria o usuário tirar aula
+            // de quem não tem carga sobrando — e o problema continuaria lá.
+            if (carga <= livres + ocupadosNoEscuro) {
+                for (const id of turnosNoEscuro) {
+                    turnosSemHorario.set(id, turnosPorId.get(id)?.nome ?? id);
+                    const afetados = professoresAfetados.get(id);
+                    if (afetados) afetados.push(prof.nome_horario);
+                    else professoresAfetados.set(id, [prof.nome_horario]);
+                }
+                continue;
+            }
             causas.push({
                 tipo: 'carga_professor',
                 titulo: `${prof.nome_horario} tem mais aulas do que horários livres`,
                 detalhe: `São ${carga} aulas atribuídas e apenas ${livres} horários disponíveis ` +
                     `(${capacidade} do turno, menos ${bloqueados} bloqueados por indisponibilidade, ` +
                     `livre docência ou reunião de fluxo` +
-                    `${ocupadoAlhures.get(profId) ? `, menos ${ocupadoAlhures.get(profId)} já ocupados em outro turno` : ''}).`,
+                    `${ocupados ? `, menos ${ocupados} já ocupados por aula em outro turno no mesmo horário` : ''}).`,
                 correcao: `Tire ${carga - livres} aula(s) de ${prof.nome_horario}, ou libere ` +
                     `${carga - livres} dos horários bloqueados dele.`,
             });
         } else if (livres - carga <= 2) {
             apertados.push(`${prof.nome_horario} (${carga} aulas em ${livres} horários)`);
         }
+    }
+
+    for (const [turnoIdSemHorario, nome] of turnosSemHorario) {
+        const nomes = [...new Set(professoresAfetados.get(turnoIdSemHorario) ?? [])];
+        const ehOProprio = turnoIdSemHorario === turno.id;
+        causas.push({
+            tipo: 'turno_sem_horario',
+            titulo: `O turno ${nome} está sem o início e o fim das aulas`,
+            detalhe: `${ehOProprio ? 'Este turno' : `O turno ${nome} tem aula gravada para esses professores, mas`} ` +
+                `não tem horário definido em nenhuma aula. Sem saber a que horas cada aula começa e termina, ` +
+                `não dá para dizer se a aula de um turno acontece junto com a do outro — e o motor, por segurança, ` +
+                `assume que sim: o dia inteiro do professor fica vedado. ` +
+                `É só isso que está tirando os horários de ${nomes.join(', ')}; a carga deles cabe no turno.`,
+            correcao: `Preencha o início e o fim de cada aula do turno ${nome} em Turnos e gere de novo.`,
+        });
     }
 
     // ── 3. Cada horário consegue atender todas as turmas? ────────────────────
