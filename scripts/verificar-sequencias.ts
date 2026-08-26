@@ -1,10 +1,16 @@
 /**
- * Sequências da mesma disciplina numa grade já salva.
+ * Repetição da mesma disciplina numa grade já salva — emendada e no dia.
  *
  *   npx tsx scripts/verificar-sequencias.ts <horario_id>
  *
- * Responde a pergunta que só se enxerga olhando a grade pronta: alguma turma
- * recebeu mais aulas seguidas da mesma matéria do que caberia?
+ * Responde as duas perguntas que só se enxergam olhando a grade pronta:
+ * alguma turma recebeu mais aulas SEGUIDAS da mesma matéria do que caberia, e
+ * alguma turma recebeu mais aulas da mesma matéria NO MESMO DIA do que caberia?
+ *
+ * São perguntas diferentes e a segunda foi descoberta depois: o par geminado em
+ * 1-2 mais uma avulsa em 5 não forma sequência nenhuma acima de 2, e ainda
+ * assim são três aulas da mesma matéria no mesmo dia. Foi assim que o defeito
+ * relatado na Dona Cândida de Freitas passou despercebido por este script.
  *
  * O teto é o mesmo do motor:
  *   - com geminação pedida, o tamanho do bloco;
@@ -30,6 +36,14 @@ import { getPool } from '../src/lib/db/pool';
  * inválida, não é grade pior.
  */
 const TETO_SEM_GEMINACAO = 2;
+
+/**
+ * O teto do dia nunca desce abaixo do que a aritmética obriga: `aulas` aulas
+ * espalhadas por `dias` dias põem `ceil(aulas / dias)` em algum dia. Acusar
+ * abaixo disso seria acusar a única grade possível.
+ */
+const tetoDoDia = (aulasSemana: number, dias: number) =>
+    Math.max(TETO_SEM_GEMINACAO, Math.ceil(aulasSemana / Math.max(1, dias)));
 
 type Linha = {
     turma: string; dia: string; aula_index: number;
@@ -78,11 +92,30 @@ async function main() {
 
     const achados: { tam: number; teto: number; texto: string }[] = [];
     const histograma = new Map<number, number>();
+    const excessosDeDia: { qtd: number; texto: string }[] = [];
 
     for (const [k, aulas] of porTurmaDia) {
         const [turma, dia] = k.split('|');
         const porIndice = new Map(aulas.map(a => [a.aula_index, a]));
         const indices = [...porIndice.keys()].sort((x, y) => x - y);
+
+        // Aulas demais da mesma disciplina no dia, emendadas ou não.
+        const porComponente = new Map<string, Linha[]>();
+        for (const a of aulas) {
+            const lista = porComponente.get(a.componente_id);
+            if (lista) lista.push(a); else porComponente.set(a.componente_id, [a]);
+        }
+        for (const [, doDia] of porComponente) {
+            const teto = tetoDoDia(doDia[0].aulas_semana, doDia[0].dias_turno);
+            if (doDia.length <= teto) continue;
+            const quais = doDia.map(a => a.aula_index + 1).sort((x, y) => x - y).join(',');
+            excessosDeDia.push({
+                qtd: doDia.length,
+                texto: `${doDia.length}x no dia (teto ${teto})  ${turma} ${dia} aulas ${quais}  ` +
+                    `${doDia[0].componente} — ${doDia[0].aulas_semana} aula(s)/semana em ` +
+                    `${doDia[0].dias_turno} dias (${doDia[0].professor})`,
+            });
+        }
 
         let i = 0;
         while (i < indices.length) {
@@ -120,8 +153,15 @@ async function main() {
         achados.sort((a, b) => b.tam - a.tam).forEach(a => console.log(`  ${a.texto}`));
     }
 
+    if (excessosDeDia.length === 0) {
+        console.log('nenhuma disciplina repetida no dia acima do teto.');
+    } else {
+        console.log(`\n${excessosDeDia.length} dia(s) com aulas demais da mesma disciplina:`);
+        excessosDeDia.sort((a, b) => b.qtd - a.qtd).forEach(a => console.log(`  ${a.texto}`));
+    }
+
     await getPool().end();
-    process.exit(achados.length === 0 ? 0 : 1);
+    process.exit(achados.length === 0 && excessosDeDia.length === 0 ? 0 : 1);
 }
 
 main().catch(e => { console.error(e); process.exit(2); });

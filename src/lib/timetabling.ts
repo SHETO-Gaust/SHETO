@@ -628,6 +628,40 @@ export function gerarHorarioAlgoritmico(
   }
 
   /**
+   * `pisoDiario`: quantas aulas da disciplina PRECISAM caber num mesmo dia.
+   *
+   * É aritmética, não preferência: `bruto` aulas espalhadas por `dias` dias
+   * obrigam algum dia a receber `ceil(bruto / dias)`. Sem este piso o teto
+   * diário rejeitaria a única distribuição possível e a grade nunca fecharia.
+   *
+   * Este piso vale para o teto DIÁRIO e só para ele. Houve um piso igual a este
+   * no teto de SEQUÊNCIA, e lá ele estava errado — "quantas no dia" não é
+   * "quantas seguidas". Aqui a conta responde exatamente a pergunta que está
+   * sendo feita.
+   *
+   * Nas três escolas de referência nenhum grupo passa de 2, o que quer dizer que
+   * o piso quase nunca levanta nada: ele existe para a carga que ainda não
+   * apareceu, não para a que está aí.
+   */
+  const pisoDiario = new Map<string, number>();
+  for (const t of turmas) {
+    for (const c of t.serie.componentes) {
+      for (const tipo of ['presencial', 'nao_presencial'] as const) {
+        const bruto = tipo === 'presencial'
+          ? (c.aulas_presenciais || 0)
+          : (c.aulas_nao_presenciais || 0);
+        if (bruto <= 0) continue;
+        const alvo = tipo === 'presencial' ? turno : turnoNP;
+        const dias = alvo?.dias_semana?.length || 5;
+        pisoDiario.set(
+          `${t.id}|${c.componente_id}|${tipo}`,
+          Math.ceil(bruto / Math.max(1, dias)),
+        );
+      }
+    }
+  }
+
+  /**
    * Confere, na grade pronta, se cada geminação pedida está de fato lá.
    *
    * É a rede de segurança do contrato. Enquanto a busca não tinha esta conta, uma
@@ -912,12 +946,15 @@ export function gerarHorarioAlgoritmico(
      * pendência para o usuário ver.
      *
      * Não há piso que levante este teto. Houve um, calculado como
-     * `ceil(aulas / dias)`, e ele estava errado duas vezes: respondia "quantas
-     * aulas por dia", que não é a mesma pergunta que "quantas seguidas", e por
-     * isso liberava 3 onde 2 bastava. Num dia de N horários cabem ceil(2N/3)
-     * aulas da mesma disciplina sem nenhuma sequência passar de 2 — quatro num
-     * dia de cinco, seis num dia de nove. Nenhuma carga da rede chega perto
-     * disso, então o teto de 2 nunca é o que impede uma grade de fechar.
+     * `ceil(aulas / dias)`, e ele estava errado AQUI: respondia "quantas aulas
+     * por dia", que não é a mesma pergunta que "quantas seguidas", e por isso
+     * liberava 3 onde 2 bastava. Num dia de N horários cabem ceil(2N/3) aulas da
+     * mesma disciplina sem nenhuma sequência passar de 2 — quatro num dia de
+     * cinco, seis num dia de nove. Nenhuma carga da rede chega perto disso,
+     * então o teto de 2 nunca é o que impede uma grade de fechar.
+     *
+     * Aquele piso não foi jogado fora: ele é a resposta certa para a pergunta
+     * que o teto DIÁRIO faz, e é em `pisoDiario` que ele mora agora.
      */
     const limiteDeSequencia = (
       turmaId: string,
@@ -927,20 +964,25 @@ export function gerarHorarioAlgoritmico(
       limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`) ?? (permitirParAvulso ? 2 : 1);
 
     /**
-     * HARD CONSTRAINT — TAMANHO DA SEQUÊNCIA
+     * HARD CONSTRAINT — TAMANHO DA SEQUÊNCIA E CARGA DO DIA
      *
-     * Colocar `size` aulas a partir de `ini` criaria, naquele dia, uma sequência
-     * contígua daquela disciplina MAIOR que o teto?
+     * Colocar `size` aulas a partir de `ini` deixaria a disciplina, naquele dia,
+     * com uma sequência contígua maior que o teto — ou com mais aulas no dia do
+     * que o teto, ainda que espalhadas?
      *
-     * É esta verificação que faz "geminar 2x" significar duas aulas seguidas e
-     * não três: sem ela uma aula avulsa encostava no bloco e o usuário via um
-     * trio que nunca pediu.
+     * São duas perguntas porque são dois defeitos diferentes, e por muito tempo
+     * só a primeira era feita. Ela é o que faz "geminar 2x" significar duas
+     * aulas seguidas e não três. Mas ela não enxerga o par em 1-2 mais a avulsa
+     * em 5: três aulas da mesma disciplina no mesmo dia, nenhuma sequência acima
+     * de 2, e ainda assim uma grade que a escola não usa. Foi isso que apareceu
+     * na Dona Cândida de Freitas — 15 dias assim nos três turnos, um deles com
+     * quatro aulas de Português numa segunda-feira.
      *
      * Duas avulsas caindo juntas em OUTRO dia continuam permitidas quando o teto
      * é 2: a sequência delas tem o tamanho do teto, não o excede. O que não pode
-     * é engordar o bloco.
+     * é engordar o bloco nem repetir o bloco no mesmo dia.
      */
-    const runExcederiaLimite = (
+    const colocacaoExcederiaLimite = (
       turmaId: string,
       compId: string,
       tipo: 'presencial' | 'nao_presencial',
@@ -953,15 +995,43 @@ export function gerarHorarioAlgoritmico(
       // geminação é abrir mão do bloco pedido, não é liberar sequência de
       // qualquer tamanho. Era por essa porta que o último recurso devolvia a
       // disciplina em blocos de quatro.
-      const limite = limiteDeSequencia(turmaId, compId, tipo);
+      const limiteRun = limiteDeSequencia(turmaId, compId, tipo);
+      /**
+       * O teto do DIA não acompanha o relaxamento — é sempre o teto final.
+       *
+       * O teto de sequência começa em 1 e sobe para 2 quando a busca aperta;
+       * essa escada existe para preferir aulas separadas enquanto há folga. O
+       * teto do dia não tem escada: 2 aulas da mesma disciplina no mesmo dia são
+       * permitidas na grade ENTREGUE, então proibi-las durante os primeiros 70%
+       * do orçamento seria negar à busca um arranjo que ela tem direito de usar.
+       *
+       * É escolha de semântica, não de desempenho, e a diferença foi medida em
+       * vez de suposta: a primeira versão usava `limiteRun` aqui, e a suspeita
+       * era que a escada explicasse a piora em 1120. Não explicava — com o teto
+       * fixo o resultado veio idêntico, 5/3/3 pendentes. O custo em 1120 é do
+       * teto diário em si.
+       *
+       * E esse custo é o preço de parar de mentir. Com o motor anterior, 1120
+       * fechava 1 vez em 3 com média de 1,0 pendência — e as TRÊS grades tinham
+       * excesso de aulas no dia (18, 7 e 13 casos); a que "fechou" entregava uma
+       * turma com quatro aulas da mesma disciplina numa terça. Agora são 3,7
+       * pendências de média e nenhuma grade inválida. A escola não perdeu uma
+       * grade boa: ela deixou de receber uma grade que não podia usar.
+       */
+      const limiteDia = Math.max(
+        limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`) ?? 2,
+        pisoDiario.get(`${turmaId}|${compId}|${tipo}`) ?? 1,
+      );
 
       const ocupados = ocupacaoComponente.get(chaveComponenteDia(turmaId, compId, tipo, turnoId, dia));
-      if (!ocupados) return size > limite;
+      if (!ocupados) return size > limiteRun || size > limiteDia;
+
+      if (ocupados.size + size > limiteDia) return true;
 
       let comprimento = size;
       for (let p = ini - 1; ocupados.has(p); p--) comprimento++;
       for (let q = ini + size; ocupados.has(q); q++) comprimento++;
-      return comprimento > limite;
+      return comprimento > limiteRun;
     };
 
     /**
@@ -1223,7 +1293,7 @@ export function gerarHorarioAlgoritmico(
       const slotKey = slotKeyOf(meta.turma_id, targetTurno.id, dia, idx);
       if (ocupacaoTurmas.has(slotKey)) return false;
 
-      if (runGeminacao > 0 && runExcederiaLimite(
+      if (runGeminacao > 0 && colocacaoExcederiaLimite(
         meta.turma_id, meta.componente_id, meta.tipo, targetTurno.id, dia, idx, runGeminacao,
       )) return false;
 
@@ -1405,7 +1475,7 @@ export function gerarHorarioAlgoritmico(
              * últimas aulas de quarta, sem ninguém ter pedido geminação. Uma
              * linha antes de todas as saídas resolve as três de uma vez.
              */
-            if (runExcederiaLimite(b.turma_id, b.componente_id, b.tipo, targetTurno.id, d, idx, b.size)) continue;
+            if (colocacaoExcederiaLimite(b.turma_id, b.componente_id, b.tipo, targetTurno.id, d, idx, b.size)) continue;
 
             const prof = b.professor_id ? professoresById.get(b.professor_id) : undefined;
             if (isBanHardBlocked(prof, targetTurno.id, d, idx)) continue;
@@ -1595,7 +1665,7 @@ export function gerarHorarioAlgoritmico(
               // O bloco inteiro de uma vez. Validar slot a slot com tamanho 1
               // aprovaria uma grade herdada em que a geminação encosta numa aula
               // avulsa da mesma disciplina — herdaríamos o defeito de volta.
-              !runExcederiaLimite(
+              !colocacaoExcederiaLimite(
                 bloco.turma_id, bloco.componente_id, bloco.tipo,
                 alvo.id, trecho[0].dia_semana, trecho[0].aula_index, bloco.size,
               );
@@ -1714,7 +1784,7 @@ export function gerarHorarioAlgoritmico(
             // uma sequência maior que o bloco pedido neste dia? Vale tanto para o
             // bloco (que não pode encostar numa aula sua já colocada) quanto para
             // as avulsas (que não podem engordar o bloco).
-            if (runExcederiaLimite(b.turma_id, b.componente_id, b.tipo, targetTurno.id, d, i, b.size)) {
+            if (colocacaoExcederiaLimite(b.turma_id, b.componente_id, b.tipo, targetTurno.id, d, i, b.size)) {
               continue;
             }
 
@@ -1971,7 +2041,8 @@ export function gerarHorarioAlgoritmico(
   ): number => limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`) ?? 2;
 
   /**
-   * Corta da grade as aulas que fazem uma sequência passar do teto.
+   * Corta da grade as aulas que fazem uma sequência passar do teto — ou o dia
+   * receber mais aulas da mesma disciplina do que o teto permite.
    *
    * Existe por causa da memória. A grade lembrada pode ter sido produzida sob um
    * contrato de geminação diferente — ou por uma versão do motor que ainda não
@@ -2013,6 +2084,22 @@ export function gerarHorarioAlgoritmico(
           excedente--;
         }
         i = fim + 1;
+      }
+
+      // Sobra do DIA: todas as sequências dentro do teto e ainda assim aulas
+      // demais. Duas duplas de Português na segunda são quatro aulas de
+      // Português na segunda. A grade lembrada pode ter sido salva antes de este
+      // teto existir, e entra como incumbente sem passar por validação nenhuma —
+      // sem esta poda o defeito volta inteiro, como já voltou uma vez.
+      const tetoDoDia = Math.max(
+        limite,
+        pisoDiario.get(`${turmaId}|${componenteId}|${tipo}`) ?? 1,
+      );
+      let sobra = aulas.filter(a => !descartadas.has(a)).length - tetoDoDia;
+      for (let q = aulas.length - 1; q >= 0 && sobra > 0; q--) {
+        if (aulas[q].aula_fixa_id || descartadas.has(aulas[q])) continue;
+        descartadas.add(aulas[q]);
+        sobra--;
       }
     }
 
