@@ -179,7 +179,7 @@ async function executarJob(job: GeracaoJob): Promise<void> {
     const avisosGeminacao: string[] = [];
 
     for (const [indice, turnoId] of job.turno_ids.entries()) {
-        const dados = await carregarDadosDaGeracao(job.escola_id, turnoId, ['publicado', 'pre_producao']);
+        const dados = await carregarDadosDaGeracao(job.escola_id, turnoId, ['publicado', 'pre_producao'], configGerminacao);
         const turno = dados.turnoData as Turno;
 
         registrarLog(
@@ -423,7 +423,19 @@ async function gerarTurno(ctx: {
                 `${dados.memoria.atual ? 'inalterado (grade vale inteira)' : 'alterado (grade sera reparada)'}`
         );
     }
-    /** Momento da última vez que `melhorGlobal` caiu. Base da parada por estagnação. */
+    /**
+     * Custo da melhor grade vista até agora, na mesma moeda do motor:
+     * pendências valem mil, geminação quebrada vale um.
+     *
+     * A estagnação media só pendências, e por isso não enxergava progresso
+     * nenhum quando elas já estavam em zero — o caso comum quando a memória
+     * entrega uma grade completa. O turno rodava a janela inteira (21 minutos,
+     * setenta mil tentativas medidas em produção) cumprindo geminação sem que
+     * uma única melhora contasse, e terminava anunciando "sem reduzir os 0
+     * bloco(s) pendente(s)".
+     */
+    let melhorCustoGlobal = Number.POSITIVE_INFINITY;
+    /** Momento da última vez que `melhorCustoGlobal` caiu. Base da parada por estagnação. */
     let ultimaMelhora = Date.now();
     let erroFinal = 'Algumas aulas não puderam ser alocadas devido a conflitos de professores ou restrições de horários.';
     let chunkAtual = CHUNK_INICIAL;
@@ -551,7 +563,6 @@ async function gerarTurno(ctx: {
                 melhorGlobal = maisPerto.melhorPendentes;
                 melhorAulas = maisPerto.aulas;
                 melhorGeminacoes = maisPerto.geminacoesQuebradas;
-                ultimaMelhora = Date.now();
             } else if (maisPerto.melhorPendentes === melhorGlobal && maisPerto.aulas.length > 0) {
                 /**
                  * Empate em pendências: adota a grade mesmo assim. São arranjos
@@ -569,6 +580,19 @@ async function gerarTurno(ctx: {
                     melhorGeminacoes = maisPerto.geminacoesQuebradas;
                 }
             }
+
+            /**
+             * O relógio da estagnação anda pelo custo da grade que ficou, não
+             * pelo da rodada — uma rodada melhor que foi descartada não é
+             * progresso. Mesma moeda de `custoDe` no motor; as duas contas
+             * precisam continuar iguais.
+             */
+            const custoAdotado = melhorGlobal * 1000 + melhorGeminacoes.length;
+            if (custoAdotado < melhorCustoGlobal) {
+                melhorCustoGlobal = custoAdotado;
+                ultimaMelhora = Date.now();
+            }
+
             if (maisPerto.error) erroFinal = maisPerto.error;
 
             // `tentativas` é o progresso DO TURNO ATUAL: é o que a barra da tela
@@ -628,8 +652,8 @@ async function gerarTurno(ctx: {
                 registrarLog(
                     inep,
                     `TURNO ESTAGNADO | job=${job.id} | "${turno.nome}" | ${offset} tentativa(s) | ` +
-                        `${Math.round(semMelhora / 60000)} min sem reduzir os ${melhorGlobal} ` +
-                        `bloco(s) pendente(s) — encerrando`
+                        `${Math.round(semMelhora / 60000)} min sem melhorar | ${melhorGlobal} ` +
+                        `bloco(s) pendente(s), ${melhorGeminacoes.length} geminacao(oes) quebrada(s) — encerrando`
                 );
                 break;
             }

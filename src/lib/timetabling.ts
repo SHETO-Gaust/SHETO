@@ -1,5 +1,6 @@
 
 import { capacidadeSemanalDaSerie } from './capacidade-serie';
+import { getSlotMinutes, minutesConflitam } from './horario-slots';
 import {
   type Turno,
   type TurmaComDados,
@@ -115,52 +116,6 @@ function getTeacherKey(p: { id: string; cpf?: string | null }): string {
     return `cpf:${p.cpf.replace(/\D/g, '')}`;
   }
   return `id:${p.id}`;
-}
-
-/** Converte "HH:mm" → minutos desde meia-noite. Retorna -1 se inválido. */
-function timeToMinutes(hhmm: string | undefined | null): number {
-  if (!hhmm) return -1;
-  const parts = hhmm.split(':');
-  if (parts.length < 2) return -1;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (isNaN(h) || isNaN(m)) return -1;
-  return h * 60 + m;
-}
-
-/**
- * Retorna [inicio_min, fim_min] para um slot de um turno.
- * Se o turno não tiver horários definidos, retorna [-1, -1].
- */
-function getSlotMinutes(turno: Turno | undefined, aulaIdx: number): [number, number] {
-  const h = turno?.horarios?.[aulaIdx];
-  const ini = timeToMinutes(h?.inicio);
-  const fim = timeToMinutes(h?.fim);
-  return [ini, fim];
-}
-
-/**
- * Verifica sobreposição real de dois slots.
- * Usa minutos pré-calculados: conflito quando ini1 < fim2 AND ini2 < fim1.
- * Contato exato (fim1 === ini2) NÃO é conflito.
- * Fail-safe: se qualquer horário for desconhecido (-1), assume conflito = true
- * (conservador — melhor rejeitar do que gerar choque).
- * Exceção: se os dois slots pertencem ao MESMO turno, usa índice direto.
- */
-function minutesConflitam(
-  ini1: number, fim1: number,
-  ini2: number, fim2: number,
-  mesmoTurno: boolean,
-  idx1: number,
-  idx2: number,
-): boolean {
-  // Mesmo turno: conflito somente se mesmo índice
-  if (mesmoTurno) return idx1 === idx2;
-
-  // Horários não mapeados — conservador: assume conflito
-  if (ini1 < 0 || fim1 < 0 || ini2 < 0 || fim2 < 0) return true;
-
-  return ini1 < fim2 && ini2 < fim1;
 }
 
 function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
@@ -641,6 +596,29 @@ export function gerarHorarioAlgoritmico(
   const limitesGeminacao = new Map<string, number>();
   const requisitosGeminacao: RequisitoGeminacao[] = [];
 
+  /**
+   * Menor sequência que a aritmética OBRIGA, por `turma|componente|tipo`.
+   *
+   * Uma disciplina com 8 aulas semanais num turno de 5 dias vai emendar pelo
+   * menos duas num dia, queira o usuário ou não. O teto de sequência de quem
+   * NÃO pediu geminação é levantado até aqui — sem esse piso, a regra "no
+   * máximo 2" tornaria essa turma impossível de fechar, e o motor gastaria a
+   * geração inteira numa restrição que os próprios dados contradizem.
+   */
+  const minimoPorDia = new Map<string, number>();
+  for (const t of turmas) {
+    for (const c of t.serie.componentes) {
+      for (const tipo of ['presencial', 'nao_presencial'] as const) {
+        const bruto = tipo === 'presencial' ? (c.aulas_presenciais || 0) : (c.aulas_nao_presenciais || 0);
+        if (bruto <= 0) continue;
+        const alvo = tipo === 'presencial' ? turno : turnoNP;
+        const dias = (alvo.dias_semana || []).length;
+        if (dias <= 0) continue;
+        minimoPorDia.set(`${t.id}|${c.componente_id}|${tipo}`, Math.ceil(bruto / dias));
+      }
+    }
+  }
+
   for (const t of turmas) {
     for (const c of t.serie.componentes) {
       const cfg = configGerminacao.find(g => g.componente_id === c.componente_id);
@@ -900,6 +878,12 @@ export function gerarHorarioAlgoritmico(
     larguraBucket: number = 4,
     /** Semeia a grade mas não a desmonta — usado para diagnosticar a grade final. */
     preservarBase: boolean = false,
+    /**
+     * Deixa a disciplina SEM geminação pedida ocupar duas aulas seguidas.
+     * Relaxamento: entra depois de `LIMIAR_PAR_AVULSO` do orçamento, quando
+     * insistir em espalhar tudo já custou grade fechada.
+     */
+    permitirParAvulso: boolean = false,
   ) => {
     const aulasGeradas: HorarioAulaGeradaAlgoritmo[] = [];
     const ocupacaoProfessoresPorDia = new Map<string, SlotOcupado[]>();
@@ -939,19 +923,43 @@ export function gerarHorarioAlgoritmico(
     };
 
     /**
-     * HARD CONSTRAINT — TAMANHO DA GEMINAÇÃO
+     * Maior sequência daquela disciplina que pode existir num dia da turma.
+     *
+     * Com geminação pedida é o tamanho do bloco: "2x" significa 2, nem 1 nem 3.
+     *
+     * Sem geminação pedida o teto é 1 — quem não pediu para emendar não deveria
+     * receber aulas emendadas. Só quando o relaxamento entra, porque a grade não
+     * fecha de outro jeito, o teto sobe para 2, e para por aí. Antes não havia
+     * teto NENHUM para essas disciplinas: era o que produzia quatro aulas
+     * seguidas da mesma matéria numa turma sem ninguém ter pedido.
+     *
+     * O piso de `minimoPorDia` nunca é violado: proibir o que a carga obriga
+     * não deixaria a grade mais bonita, deixaria a grade impossível.
+     */
+    const limiteDeSequencia = (
+      turmaId: string,
+      compId: string,
+      tipo: 'presencial' | 'nao_presencial',
+    ): number => {
+      const chave = `${turmaId}|${compId}|${tipo}`;
+      const pedido = limitesGeminacao.get(chave);
+      if (pedido !== undefined) return pedido;
+      return Math.max(permitirParAvulso ? 2 : 1, minimoPorDia.get(chave) ?? 1);
+    };
+
+    /**
+     * HARD CONSTRAINT — TAMANHO DA SEQUÊNCIA
      *
      * Colocar `size` aulas a partir de `ini` criaria, naquele dia, uma sequência
-     * contígua daquela disciplina MAIOR que o bloco pedido?
+     * contígua daquela disciplina MAIOR que o teto?
      *
      * É esta verificação que faz "geminar 2x" significar duas aulas seguidas e
      * não três: sem ela uma aula avulsa encostava no bloco e o usuário via um
-     * trio que nunca pediu. Vale só para disciplina com geminação configurada —
-     * quem não pediu geminação segue sem limite de sequência, como sempre foi.
+     * trio que nunca pediu.
      *
-     * Duas avulsas caindo juntas em OUTRO dia continuam permitidas: a sequência
-     * delas tem o tamanho do bloco, não o excede. O que não pode é engordar o
-     * bloco.
+     * Duas avulsas caindo juntas em OUTRO dia continuam permitidas quando o teto
+     * é 2: a sequência delas tem o tamanho do teto, não o excede. O que não pode
+     * é engordar o bloco.
      */
     const runExcederiaLimite = (
       turmaId: string,
@@ -962,9 +970,11 @@ export function gerarHorarioAlgoritmico(
       ini: number,
       size: number,
     ): boolean => {
-      if (forcarIndividuais) return false; // geminação abandonada nesta tentativa
-      const limite = limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`);
-      if (limite === undefined) return false;
+      // Não há mais a saída por `forcarIndividuais` que existia aqui: largar a
+      // geminação é abrir mão do bloco pedido, não é liberar sequência de
+      // qualquer tamanho. Era por essa porta que o último recurso devolvia a
+      // disciplina em blocos de quatro.
+      const limite = limiteDeSequencia(turmaId, compId, tipo);
 
       const ocupados = ocupacaoComponente.get(chaveComponenteDia(turmaId, compId, tipo, turnoId, dia));
       if (!ocupados) return size > limite;
@@ -1653,11 +1663,16 @@ export function gerarHorarioAlgoritmico(
           const maxStart = targetTurno.aulas_por_dia - b.size;
 
           /**
-           * Só para disciplina com geminação pedida: a aula avulsa foge de
-           * encostar no bloco (o que a checagem dura já proíbe) e também em outra
-           * avulsa — que é permitido, mas produziria um par que ninguém pediu.
+           * A aula foge de encostar em outra da mesma disciplina — no bloco (o
+           * que a checagem dura já proíbe) e também em outra avulsa, que produz
+           * um par que ninguém pediu.
+           *
+           * Vale para qualquer disciplina, não só a geminada: quando o par
+           * avulso é liberado pelo relaxamento ele passa a ser permitido, e sem
+           * esta preferência a busca começaria a emendar por acaso justamente
+           * onde o usuário não pediu emenda.
            */
-          const evitarVizinho = limitesGeminacao.has(`${b.turma_id}|${b.componente_id}|${b.tipo}`) && !forcarIndividuais
+          const evitarVizinho = !forcarIndividuais
             ? (i: number) => {
                 const ocupados = ocupacaoComponente.get(
                   chaveComponenteDia(b.turma_id, b.componente_id, b.tipo, targetTurno.id, d)
@@ -1894,6 +1909,13 @@ export function gerarHorarioAlgoritmico(
    */
   const LIMIAR_INDIV = Number(process.env.SHETO_RELAX_INDIV) || 0.85;
   const LIMIAR_DIAS = Number(process.env.SHETO_RELAX_DIAS) || 0.70;
+  /**
+   * A partir daqui a disciplina sem geminação pedida pode ocupar duas aulas
+   * seguidas. Fica antes de `LIMIAR_INDIV` de propósito: emendar um par onde
+   * ninguém pediu é uma concessão menor do que desfazer a geminação pedida, e
+   * portanto tem de ser tentada primeiro.
+   */
+  const LIMIAR_PAR_AVULSO = Number(process.env.SHETO_RELAX_PAR_AVULSO) || 0.30;
 
   /**
    * Fração do orçamento gasta em reinícios do zero antes de a busca passar a
@@ -1914,10 +1936,92 @@ export function gerarHorarioAlgoritmico(
   // grade parcial oferecida ao usuário quando a geração falha.
   // A grade herdada já é a incumbente, com o custo que ela custa. Só é
   // substituída por algo igual ou melhor.
+  /**
+   * Maior sequência que a grade ENTREGUE pode ter. É o teto já relaxado: o
+   * tamanho pedido para quem pediu geminação, 2 para quem não pediu.
+   */
+  const limiteFinalDeSequencia = (
+    turmaId: string,
+    compId: string,
+    tipo: string,
+  ): number => {
+    const chave = `${turmaId}|${compId}|${tipo}`;
+    return limitesGeminacao.get(chave) ?? Math.max(2, minimoPorDia.get(chave) ?? 1);
+  };
+
+  /**
+   * Corta da grade as aulas que fazem uma sequência passar do teto.
+   *
+   * Existe por causa da memória. A grade lembrada pode ter sido produzida sob um
+   * contrato de geminação diferente — ou por uma versão do motor que ainda não
+   * tinha teto de sequência — e ela entra como incumbente sem passar pela
+   * validação por onde toda aula colocada passa. Sem esta poda o motor devolvia
+   * intacta uma grade antiga: aconteceu de uma grade com quatro aulas seguidas
+   * da mesma disciplina voltar doze dias depois, idêntica, depois de setenta mil
+   * tentativas que não tinham como recusá-la.
+   *
+   * O que é cortado vira pendência e a busca recoloca. Aula travada
+   * (`turmas_aulas_fixas`) nunca é cortada: o usuário a fixou naquele slot, e
+   * mover uma delas seria desobedecer a tela.
+   */
+  const podarSequenciasLongas = (grade: HorarioAulaGeradaAlgoritmo[]) => {
+    const porGrupo = new Map<string, HorarioAulaGeradaAlgoritmo[]>();
+    for (const a of grade) {
+      pushMapArray(
+        porGrupo,
+        `${a.turma_id}|${a.componente_id}|${a.tipo}|${a.turno_id}|${a.dia_semana}`,
+        a,
+      );
+    }
+
+    const descartadas = new Set<HorarioAulaGeradaAlgoritmo>();
+    for (const [k, aulas] of porGrupo) {
+      const [turmaId, componenteId, tipo] = k.split('|');
+      const limite = limiteFinalDeSequencia(turmaId, componenteId, tipo);
+      aulas.sort((x, y) => x.aula_index - y.aula_index);
+
+      let i = 0;
+      while (i < aulas.length) {
+        let fim = i;
+        while (fim + 1 < aulas.length && aulas[fim + 1].aula_index === aulas[fim].aula_index + 1) fim++;
+
+        let excedente = fim - i + 1 - limite;
+        for (let q = fim; q >= i && excedente > 0; q--) {
+          if (aulas[q].aula_fixa_id) continue;
+          descartadas.add(aulas[q]);
+          excedente--;
+        }
+        i = fim + 1;
+      }
+    }
+
+    return {
+      grade: descartadas.size === 0 ? grade : grade.filter(a => !descartadas.has(a)),
+      removidas: descartadas.size,
+    };
+  };
+
   const herdou = !!gradeHerdada && gradeHerdada.length > 0;
-  let melhorPendentes = herdou ? pendentesHerdados : Number.POSITIVE_INFINITY;
+  /**
+   * Podada sempre, inclusive quando o custo dela é desconhecido. É esse o caso
+   * do "cadastro alterado, grade sera reparada": ela não vira incumbente, mas
+   * continua servindo de ponto de partida — e não pode semear um defeito.
+   */
+  const herdada = herdou
+    ? podarSequenciasLongas(gradeHerdada!)
+    : { grade: [] as HorarioAulaGeradaAlgoritmo[], removidas: 0 };
+  /**
+   * O que a poda tirou volta a faltar. Somar aqui é o que impede a grade herdada
+   * de continuar parecendo completa depois de perder aulas — sem isso ela seguiria
+   * como incumbente de custo zero e nada jamais a substituiria.
+   */
+  const faltandoHerdado = herdou && Number.isFinite(pendentesHerdados)
+    ? pendentesHerdados + herdada.removidas
+    : Number.POSITIVE_INFINITY;
+
+  let melhorPendentes = faltandoHerdado;
   let melhorAulas: HorarioAulaGeradaAlgoritmo[] =
-    herdou && Number.isFinite(pendentesHerdados) ? gradeHerdada! : [];
+    Number.isFinite(faltandoHerdado) ? herdada.grade : [];
   let melhorIndice = offsetTentativa;
 
   /**
@@ -1935,11 +2039,11 @@ export function gerarHorarioAlgoritmico(
   const custoDe = (aulasFaltando: number, geminacoesQuebradas: number) =>
     aulasFaltando * 1000 + geminacoesQuebradas;
 
-  let melhorCusto = herdou && Number.isFinite(pendentesHerdados)
-    ? custoDe(pendentesHerdados, verificarGeminacoes(gradeHerdada!).length)
+  let melhorCusto = Number.isFinite(faltandoHerdado)
+    ? custoDe(faltandoHerdado, verificarGeminacoes(herdada.grade).length)
     : Number.POSITIVE_INFINITY;
   let melhorGeminacoesQuebradas: GeminacaoQuebrada[] =
-    herdou && Number.isFinite(pendentesHerdados) ? verificarGeminacoes(gradeHerdada!) : [];
+    Number.isFinite(faltandoHerdado) ? verificarGeminacoes(herdada.grade) : [];
 
   /**
    * Grade completa cuja geminação não fechou — resposta de último recurso.
@@ -1968,6 +2072,7 @@ export function gerarHorarioAlgoritmico(
     const permitirPersonalizado = force || curProg > LIMIAR_PLAN;
     const forcarIndiv = force || curProg > LIMIAR_INDIV;
     const ignorarDiasPref = force || curProg > LIMIAR_DIAS;
+    const permitirParAvulso = force || curProg > LIMIAR_PAR_AVULSO;
 
     // Semente = índice global: única em toda a geração, inclusive entre as
     // threads que processam pedaços diferentes ao mesmo tempo.
@@ -1983,7 +2088,7 @@ export function gerarHorarioAlgoritmico(
      * em vez de zero — é a diferença entre repetir quarenta mil vezes o mesmo
      * esforço e acumulá-lo.
      */
-    const base = melhorAulas.length > 0 ? melhorAulas : (gradeHerdada ?? []);
+    const base = melhorAulas.length > 0 ? melhorAulas : herdada.grade;
     /**
      * Grade recebida de fora (memória da escola ou outra thread) já entra em
      * intensificação na primeira tentativa: a fase de exploração existe para
@@ -1999,6 +2104,7 @@ export function gerarHorarioAlgoritmico(
       // ela é afrouxada para as tentativas não saírem todas iguais.
       intensificar ? 1 : 4,
       modoDiagnostico,
+      permitirParAvulso,
     );
 
     // Aprendizado: todo bloco que ficou de fora fica mais pesado e será tentado
@@ -2065,6 +2171,29 @@ export function gerarHorarioAlgoritmico(
       melhorIndice,
       pesos: Object.fromEntries(pesos),
       geminacoesQuebradas: sucessoDegradado,
+    };
+  }
+
+  /**
+   * A incumbente está completa, mesmo sem nenhuma tentativa DESTE pedaço ter
+   * fechado uma.
+   *
+   * `sucessoDegradadoAulas` só é preenchido a partir do `success` de uma
+   * tentativa daqui, e a grade herdada da memória não passa por lá. Sem este
+   * caso, uma grade com todas as aulas colocadas voltava com `success: false` e
+   * a tela anunciava "Geração incompleta" logo acima de uma lista vazia de
+   * aulas que ficaram de fora — o log dizia "nenhuma grade fechada" sobre 405
+   * aulas alocadas e zero pendências.
+   */
+  if (melhorPendentes === 0 && melhorAulas.length > 0) {
+    return {
+      success: true,
+      aulas: melhorAulas,
+      attemptsMade: chunk,
+      melhorPendentes: 0,
+      melhorIndice,
+      pesos: Object.fromEntries(pesos),
+      geminacoesQuebradas: melhorGeminacoesQuebradas,
     };
   }
 

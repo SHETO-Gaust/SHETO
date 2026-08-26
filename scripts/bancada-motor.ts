@@ -10,7 +10,23 @@
  *
  * Sem argumentos, roda o conjunto padrão de escolas de referência.
  */
-import 'dotenv/config';
+import { config as carregarEnv } from 'dotenv';
+
+/**
+ * As credenciais deste projeto moram em `.env.local` — `.env` não existe.
+ *
+ * `import 'dotenv/config'` lê apenas `.env`, então a bancada subia sem PGPASSWORD
+ * e morria com "SASL: client password must be a string", um erro que não diz
+ * nada sobre a causa. Ler os dois arquivos mantém a convenção do repositório
+ * (mesma de `scripts/aplicar-migration.js`) sem impedir um `.env` no futuro.
+ *
+ * Roda antes de qualquer consulta porque o pool é preguiçoso: `getPool()` só
+ * chama `new Pool()` — que é quem lê PGHOST/PGUSER/PGPASSWORD — na primeira
+ * consulta, bem depois deste ponto.
+ */
+carregarEnv({ path: '.env.local' });
+carregarEnv();
+
 import { getPool } from '../src/lib/db/pool';
 import { carregarDadosDaGeracao } from '../src/lib/geracao/dados';
 import { gerarHorarioEmWorker } from '../src/lib/timetabling-pool';

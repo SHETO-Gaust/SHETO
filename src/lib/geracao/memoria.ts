@@ -29,16 +29,24 @@ export type MemoriaTurno = {
  * Impressão digital dos dados que determinam a grade.
  *
  * Serve para saber se a memória envelheceu. Precisa cobrir tudo que muda o
- * resultado — turno, turmas, cargas, vínculos de professor, restrições e
- * travamentos — e precisa ser estável: a ordem em que o banco devolve as linhas
- * varia, então tudo é ordenado antes de entrar no hash. Sem isso a impressão
- * mudaria sozinha entre duas leituras idênticas e a memória nunca seria usada.
+ * resultado — turno, turmas, cargas, vínculos de professor, restrições,
+ * travamentos e a geminação pedida — e precisa ser estável: a ordem em que o
+ * banco devolve as linhas varia, então tudo é ordenado antes de entrar no hash.
+ * Sem isso a impressão mudaria sozinha entre duas leituras idênticas e a memória
+ * nunca seria usada.
+ *
+ * A geminação entrou depois, e a falta dela custou caro: como a configuração não
+ * pesava no hash, mudar "geminar 2x" na tela deixava a memória respondendo
+ * "cadastro inalterado". A grade lembrada, montada sob outro contrato, voltava
+ * inteira — e o motor gastava a geração toda em cima de uma grade que já nascia
+ * fora do pedido.
  */
 export function calcularImpressao(dados: {
     turnoData: any;
     turmasDoTurno: any[];
     allProfessores: any[];
     aulasFixas: any[];
+    configGerminacao?: { componente_id: string; geminar?: boolean; tamanho_bloco?: number }[];
 }): string {
     const partes: string[] = [];
 
@@ -73,6 +81,14 @@ export function calcularImpressao(dados: {
     for (const f of [...dados.aulasFixas].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
         partes.push(`fixa:${f.turma_id}:${f.componente_id}:${f.tipo_aula}:${f.dia_semana}:${f.aula_index}`);
     }
+
+    // Só o que o motor de fato lê: quem não gemina, ou gemina em bloco de 1, não
+    // gera requisito nenhum e não pode mudar a impressão ao ser marcado.
+    const gem = (dados.configGerminacao ?? [])
+        .filter(c => c.geminar && (c.tamanho_bloco ?? 0) > 1)
+        .map(c => `${c.componente_id}:${c.tamanho_bloco}`)
+        .sort();
+    partes.push(`geminacao:[${gem.join(',')}]`);
 
     return createHash('sha256').update(partes.join('\n')).digest('hex').slice(0, 32);
 }

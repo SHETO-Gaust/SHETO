@@ -8,7 +8,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
-import type { Turno } from '@/lib/types';
+import type { Turno, ConfiguracaoGerminacao } from '@/lib/types';
 // Leitura sem guard, de propósito: o orquestrador roda fora de uma requisição e
 // os guards das Server Actions resolvem a sessão pelos cookies. Ver
 // `src/lib/dados/leitura.ts`. A autorização acontece antes, ao criar o job.
@@ -68,9 +68,19 @@ export function invalidarCacheGeracao() {
 export async function carregarDadosDaGeracao(
     escolaId: string,
     turnoId: string,
-    statusOcupacao: string[]
+    statusOcupacao: string[],
+    /**
+     * Entra na impressão digital da memória: uma grade lembrada só vale se tiver
+     * sido montada sob a MESMA geminação que se está pedindo agora.
+     */
+    configGerminacao: ConfiguracaoGerminacao[] = []
 ): Promise<DadosDaGeracao> {
-    const chave = `${escolaId}|${turnoId}|${statusOcupacao.join(',')}`;
+    const assinaturaGeminacao = configGerminacao
+        .filter(c => c.geminar && c.tamanho_bloco > 1)
+        .map(c => `${c.componente_id}:${c.tamanho_bloco}`)
+        .sort()
+        .join(',');
+    const chave = `${escolaId}|${turnoId}|${statusOcupacao.join(',')}|${assinaturaGeminacao}`;
     const emCache = cacheGeracao().get(chave);
     if (emCache && emCache.expiraEm > Date.now()) return emCache.dados;
 
@@ -188,6 +198,7 @@ export async function carregarDadosDaGeracao(
         turmasDoTurno,
         allProfessores: allProfessores || [],
         aulasFixas,
+        configGerminacao,
     });
     const [memoria, padroes] = await Promise.all([
         lerMemoria(escolaId, turnoId, impressao).catch(err => {
