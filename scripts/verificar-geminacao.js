@@ -18,7 +18,10 @@
  *   2. nenhuma sequencia passa desse tamanho (a avulsa nao cola no bloco e
  *      vira trio);
  *   3. quando 1 ou 2 nao cabem nos dados, a perda vem DECLARADA em
- *      `geminacoesQuebradas` — e nao escondida atras de um `success: true`.
+ *      `geminacoesQuebradas` — e nao escondida atras de um `success: true`;
+ *   4. disciplina SEM geminacao pedida nao emenda: o teto dela e 2 aulas
+ *      seguidas, e so quando o relaxamento entra porque a grade nao fecha de
+ *      outro jeito.
  *
  * O item 3 e o que este arquivo mais protege. Uma geminacao desfeita nao deixa
  * celula vazia: a disciplina continua com todas as aulas dela na grade, so que
@@ -284,7 +287,13 @@ function cenario1() {
       const alvo = geminar[sigla];
 
       checar(`${t.nome}/${sigla}: ${n} aulas na grade`, total === n, `encontrei ${total}`);
-      if (alvo === undefined) continue;
+      if (alvo === undefined) {
+        // Quem nao pediu geminacao nao pode receber emenda maior que 2. Antes
+        // nao havia teto NENHUM aqui, e a disciplina saia em blocos de quatro.
+        checar(`${t.nome}/${sigla}: sem geminacao pedida, nenhuma sequencia passa de 2`,
+          !runs.some(x => x > 2), `sequencias: [${runs.join(',')}]`);
+        continue;
+      }
 
       checar(`${t.nome}/${sigla}: existe o bloco de ${alvo}  [${runs.join(',')}]`, runs.includes(alvo));
       checar(`${t.nome}/${sigla}: nenhuma sequencia passa de ${alvo}`, !runs.some(x => x > alvo),
@@ -404,6 +413,52 @@ function cenario3() {
   }
 }
 
+// ─── Cenario 4: grade herdada fora do contrato nao pode voltar intacta ──────
+//
+// Foi o defeito visto em producao. A memoria devolvia uma grade montada por uma
+// versao do motor que ainda nao tinha teto de sequencia — quatro aulas seguidas
+// da mesma disciplina — e ela entrava como incumbente sem passar por nenhuma
+// validacao. Depois de 70 mil tentativas e 21 minutos o motor devolvia a MESMA
+// grade, aula por aula, com as sequencias de quatro intactas.
+function cenario4() {
+  console.log('\n4. grade herdada fora do contrato — o motor tem de podar, nao repetir');
+
+  const grade = [['MAT', 4]];
+  const t1 = montarTurno('t1', 'Matutino', 5, 7);
+  const t2 = montarTurno('t2', 'Vespertino', 5, 13);
+  const professores = [montarProfessor('p_MAT')];
+  const turmas = [montarTurma(1, 'A', grade, () => 'p_MAT')];
+
+  // As quatro aulas de MAT emendadas na segunda: nenhuma geracao nova poderia
+  // produzir isso, porque sem geminacao pedida o teto e 2.
+  const herdada = [0, 1, 2, 3].map(i => ({
+    turma_id: 'turma1', componente_id: 'c_MAT', professor_id: 'p_MAT',
+    dia_semana: 'segunda', aula_index: i, tipo: 'presencial', turno_id: 't1',
+    aula_fixa_id: null,
+  }));
+
+  const r = semRuido(() => gerarHorarioAlgoritmico(
+    t1, turmas, professores, [t1, t2], montarConfig(grade, {}),
+    false,      // force
+    [],         // ocupacoes existentes
+    400,        // chunk
+    0,          // offset
+    [],         // aulas fixas
+    false,      // permitir mesmo prof / disciplinas / mesmo dia
+    400,        // orcamento total
+    false,      // diagnostico
+    herdada,    // grade herdada — fora do contrato de hoje
+    null,       // pesos iniciais
+    0,          // pendentes herdados: a grade se dizia completa
+    {}
+  ));
+
+  const runs = (sequenciasPorGrupo(r.aulas).get('turma1|c_MAT|presencial') || []).sort((a, b) => b - a);
+  checar('as 4 aulas continuam na grade', r.aulas.length === 4, `${r.aulas.length} aulas`);
+  checar('a sequencia de 4 herdada nao sobreviveu', !runs.some(x => x > 2),
+    `sequencias: [${runs.join(',')}]`);
+}
+
 // ─── Execucao ───────────────────────────────────────────────────────────────
 
 console.log('=== verificacao do contrato de geminacao ===');
@@ -411,6 +466,7 @@ cenario0();
 cenario1();
 cenario2();
 cenario3();
+cenario4();
 
 console.log('');
 if (falhas === 0) {
