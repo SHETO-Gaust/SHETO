@@ -102,7 +102,8 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
     }
 
     /**
-     * Sequência da mesma disciplina acima do teto.
+     * Sequência da mesma disciplina acima do teto — e aulas demais da mesma
+     * disciplina num mesmo dia, que é outra pergunta.
      *
      * Isto é hard constraint, não estética: uma turma com três aulas seguidas
      * de Matemática que ninguém pediu é uma grade que a escola não consegue
@@ -120,6 +121,13 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
      * A chave inclui o turno: `aula_index` recomeça do zero em cada turno, e
      * juntar dois turnos no mesmo dia faria a 1ª aula de um parecer vizinha da
      * última do outro.
+     *
+     * A carga do DIA usa o mesmo teto, levantado pelo piso aritmético
+     * `ceil(carga semanal / dias do turno)` — abaixo dele não existe grade
+     * nenhuma, então acusar ali seria acusar o impossível, não o defeito. É a
+     * verificação que faltava: o par geminado em 1-2 mais a avulsa em 5 não
+     * forma nenhuma sequência acima de 2 e mesmo assim são três aulas da mesma
+     * matéria no mesmo dia.
      */
     const chaveGrupo = (a: any) => `${a.turma_id}|${a.componente_id}|${a.tipo}|${a.turno_id}|${a.dia_semana}`;
 
@@ -143,6 +151,15 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
         travadoPorGrupo.set(k, maior);
     }
 
+    /** Carga semanal de cada `turma|componente|tipo`, direto do cadastro. */
+    const cargaSemanal = new Map<string, number>();
+    for (const t of dados.turmasDoTurno) {
+        for (const c of t.serie?.componentes || []) {
+            cargaSemanal.set(`${t.id}|${c.componente_id}|presencial`, c.aulas_presenciais || 0);
+            cargaSemanal.set(`${t.id}|${c.componente_id}|nao_presencial`, c.aulas_nao_presenciais || 0);
+        }
+    }
+
     const indicesPorGrupoDia = new Map<string, number[]>();
     for (const a of aulas) {
         const k = chaveGrupo(a);
@@ -150,10 +167,23 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
         if (lista) lista.push(a.aula_index); else indicesPorGrupoDia.set(k, [a.aula_index]);
     }
     for (const [k, indices] of indicesPorGrupoDia) {
-        const [, componenteId] = k.split('|');
+        const [turmaId, componenteId, tipo, turnoIdDoGrupo] = k.split('|');
         const cfg = configGerminacao.find((g: any) => g.componente_id === componenteId);
         const pedidoNaTela = cfg?.geminar && cfg.tamanho_bloco > 1 ? cfg.tamanho_bloco : 2;
         const teto = Math.max(pedidoNaTela, travadoPorGrupo.get(k) ?? 0);
+
+        // Aulas demais no mesmo dia, emendadas ou não. As travadas contam para o
+        // teto porque travar é pedir: quem fixou quatro aulas numa sexta quer as
+        // quatro naquela sexta.
+        const diasDoTurno = turnos.get(turnoIdDoGrupo)?.dias_semana?.length || 5;
+        const piso = Math.ceil(
+            (cargaSemanal.get(`${turmaId}|${componenteId}|${tipo}`) ?? 0) / Math.max(1, diasDoTurno)
+        );
+        const tetoDia = Math.max(pedidoNaTela, piso, fixasPorGrupo.get(k)?.length ?? 0);
+        if (indices.length > tetoDia) {
+            const quais = [...indices].sort((x, y) => x - y).map(x => x + 1).join(',');
+            erros.push(`${indices.length} aulas da mesma disciplina no dia (teto ${tetoDia}): ${k} nas aulas ${quais}`);
+        }
 
         indices.sort((x, y) => x - y);
         let i = 0;
@@ -169,7 +199,6 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
         }
     }
 
-    void turnos;
     return [...new Set(erros)];
 }
 
@@ -194,6 +223,18 @@ function auditarGeminacao(aulas: any[], dados: any, configGerminacao: any[]): { 
         if (!porGrupoDia.has(k)) porGrupoDia.set(k, []);
         porGrupoDia.get(k)!.push(a.aula_index);
     }
+
+    /**
+     * Em que turno cada grupo caiu. As aulas não presenciais vão para o
+     * contraturno, e é o `aulas_por_dia` DELE que corta o tamanho do bloco.
+     * Lido da grade em vez de recalculado: repetir aqui a regra que escolhe o
+     * contraturno seria criar uma segunda fonte para o mesmo número.
+     */
+    const turnoPorGrupo = new Map<string, string>();
+    for (const a of aulas) {
+        turnoPorGrupo.set(`${a.turma_id}|${a.componente_id}|${a.tipo}`, a.turno_id);
+    }
+    const turnosPorId = new Map<string, any>(dados.allTurnos.map((t: any) => [t.id, t]));
 
     const sequencias = new Map<string, number[]>();
     for (const [k, indices] of porGrupoDia) {
@@ -221,7 +262,25 @@ function auditarGeminacao(aulas: any[], dados: any, configGerminacao: any[]): { 
                 ['presencial', c.aulas_presenciais || 0],
                 ['nao_presencial', c.aulas_nao_presenciais || 0],
             ] as [string, number][]) {
-                const alvo = Math.min(cfg.tamanho_bloco, n);
+                /**
+                 * O MESMO corte que o motor aplica em `limitesGeminacao`: o
+                 * pedido da tela cai para o que sobra depois das travadas e para
+                 * o que cabe num dia do turno. Sem isso a bancada acusava grade
+                 * correta — `34.01/EST ORIEN=[4] esperava bloco de 2`, numa
+                 * disciplina cujas quatro aulas estão todas travadas em
+                 * sequência, sem nenhuma livre para formar bloco.
+                 */
+                const nFixa = (dados.aulasFixas as any[]).filter((f: any) =>
+                    f.turma_id === t.id && f.componente_id === c.componente_id && f.tipo_aula === tipo
+                ).length;
+                const turnoDoGrupo = turnosPorId.get(
+                    turnoPorGrupo.get(`${t.id}|${c.componente_id}|${tipo}`) || ''
+                ) || dados.turnoData;
+                const alvo = Math.min(
+                    cfg.tamanho_bloco,
+                    Math.max(0, n - nFixa),
+                    turnoDoGrupo?.aulas_por_dia || 0,
+                );
                 if (alvo <= 1) continue;
                 pedidas++;
 
@@ -341,6 +400,20 @@ async function main() {
     }
 
     await getPool().end();
+
+    /**
+     * A bancada precisa dizer que acabou.
+     *
+     * O pool de workers de `timetabling-pool` e feito para um servidor: ele
+     * mantem as threads vivas entre as geracoes, que e o certo la. Num script
+     * isso quer dizer que o processo nunca sai sozinho — ficava rodando depois
+     * de imprimir o resumo, e cada medicao interrompida deixava um orfao
+     * segurando CPU. Dois deles chegaram a sobreviver a sessao inteira.
+     *
+     * Nao ha o que salvar neste ponto: o resumo ja foi impresso e o pool do
+     * banco ja fechou.
+     */
+    process.exit(0);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

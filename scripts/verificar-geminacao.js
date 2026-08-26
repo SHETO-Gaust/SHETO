@@ -21,7 +21,10 @@
  *      `geminacoesQuebradas` — e nao escondida atras de um `success: true`;
  *   4. disciplina SEM geminacao pedida nao emenda: o teto dela e 2 aulas
  *      seguidas, e so quando o relaxamento entra porque a grade nao fecha de
- *      outro jeito.
+ *      outro jeito;
+ *   5. o mesmo numero vale para o DIA, nao so para a sequencia: bloco de 2
+ *      pedido significa duas aulas naquele dia, e nao duas seguidas mais uma
+ *      solta em outro horario.
  *
  * O item 3 e o que este arquivo mais protege. Uma geminacao desfeita nao deixa
  * celula vazia: a disciplina continua com todas as aulas dela na grade, so que
@@ -178,6 +181,24 @@ function sequenciasPorGrupo(aulas) {
   return sequencias;
 }
 
+/**
+ * Quantas aulas cada `turma|componente|tipo` tem em cada dia.
+ *
+ * A pergunta que faltava. Sequencia e uma coisa, carga do dia e outra: o par em
+ * 1-2 mais a avulsa em 5 nao produz nenhuma sequencia acima de 2 e ainda assim
+ * sao tres aulas da mesma materia no mesmo dia.
+ */
+function aulasPorDiaPorGrupo(aulas) {
+  const contagem = new Map();
+  for (const a of aulas) {
+    const k = `${a.turma_id}|${a.componente_id}|${a.tipo}`;
+    if (!contagem.has(k)) contagem.set(k, new Map());
+    const porDia = contagem.get(k);
+    porDia.set(a.dia_semana, (porDia.get(a.dia_semana) || 0) + 1);
+  }
+  return contagem;
+}
+
 /** Lista das geminacoes que a grade NAO cumpre, na leitura independente. */
 function geminacoesQuebradasReais(aulas, turmas, grade, geminar) {
   const seq = sequenciasPorGrupo(aulas);
@@ -275,6 +296,7 @@ function cenario1() {
 
   const r = rodar(t1, turmas, professores, [t1, t2], montarConfig(grade, geminar), 4000);
   const seq = sequenciasPorGrupo(r.aulas);
+  const diario = aulasPorDiaPorGrupo(r.aulas);
 
   checar('a grade fecha', r.success, `success=${r.success}, ${r.aulas.length} aulas`);
   checar('nenhuma geminacao declarada como quebrada', r.geminacoesQuebradas.length === 0,
@@ -287,6 +309,14 @@ function cenario1() {
       const alvo = geminar[sigla];
 
       checar(`${t.nome}/${sigla}: ${n} aulas na grade`, total === n, `encontrei ${total}`);
+
+      // Carga do dia, independente da sequencia: quem pediu bloco de 2 pediu
+      // duas aulas naquele dia. Quem nao pediu nada tem o mesmo teto de 2.
+      const porDia = diario.get(`${t.id}|c_${sigla}|presencial`) || new Map();
+      const tetoDia = Math.max(alvo === undefined ? 2 : alvo, Math.ceil(n / DIAS.length));
+      const piorDia = Math.max(0, ...porDia.values());
+      checar(`${t.nome}/${sigla}: nenhum dia com mais de ${tetoDia} aula(s)`,
+        piorDia <= tetoDia, `pior dia tem ${piorDia}`);
       if (alvo === undefined) {
         // Quem nao pediu geminacao nao pode receber emenda maior que 2. Antes
         // nao havia teto NENHUM aqui, e a disciplina saia em blocos de quatro.
@@ -407,6 +437,28 @@ function cenario3() {
     reais.length === r.geminacoesQuebradas.length,
     `a grade perdeu ${reais.length} [${reais.join(' ; ')}] mas o motor declarou ${r.geminacoesQuebradas.length}`);
 
+  /**
+   * Sob pressao e que os vazamentos aparecem: o reparo so entra quando a busca
+   * ja falhou, e foi la que a aula extra do dia estava sendo colada. Nenhum
+   * cenario tranquilo pega isso.
+   */
+  const diario = aulasPorDiaPorGrupo(r.aulas);
+  const estourou = [];
+  for (const [sigla, p, np] of grade) {
+    for (const [tipo, n] of [['presencial', p], ['nao_presencial', np || 0]]) {
+      if (!n) continue;
+      const teto = Math.max(geminar[sigla] || 2, Math.ceil(n / DIAS.length));
+      for (const t of turmas) {
+        const porDia = diario.get(`${t.id}|c_${sigla}|${tipo}`) || new Map();
+        for (const [d, q] of porDia) {
+          if (q > teto) estourou.push(`${t.nome}/${sigla}/${d}=${q} (teto ${teto})`);
+        }
+      }
+    }
+  }
+  checar('nenhum dia recebeu mais aulas da mesma disciplina do que o teto',
+    estourou.length === 0, estourou.slice(0, 8).join(' ; '));
+
   // Aviso, nao falha: a maioria deveria caber. Se despencar, algo regrediu.
   if (reais.length > pedidas / 2) {
     console.log(`   AVISO  mais da metade das geminacoes nao coube (${reais.length}/${pedidas}) — investigue`);
@@ -459,6 +511,63 @@ function cenario4() {
     `sequencias: [${runs.join(',')}]`);
 }
 
+// ─── Cenario 5: carga do dia, o defeito que o teto de sequencia nao pegava ──
+//
+// Relatado na Dona Candida de Freitas: o par geminado em 1-2 mais uma aula
+// solta em 5. Nenhuma sequencia passa de 2 e a turma tem tres aulas da mesma
+// materia no mesmo dia. Nos tres turnos daquela escola isso apareceu 15 vezes,
+// uma delas com QUATRO aulas de Portugues numa segunda — duas duplas.
+//
+// A grade herdada e o jeito deterministico de exigir a poda: ela entra como
+// incumbente sem passar por validacao nenhuma, entao se o motor nao souber
+// cortar, ela volta intacta — que foi exatamente o que ja aconteceu uma vez.
+function cenario5() {
+  console.log('\n5. carga do dia — o par mais a avulsa sao tres aulas no mesmo dia');
+
+  const t1 = montarTurno('t1', 'Matutino', 5, 7);
+  const t2 = montarTurno('t2', 'Vespertino', 5, 13);
+
+  const casos = [
+    { nome: 'geminada 2x: par em 1-2 e avulsa em 5', grade: [['MAT', 3]], geminar: { MAT: 2 }, indices: [0, 1, 4] },
+    { nome: 'sem geminacao: duas duplas no mesmo dia', grade: [['POR', 4]], geminar: {}, indices: [0, 1, 3, 4] },
+  ];
+
+  for (const caso of casos) {
+    const sigla = caso.grade[0][0];
+    const total = caso.grade[0][1];
+    const professores = [montarProfessor(`p_${sigla}`)];
+    const turmas = [montarTurma(1, 'A', caso.grade, () => `p_${sigla}`)];
+
+    const herdada = caso.indices.map(i => ({
+      turma_id: 'turma1', componente_id: `c_${sigla}`, professor_id: `p_${sigla}`,
+      dia_semana: 'segunda', aula_index: i, tipo: 'presencial', turno_id: 't1',
+      aula_fixa_id: null,
+    }));
+
+    const r = semRuido(() => gerarHorarioAlgoritmico(
+      t1, turmas, professores, [t1, t2], montarConfig(caso.grade, caso.geminar),
+      false,      // force
+      [],         // ocupacoes existentes
+      400,        // chunk
+      0,          // offset
+      [],         // aulas fixas
+      false,      // permitir mesmo prof / disciplinas / mesmo dia
+      400,        // orcamento total
+      false,      // diagnostico
+      herdada,    // grade herdada — com o defeito dentro
+      null,       // pesos iniciais
+      0,          // pendentes herdados: a grade se dizia completa
+      {}
+    ));
+
+    const naSegunda = r.aulas.filter(a => a.dia_semana === 'segunda').length;
+    checar(`${caso.nome}: as ${total} aulas continuam na grade`,
+      r.aulas.length === total, `${r.aulas.length} aulas`);
+    checar(`${caso.nome}: a segunda ficou com no maximo 2`,
+      naSegunda <= 2, `a segunda ficou com ${naSegunda}`);
+  }
+}
+
 // ─── Execucao ───────────────────────────────────────────────────────────────
 
 console.log('=== verificacao do contrato de geminacao ===');
@@ -467,6 +576,7 @@ cenario1();
 cenario2();
 cenario3();
 cenario4();
+cenario5();
 
 console.log('');
 if (falhas === 0) {
