@@ -6,12 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, FileDown, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee, Layers, CalendarDays, Users } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, FileDown, FileText, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee, Layers, CalendarDays, Users } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho, swapAulasManualmente } from '../actions';
 import { useToast } from '@/hooks/use-toast';
-import { exportarHorarioXLSX } from '@/lib/export-horario';
+import { exportarHorarioXLSX, exportarHorarioPDF } from '@/lib/export-horario';
 import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
@@ -543,7 +543,19 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
               <Button variant="outline" size="sm" onClick={() => exportarHorarioXLSX(horario)} className="gap-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300">
                   <FileDown className="h-4 w-4" /> Exportar .xlsx
               </Button>
-              <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
+              {/*
+                  PDF do horário INTEIRO, montado a partir dos dados — não do que
+                  está na tela. É a diferença para o botão ao lado: "Imprimir
+                  tela" reproduz a visualização atual, então em modo "turma única"
+                  ou "por dia" ele sai com uma turma só, que é o que se esperava
+                  dele mas não o que se espera de um PDF do horário.
+              */}
+              <Button variant="outline" size="sm" onClick={() => exportarHorarioPDF(horario)} className="gap-2 text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/30 dark:hover:text-rose-300">
+                  <FileText className="h-4 w-4" /> PDF completo
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => window.print()} title="Imprime exatamente o que está sendo exibido nesta tela">
+                  <Printer className="mr-2 h-4 w-4" /> Imprimir tela
+              </Button>
           </div>
       </div>
 
