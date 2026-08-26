@@ -37,6 +37,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
@@ -76,6 +77,15 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     const [isPending, startTransition] = useTransition();
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
+    /**
+     * Horários marcados para exportar ou excluir em lote.
+     *
+     * Guarda ids, não índices nem objetos: a lista é recarregada do servidor a
+     * cada troca de turno e depois de cada exclusão, e qualquer referência por
+     * posição apontaria para o horário errado depois disso.
+     */
+    const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+    const [isExcluindoLote, setIsExcluindoLote] = useState(false);
     /**
      * O painel de resultado da última geração. Ele persiste entre visitas (o
      * desfecho mora no banco), então o usuário precisa poder dispensá-lo.
@@ -143,6 +153,9 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     const loadHorarios = async (turnoId: string) => {
         setIsLoadingHorarios(true);
+        // A lista vai ser substituída: manter marcações da lista anterior faria a
+        // barra de seleção contar horários que não estão mais na tela.
+        setSelecionados(new Set());
         if (turnoId === 'todos') {
             const { data, error } = await getHorariosSalvosTodasTurnos(escolaId);
             if (error) {
@@ -340,36 +353,125 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         } else {
             toast({ title: 'Horário removido' });
             setHorarios(prev => prev.filter(h => h.id !== id));
+            desmarcar(id);
         }
     };
 
-    const handleBaixarTodos = async () => {
-        const horariosParaBaixar = horarios.filter(h => h.status !== 'pre_producao');
-        if (horariosParaBaixar.length === 0) {
-            toast({ title: 'Nenhum horário disponível', description: 'Não há grades para exportar.', variant: 'destructive' });
+    // ── Seleção em lote ──────────────────────────────────────────────────────
+
+    /**
+     * Grade em produção não tem o que exportar: ela é o estado intermediário de
+     * uma geração multi-turno, antes de virar rascunho. O botão "Baixar todos"
+     * sempre a ignorou em silêncio; aqui a marcação continua permitida (para
+     * poder excluí-la) e o que a exportação deixa de fora é dito na hora.
+     */
+    const podeExportar = (h: HorarioComTurno) => h.status !== 'pre_producao';
+
+    const desmarcar = (id: string) =>
+        setSelecionados(prev => {
+            if (!prev.has(id)) return prev;
+            const proximo = new Set(prev);
+            proximo.delete(id);
+            return proximo;
+        });
+
+    const alternarSelecao = (id: string) =>
+        setSelecionados(prev => {
+            const proximo = new Set(prev);
+            if (proximo.has(id)) proximo.delete(id); else proximo.add(id);
+            return proximo;
+        });
+
+    const horariosSelecionados = horarios.filter(h => selecionados.has(h.id));
+    const todosMarcados = horarios.length > 0 && selecionados.size === horarios.length;
+
+    const alternarTodos = () =>
+        setSelecionados(todosMarcados ? new Set() : new Set(horarios.map(h => h.id)));
+
+    /**
+     * Monta o .zip de uma lista qualquer de horários.
+     *
+     * Era o corpo de `handleBaixarTodos`. Virou função à parte quando a seleção
+     * em lote passou a precisar exatamente do mesmo trabalho — duplicar isso
+     * significaria que uma correção no formato do arquivo pegaria só metade dos
+     * caminhos de exportação.
+     */
+    const exportarLista = async (lista: HorarioComTurno[], rotuloVazio: string) => {
+        const exportaveis = lista.filter(podeExportar);
+        const ignorados = lista.length - exportaveis.length;
+
+        if (exportaveis.length === 0) {
+            toast({ title: 'Nenhum horário disponível', description: rotuloVazio, variant: 'destructive' });
             return;
         }
+
         setIsBaixandoTodos(true);
-        setBaixarProgresso({ atual: 0, total: horariosParaBaixar.length });
+        setBaixarProgresso({ atual: 0, total: exportaveis.length });
         try {
             const completos = [];
-            for (let i = 0; i < horariosParaBaixar.length; i++) {
-                const { data, error } = await getHorarioDetalhado(horariosParaBaixar[i].id);
+            for (let i = 0; i < exportaveis.length; i++) {
+                const { data, error } = await getHorarioDetalhado(exportaveis[i].id);
                 if (error || !data) {
-                    toast({ title: 'Erro ao carregar horário', description: horariosParaBaixar[i].nome, variant: 'destructive' });
+                    toast({ title: 'Erro ao carregar horário', description: exportaveis[i].nome, variant: 'destructive' });
                     continue;
                 }
                 completos.push(data);
-                setBaixarProgresso({ atual: i + 1, total: horariosParaBaixar.length });
+                setBaixarProgresso({ atual: i + 1, total: exportaveis.length });
             }
             if (completos.length === 0) return;
             await exportarTodosHorariosZIP(completos);
-            toast({ title: 'Download concluído!', description: `${completos.length} horário(s) exportados no arquivo .zip.` });
+            toast({
+                title: 'Download concluído!',
+                description: `${completos.length} horário(s) exportados no arquivo .zip.` +
+                    (ignorados > 0 ? ` ${ignorados} em produção ficaram de fora.` : ''),
+            });
         } catch {
             toast({ title: 'Erro ao exportar', description: 'Não foi possível gerar o arquivo.', variant: 'destructive' });
         } finally {
             setIsBaixandoTodos(false);
             setBaixarProgresso(null);
+        }
+    };
+
+    const handleBaixarTodos = () => exportarLista(horarios, 'Não há grades para exportar.');
+
+    const handleExportarSelecionados = () =>
+        exportarLista(horariosSelecionados, 'Os horários marcados ainda estão em produção.');
+
+    /**
+     * Exclusão em lote.
+     *
+     * Sequencial, e não `Promise.all`: cada `deleteHorario` refaz a checagem de
+     * permissão da escola no servidor, e disparar tudo de uma vez só troca um
+     * relatório claro de quais falharam por um erro genérico. O resultado diz o
+     * que saiu e o que ficou — apagar sete de dez e mostrar "pronto" seria o
+     * mesmo tipo de silêncio que estamos tirando do sistema.
+     */
+    const handleExcluirSelecionados = async () => {
+        const alvos = horariosSelecionados;
+        if (alvos.length === 0) return;
+
+        setIsExcluindoLote(true);
+        const apagados: string[] = [];
+        const falharam: string[] = [];
+
+        for (const h of alvos) {
+            const { error } = await deleteHorario(h.id);
+            if (error) falharam.push(h.nome); else apagados.push(h.id);
+        }
+
+        setHorarios(prev => prev.filter(h => !apagados.includes(h.id)));
+        setSelecionados(new Set(falharam.length ? alvos.filter(h => !apagados.includes(h.id)).map(h => h.id) : []));
+        setIsExcluindoLote(false);
+
+        if (falharam.length === 0) {
+            toast({ title: `${apagados.length} horário(s) removido(s)` });
+        } else {
+            toast({
+                title: `${apagados.length} de ${alvos.length} removido(s)`,
+                description: `Não foi possível excluir: ${falharam.join(', ')}.`,
+                variant: 'destructive',
+            });
         }
     };
 
@@ -740,18 +842,151 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                             <Loader2 className="h-10 w-10 animate-spin text-primary/40" />
                         </div>
                     ) : horarios.length > 0 ? (
+                        <>
+                        {/*
+                            Barra de seleção. Fica sempre visível, e não só depois
+                            do primeiro clique: é ela que anuncia que dá para
+                            marcar vários — uma bolinha solta no canto de cada
+                            card não conta essa história sozinha.
+                        */}
+                        <div className="flex flex-wrap items-center gap-2 mb-4 p-2 pl-3 rounded-xl border bg-muted/30">
+                            <label className="flex items-center gap-2 cursor-pointer select-none mr-auto">
+                                <Checkbox
+                                    checked={todosMarcados ? true : (selecionados.size > 0 ? 'indeterminate' : false)}
+                                    onCheckedChange={alternarTodos}
+                                    aria-label={todosMarcados ? 'Desmarcar todos' : 'Marcar todos'}
+                                    className="rounded-full data-[state=indeterminate]:bg-primary/40 data-[state=indeterminate]:border-primary"
+                                />
+                                <span className="text-xs font-semibold">
+                                    {selecionados.size > 0
+                                        ? `${selecionados.size} de ${horarios.length} selecionado(s)`
+                                        : 'Selecionar horários'}
+                                </span>
+                                {/* Marcado mas inexportável precisa aparecer ANTES do clique
+                                    em Exportar, senão o .zip volta com menos arquivos do
+                                    que o usuário marcou e ele não sabe por quê. */}
+                                {selecionados.size > 0 && horariosSelecionados.some(h => !podeExportar(h)) && (
+                                    <span className="text-[10px] text-muted-foreground font-medium">
+                                        ({horariosSelecionados.filter(h => !podeExportar(h)).length} em produção, não exportável)
+                                    </span>
+                                )}
+                            </label>
+
+                            {selecionados.size > 0 && (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 gap-2 text-xs"
+                                        onClick={handleExportarSelecionados}
+                                        disabled={isBaixandoTodos || isExcluindoLote}
+                                    >
+                                        {isBaixandoTodos ? (
+                                            <>
+                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                {baixarProgresso ? `${baixarProgresso.atual}/${baixarProgresso.total}...` : 'Preparando...'}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FolderDown className="h-3.5 w-3.5" />
+                                                Exportar (.zip)
+                                            </>
+                                        )}
+                                    </Button>
+
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 gap-2 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                                                disabled={isBaixandoTodos || isExcluindoLote}
+                                            >
+                                                {isExcluindoLote
+                                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    : <Trash2 className="h-3.5 w-3.5" />}
+                                                Excluir
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>
+                                                    Excluir {selecionados.size} horário(s)?
+                                                </AlertDialogTitle>
+                                                <AlertDialogDescription asChild>
+                                                    <div className="space-y-3">
+                                                        <p>Esta ação não pode ser desfeita.</p>
+                                                        {/* Publicado é o que a escola está usando de verdade.
+                                                            Apagá-lo no meio de um lote não pode passar como
+                                                            mais um item da lista. */}
+                                                        {horariosSelecionados.some(h => h.status === 'publicado') && (
+                                                            <p className="text-destructive font-semibold">
+                                                                Atenção: {horariosSelecionados.filter(h => h.status === 'publicado').length} deste(s)
+                                                                está(ão) PUBLICADO(S) e em uso.
+                                                            </p>
+                                                        )}
+                                                        <ul className="max-h-40 overflow-y-auto text-xs space-y-1 rounded-lg border bg-muted/30 p-3">
+                                                            {horariosSelecionados.map(h => (
+                                                                <li key={h.id} className="flex items-center gap-2">
+                                                                    <span className="truncate">{h.nome}</span>
+                                                                    {h.status === 'publicado' && (
+                                                                        <span className="shrink-0 text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-green-500 text-white">
+                                                                            publicado
+                                                                        </span>
+                                                                    )}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                <AlertDialogAction
+                                                    onClick={handleExcluirSelecionados}
+                                                    className="bg-destructive hover:bg-destructive/90"
+                                                >
+                                                    Confirmar Exclusão
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 text-xs text-muted-foreground"
+                                        onClick={() => setSelecionados(new Set())}
+                                        disabled={isBaixandoTodos || isExcluindoLote}
+                                    >
+                                        Limpar
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {horarios.map(h => {
                                 const isPublicado = h.status === 'publicado';
                                 const isIncompleto = h.nome.includes('(Com Pendências)');
+                                const marcado = selecionados.has(h.id);
                                 return (
                                     <Card key={h.id} className={cn(
                                         "bg-muted/40 overflow-hidden border shadow-sm group hover:border-primary/30 transition-all flex flex-col",
-                                        isIncompleto && "border-orange-200 bg-orange-50/20 dark:border-orange-900/50 dark:bg-orange-950/10"
+                                        isIncompleto && "border-orange-200 bg-orange-50/20 dark:border-orange-900/50 dark:bg-orange-950/10",
+                                        // O card inteiro muda de cor: a bolinha sozinha é pequena
+                                        // demais para se achar num grid de três colunas.
+                                        marcado && "border-primary ring-2 ring-primary/30 bg-primary/5"
                                     )}>
                                         <CardHeader className="pb-3">
                                             <div className="flex items-center justify-between gap-2">
-                                                <CardTitle className="text-sm font-bold flex items-center gap-1.5 min-w-0" title={h.nome}>
+                                                <Checkbox
+                                                    checked={marcado}
+                                                    onCheckedChange={() => alternarSelecao(h.id)}
+                                                    aria-label={`Selecionar ${h.nome}`}
+                                                    className="shrink-0 rounded-full h-4 w-4"
+                                                />
+                                                <CardTitle className="text-sm font-bold flex items-center gap-1.5 min-w-0 mr-auto" title={h.nome}>
                                                     {isTodos && h.turno_nome && (
                                                         <span className={cn(
                                                             "shrink-0 text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded",
@@ -806,6 +1041,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                 )
                             })}
                         </div>
+                        </>
                     ) : (
                         <div className="flex flex-col items-center justify-center p-16 text-center border-2 border-dashed rounded-xl bg-muted/10">
                             <Clock className="h-14 w-14 text-muted-foreground/20 mb-4" />
