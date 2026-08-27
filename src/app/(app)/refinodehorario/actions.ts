@@ -64,21 +64,29 @@ export async function getDadosRefinoHorario(escolaId: string, horarioSelecionado
 
     const aulasDesteHorario = todasAulas.filter(a => a.horario_id === horarioSelecionadoId);
     if (!aulasDesteHorario.length) {
-        return { data: { todasAulas: [], professores: [], turnos: [] } };
+        return { data: { todasAulas: [], professores: [], turmas: [], turnos: [] } };
     }
 
     const profsMap = new Map<string, { id: string; nome: string }>();
+    // As turmas saem das aulas pelo mesmo caminho que os professores: quem
+    // aparece na grade e quem pode ser refinado nela.
+    const turmasMap = new Map<string, { id: string; nome: string }>();
     for (const a of aulasDesteHorario) {
         if (a.professor_id) {
             profsMap.set(a.professor_id, { id: a.professor_id, nome: a.professor_nome });
         }
+        if (a.turma_id) {
+            turmasMap.set(a.turma_id, { id: a.turma_id, nome: a.turma_nome });
+        }
     }
     const professores = Array.from(profsMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
+    const turmas = Array.from(turmasMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
 
     return {
         data: {
             todasAulas,
             professores,
+            turmas,
             turnos: turnosList as Turno[]
         }
     };
