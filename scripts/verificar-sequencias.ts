@@ -1,16 +1,18 @@
 /**
- * Repetição da mesma disciplina numa grade já salva — emendada e no dia.
+ * A regra do dia numa grade já salva.
  *
  *   npx tsx scripts/verificar-sequencias.ts <horario_id>
  *
- * Responde as duas perguntas que só se enxergam olhando a grade pronta:
- * alguma turma recebeu mais aulas SEGUIDAS da mesma matéria do que caberia, e
- * alguma turma recebeu mais aulas da mesma matéria NO MESMO DIA do que caberia?
+ * Três coisas que só se enxergam olhando a grade pronta:
  *
- * São perguntas diferentes e a segunda foi descoberta depois: o par geminado em
- * 1-2 mais uma avulsa em 5 não forma sequência nenhuma acima de 2, e ainda
- * assim são três aulas da mesma matéria no mesmo dia. Foi assim que o defeito
- * relatado na Dona Cândida de Freitas passou despercebido por este script.
+ *   EMENDA      alguma turma recebeu aulas SEGUIDAS demais da mesma matéria?
+ *   ESPAÇAMENTO os grupos da mesma matéria no dia respiram? Pelo menos 1 aula
+ *               livre entre duas avulsas, 2 quando uma delas é dupla.
+ *   TETO        quantas da mesma matéria caíram no dia, no total?
+ *
+ * Repetir a matéria no dia é permitido — a escola usa. O que ela não usa é o
+ * amontoado: o par colado numa terceira aula, ou o dia inteiro tomado por uma
+ * disciplina só.
  *
  * O teto é o mesmo do motor:
  *   - com geminação pedida, o tamanho do bloco;
@@ -38,17 +40,50 @@ import { getPool } from '../src/lib/db/pool';
 const TETO_SEM_GEMINACAO = 2;
 
 /**
- * O teto do dia nunca desce abaixo do que a aritmética obriga: `aulas` aulas
- * espalhadas por `dias` dias põem `ceil(aulas / dias)` em algum dia. Acusar
+ * Quantas aulas da mesma matéria cabem no dia: 4 num dia de 7 aulas ou mais, 3
+ * nos demais, e nunca abaixo do que a aritmética obriga — `aulas` aulas
+ * espalhadas por `dias` dias põem `ceil(aulas / dias)` em algum dia, e acusar
  * abaixo disso seria acusar a única grade possível.
  */
-const tetoDoDia = (aulasSemana: number, dias: number) =>
-    Math.max(TETO_SEM_GEMINACAO, Math.ceil(aulasSemana / Math.max(1, dias)));
+const tetoDoDia = (aulasSemana: number, dias: number, aulasPorDia: number) =>
+    Math.max(aulasPorDia >= 7 ? 4 : 3, Math.ceil(aulasSemana / Math.max(1, dias)));
+
+/**
+ * A regra do dia. Devolve o motivo, ou null.
+ *
+ * Como a grade salva não guarda a configuração de geminação usada, `limiteRun`
+ * assumido é o de quem NÃO pediu geminação. Uma emenda acusada pode, portanto,
+ * ser legítima — se aquela disciplina tinha geminação de 3 ou mais na tela.
+ * Espaçamento e teto não dependem disso e são sempre confiáveis.
+ */
+function motivoDaRegra(indices: number[], limiteRun: number, teto: number): string | null {
+    const ord = [...new Set(indices)].sort((a, b) => a - b);
+    if (ord.length === 0) return null;
+    if (ord.length > teto) return `${ord.length} aulas no dia (teto ${teto})`;
+
+    const corridas: { ini: number; fim: number; tam: number }[] = [];
+    let i = 0;
+    while (i < ord.length) {
+        let fim = i;
+        while (fim + 1 < ord.length && ord[fim + 1] === ord[fim] + 1) fim++;
+        corridas.push({ ini: ord[i], fim: ord[fim], tam: fim - i + 1 });
+        i = fim + 1;
+    }
+    for (const c of corridas) {
+        if (c.tam > limiteRun) return `emenda de ${c.tam} (teto ${limiteRun})`;
+    }
+    for (let k = 1; k < corridas.length; k++) {
+        const vao = corridas[k].ini - corridas[k - 1].fim - 1;
+        const minimo = corridas[k - 1].tam >= 2 || corridas[k].tam >= 2 ? 2 : 1;
+        if (vao < minimo) return `vao de ${vao} entre grupos (minimo ${minimo})`;
+    }
+    return null;
+}
 
 type Linha = {
     turma: string; dia: string; aula_index: number;
     componente: string; componente_id: string; professor: string;
-    aulas_semana: number; dias_turno: number;
+    aulas_semana: number; dias_turno: number; aulas_por_dia: number;
 };
 
 async function main() {
@@ -64,7 +99,8 @@ async function main() {
                 ha.componente_id::text as componente_id,
                 coalesce(p.nome_horario, '-') as professor,
                 coalesce(sc.aulas_presenciais, 0) as aulas_semana,
-                coalesce(array_length(t.dias_semana, 1), 5) as dias_turno
+                coalesce(array_length(t.dias_semana, 1), 5) as dias_turno,
+                coalesce(t.aulas_por_dia, 5) as aulas_por_dia
            from horario_aulas ha
            join horarios h on h.id = ha.horario_id
            join turnos t on t.id = h.turno_id
@@ -99,21 +135,23 @@ async function main() {
         const porIndice = new Map(aulas.map(a => [a.aula_index, a]));
         const indices = [...porIndice.keys()].sort((x, y) => x - y);
 
-        // Aulas demais da mesma disciplina no dia, emendadas ou não.
+        // A regra do dia, por disciplina.
         const porComponente = new Map<string, Linha[]>();
         for (const a of aulas) {
             const lista = porComponente.get(a.componente_id);
             if (lista) lista.push(a); else porComponente.set(a.componente_id, [a]);
         }
         for (const [, doDia] of porComponente) {
-            const teto = tetoDoDia(doDia[0].aulas_semana, doDia[0].dias_turno);
-            if (doDia.length <= teto) continue;
+            const ref = doDia[0];
+            const teto = tetoDoDia(ref.aulas_semana, ref.dias_turno, ref.aulas_por_dia);
+            const motivo = motivoDaRegra(doDia.map(a => a.aula_index), TETO_SEM_GEMINACAO, teto);
+            if (!motivo) continue;
             const quais = doDia.map(a => a.aula_index + 1).sort((x, y) => x - y).join(',');
             excessosDeDia.push({
                 qtd: doDia.length,
-                texto: `${doDia.length}x no dia (teto ${teto})  ${turma} ${dia} aulas ${quais}  ` +
-                    `${doDia[0].componente} — ${doDia[0].aulas_semana} aula(s)/semana em ` +
-                    `${doDia[0].dias_turno} dias (${doDia[0].professor})`,
+                texto: `${motivo}  ${turma} ${dia} aulas ${quais}  ` +
+                    `${ref.componente} — ${ref.aulas_semana} aula(s)/semana em ` +
+                    `${ref.dias_turno} dias (${ref.professor})`,
             });
         }
 
@@ -154,9 +192,9 @@ async function main() {
     }
 
     if (excessosDeDia.length === 0) {
-        console.log('nenhuma disciplina repetida no dia acima do teto.');
+        console.log('nenhum dia quebra a regra do dia.');
     } else {
-        console.log(`\n${excessosDeDia.length} dia(s) com aulas demais da mesma disciplina:`);
+        console.log(`\n${excessosDeDia.length} dia(s) quebrando a regra do dia:`);
         excessosDeDia.sort((a, b) => b.qtd - a.qtd).forEach(a => console.log(`  ${a.texto}`));
     }
 

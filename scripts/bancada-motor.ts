@@ -43,6 +43,44 @@ const PADRAO: Caso[] = [
 ];
 
 /**
+ * A regra do dia, reimplementada aqui de propósito.
+ *
+ * A bancada é instrumento de medida: se ela chamasse a função do motor, mediria
+ * o motor com a régua do próprio motor e aprovaria qualquer regra que ele
+ * decidisse aplicar. A leitura independente é o que faz o `INVALIDA` significar
+ * alguma coisa — foi ela que pegou os dois vazamentos do reparo.
+ *
+ * Devolve o motivo, ou null quando o dia está bom.
+ */
+function motivoDaRegraDoDia(
+    indices: number[], limiteRun: number, teto: number,
+): string | null {
+    const ord = [...new Set(indices)].sort((a, b) => a - b);
+    if (ord.length === 0) return null;
+    if (ord.length > teto) return `${ord.length} aulas no dia (teto ${teto})`;
+
+    const corridas: { ini: number; fim: number; tam: number }[] = [];
+    let i = 0;
+    while (i < ord.length) {
+        let fim = i;
+        while (fim + 1 < ord.length && ord[fim + 1] === ord[fim] + 1) fim++;
+        corridas.push({ ini: ord[i], fim: ord[fim], tam: fim - i + 1 });
+        i = fim + 1;
+    }
+
+    for (const c of corridas) {
+        if (c.tam > limiteRun) return `emenda de ${c.tam} (teto ${limiteRun})`;
+    }
+
+    for (let k = 1; k < corridas.length; k++) {
+        const vao = corridas[k].ini - corridas[k - 1].fim - 1;
+        const minimo = corridas[k - 1].tam >= 2 || corridas[k].tam >= 2 ? 2 : 1;
+        if (vao < minimo) return `vao de ${vao} entre grupos (minimo ${minimo})`;
+    }
+    return null;
+}
+
+/**
  * Confere que a grade devolvida respeita as restrições que o motor promete nunca
  * violar. Um motor mais rápido que produz grade inválida não vale nada, e o
  * número de pendências sozinho não denuncia isso.
@@ -105,14 +143,18 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
     }
 
     /**
-     * Sequência da mesma disciplina acima do teto — e aulas demais da mesma
-     * disciplina num mesmo dia, que é outra pergunta.
+     * A regra do dia: emenda, espaçamento e teto.
      *
      * Isto é hard constraint, não estética: uma turma com três aulas seguidas
      * de Matemática que ninguém pediu é uma grade que a escola não consegue
      * usar. Enquanto esta verificação não existia, a bancada contava como
      * "FECHOU" grades com quatro aulas emendadas — media sucesso onde havia
      * falha, que é o pior desfecho possível para um instrumento de medida.
+     *
+     * Repetir a disciplina no dia é permitido desde que as aulas respirem — 1
+     * aula livre entre avulsas, 2 quando há dupla envolvida. Houve aqui um teto
+     * de contagem puro, no máximo 2 no dia, e ele reprovava o espaçado junto com
+     * o colado.
      *
      * O teto é o do motor, e o critério é UM só: emenda que o usuário pediu
      * pode ter qualquer tamanho; emenda que ele não pediu para em 2. Pedir tem
@@ -125,12 +167,11 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
      * juntar dois turnos no mesmo dia faria a 1ª aula de um parecer vizinha da
      * última do outro.
      *
-     * A carga do DIA usa o mesmo teto, levantado pelo piso aritmético
-     * `ceil(carga semanal / dias do turno)` — abaixo dele não existe grade
-     * nenhuma, então acusar ali seria acusar o impossível, não o defeito. É a
-     * verificação que faltava: o par geminado em 1-2 mais a avulsa em 5 não
-     * forma nenhuma sequência acima de 2 e mesmo assim são três aulas da mesma
-     * matéria no mesmo dia.
+     * O teto de contagem é 4 num dia de 7 aulas ou mais e 3 nos demais,
+     * levantado pelo piso aritmético `ceil(carga semanal / dias do turno)` —
+     * abaixo dele não existe grade nenhuma, então acusar ali seria acusar o
+     * impossível, não o defeito — e também pelo bloco pedido na tela e pelas
+     * aulas travadas naquele dia, porque travar é pedir.
      */
     const chaveGrupo = (a: any) => `${a.turma_id}|${a.componente_id}|${a.tipo}|${a.turno_id}|${a.dia_semana}`;
 
@@ -175,30 +216,22 @@ function validar(aulas: any[], dados: any, configGerminacao: any[] = []): string
         const pedidoNaTela = cfg?.geminar && cfg.tamanho_bloco > 1 ? cfg.tamanho_bloco : 2;
         const teto = Math.max(pedidoNaTela, travadoPorGrupo.get(k) ?? 0);
 
-        // Aulas demais no mesmo dia, emendadas ou não. As travadas contam para o
-        // teto porque travar é pedir: quem fixou quatro aulas numa sexta quer as
-        // quatro naquela sexta.
-        const diasDoTurno = turnos.get(turnoIdDoGrupo)?.dias_semana?.length || 5;
+        const turnoDoGrupo = turnos.get(turnoIdDoGrupo);
+        const diasDoTurno = turnoDoGrupo?.dias_semana?.length || 5;
         const piso = Math.ceil(
             (cargaSemanal.get(`${turmaId}|${componenteId}|${tipo}`) ?? 0) / Math.max(1, diasDoTurno)
         );
-        const tetoDia = Math.max(pedidoNaTela, piso, fixasPorGrupo.get(k)?.length ?? 0);
-        if (indices.length > tetoDia) {
-            const quais = [...indices].sort((x, y) => x - y).map(x => x + 1).join(',');
-            erros.push(`${indices.length} aulas da mesma disciplina no dia (teto ${tetoDia}): ${k} nas aulas ${quais}`);
-        }
+        const tetoDia = Math.max(
+            (turnoDoGrupo?.aulas_por_dia ?? 0) >= 7 ? 4 : 3,
+            piso,
+            pedidoNaTela,
+            fixasPorGrupo.get(k)?.length ?? 0,
+        );
 
-        indices.sort((x, y) => x - y);
-        let i = 0;
-        while (i < indices.length) {
-            let fim = i;
-            while (fim + 1 < indices.length && indices[fim + 1] === indices[fim] + 1) fim++;
-            const tam = fim - i + 1;
-            if (tam > teto) {
-                const aulasDaSeq = indices.slice(i, fim + 1).map(x => x + 1).join(',');
-                erros.push(`sequencia de ${tam} (teto ${teto}): ${k} nas aulas ${aulasDaSeq}`);
-            }
-            i = fim + 1;
+        const motivo = motivoDaRegraDoDia(indices, teto, tetoDia);
+        if (motivo) {
+            const quais = [...indices].sort((x, y) => x - y).map(x => x + 1).join(',');
+            erros.push(`${motivo}: ${k} nas aulas ${quais}`);
         }
     }
 

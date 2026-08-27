@@ -22,9 +22,10 @@
  *   4. disciplina SEM geminacao pedida nao emenda: o teto dela e 2 aulas
  *      seguidas, e so quando o relaxamento entra porque a grade nao fecha de
  *      outro jeito;
- *   5. o mesmo numero vale para o DIA, nao so para a sequencia: bloco de 2
- *      pedido significa duas aulas naquele dia, e nao duas seguidas mais uma
- *      solta em outro horario.
+ *   5. a regra do DIA, que nao e a mesma pergunta que a sequencia: aulas da
+ *      mesma disciplina podem se repetir no dia desde que RESPIREM — pelo menos
+ *      1 aula livre entre duas avulsas, pelo menos 2 quando uma delas e dupla —
+ *      e ate um teto (4 num dia de 7 aulas ou mais, 3 nos demais).
  *
  * O item 3 e o que este arquivo mais protege. Uma geminacao desfeita nao deixa
  * celula vazia: a disciplina continua com todas as aulas dela na grade, so que
@@ -45,8 +46,9 @@ const CAMINHO_MOTOR = process.env.SHETO_MOTOR || path.join(__dirname, '..', 'wor
 
 let gerarHorarioAlgoritmico;
 let criarBlocos;
+let regraDoDiaViolada;
 try {
-  ({ gerarHorarioAlgoritmico, criarBlocos } = require(CAMINHO_MOTOR));
+  ({ gerarHorarioAlgoritmico, criarBlocos, regraDoDiaViolada } = require(CAMINHO_MOTOR));
 } catch (err) {
   console.error(`Nao encontrei o motor compilado em ${CAMINHO_MOTOR}.`);
   console.error('Rode `npm run build:worker` antes (ou use `npm run verificar:geminacao`).');
@@ -182,21 +184,64 @@ function sequenciasPorGrupo(aulas) {
 }
 
 /**
+ * A regra do dia, reimplementada AQUI de proposito.
+ *
+ * O cenario 6 testa a funcao do motor contra uma tabela escrita a mao. Estes
+ * outros cenarios auditam a GRADE, e para isso usam esta copia: um teste que
+ * audita a grade com a mesma funcao que a grade usou nao audita nada.
+ *
+ * teto: quantas cabem no dia. limiteRun: maior emenda permitida.
+ */
+function violaRegraDoDia(indices, limiteRun, teto) {
+  const ord = [...new Set(indices)].sort((a, b) => a - b);
+  if (ord.length === 0) return false;
+  if (ord.length > teto) return true;
+
+  const corridas = [];
+  let i = 0;
+  while (i < ord.length) {
+    let fim = i;
+    while (fim + 1 < ord.length && ord[fim + 1] === ord[fim] + 1) fim++;
+    corridas.push({ ini: ord[i], fim: ord[fim], tam: fim - i + 1 });
+    i = fim + 1;
+  }
+
+  if (corridas.some(c => c.tam > limiteRun)) return true;
+
+  for (let k = 1; k < corridas.length; k++) {
+    const vao = corridas[k].ini - corridas[k - 1].fim - 1;
+    const minimo = corridas[k - 1].tam >= 2 || corridas[k].tam >= 2 ? 2 : 1;
+    if (vao < minimo) return true;
+  }
+  return false;
+}
+
+/** Teto de aulas no dia, pelo tamanho do dia. Espelha o motor. */
+function tetoDoDia(aulasPorDia, cargaSemanal, dias, blocoPedido) {
+  return Math.max(
+    aulasPorDia >= 7 ? 4 : 3,
+    Math.ceil(cargaSemanal / Math.max(1, dias)),
+    blocoPedido || 0,
+  );
+}
+
+/**
  * Quantas aulas cada `turma|componente|tipo` tem em cada dia.
  *
  * A pergunta que faltava. Sequencia e uma coisa, carga do dia e outra: o par em
  * 1-2 mais a avulsa em 5 nao produz nenhuma sequencia acima de 2 e ainda assim
  * sao tres aulas da mesma materia no mesmo dia.
  */
-function aulasPorDiaPorGrupo(aulas) {
-  const contagem = new Map();
+function indicesPorGrupoEDia(aulas) {
+  const mapa = new Map();
   for (const a of aulas) {
     const k = `${a.turma_id}|${a.componente_id}|${a.tipo}`;
-    if (!contagem.has(k)) contagem.set(k, new Map());
-    const porDia = contagem.get(k);
-    porDia.set(a.dia_semana, (porDia.get(a.dia_semana) || 0) + 1);
+    if (!mapa.has(k)) mapa.set(k, new Map());
+    const porDia = mapa.get(k);
+    if (!porDia.has(a.dia_semana)) porDia.set(a.dia_semana, []);
+    porDia.get(a.dia_semana).push(a.aula_index);
   }
-  return contagem;
+  return mapa;
 }
 
 /** Lista das geminacoes que a grade NAO cumpre, na leitura independente. */
@@ -296,7 +341,7 @@ function cenario1() {
 
   const r = rodar(t1, turmas, professores, [t1, t2], montarConfig(grade, geminar), 4000);
   const seq = sequenciasPorGrupo(r.aulas);
-  const diario = aulasPorDiaPorGrupo(r.aulas);
+  const indicesPorGrupoDia = indicesPorGrupoEDia(r.aulas);
 
   checar('a grade fecha', r.success, `success=${r.success}, ${r.aulas.length} aulas`);
   checar('nenhuma geminacao declarada como quebrada', r.geminacoesQuebradas.length === 0,
@@ -310,13 +355,14 @@ function cenario1() {
 
       checar(`${t.nome}/${sigla}: ${n} aulas na grade`, total === n, `encontrei ${total}`);
 
-      // Carga do dia, independente da sequencia: quem pediu bloco de 2 pediu
-      // duas aulas naquele dia. Quem nao pediu nada tem o mesmo teto de 2.
-      const porDia = diario.get(`${t.id}|c_${sigla}|presencial`) || new Map();
-      const tetoDia = Math.max(alvo === undefined ? 2 : alvo, Math.ceil(n / DIAS.length));
-      const piorDia = Math.max(0, ...porDia.values());
-      checar(`${t.nome}/${sigla}: nenhum dia com mais de ${tetoDia} aula(s)`,
-        piorDia <= tetoDia, `pior dia tem ${piorDia}`);
+      // Regra do dia: repetir a disciplina no dia e permitido, colar nao.
+      const idxPorDia = indicesPorGrupoDia.get(`${t.id}|c_${sigla}|presencial`) || new Map();
+      const teto = tetoDoDia(5, n, DIAS.length, alvo);
+      const diasRuins = [...idxPorDia.entries()]
+        .filter(([, idx]) => violaRegraDoDia(idx, alvo === undefined ? 2 : alvo, teto))
+        .map(([d, idx]) => `${d}=[${[...idx].sort((x, y) => x - y).map(v => v + 1).join(',')}]`);
+      checar(`${t.nome}/${sigla}: nenhum dia quebra a regra (teto ${teto})`,
+        diasRuins.length === 0, diasRuins.join(' ; '));
       if (alvo === undefined) {
         // Quem nao pediu geminacao nao pode receber emenda maior que 2. Antes
         // nao havia teto NENHUM aqui, e a disciplina saia em blocos de quatro.
@@ -442,21 +488,23 @@ function cenario3() {
    * ja falhou, e foi la que a aula extra do dia estava sendo colada. Nenhum
    * cenario tranquilo pega isso.
    */
-  const diario = aulasPorDiaPorGrupo(r.aulas);
+  const idxPorGrupoDia = indicesPorGrupoEDia(r.aulas);
   const estourou = [];
   for (const [sigla, p, np] of grade) {
     for (const [tipo, n] of [['presencial', p], ['nao_presencial', np || 0]]) {
       if (!n) continue;
-      const teto = Math.max(geminar[sigla] || 2, Math.ceil(n / DIAS.length));
+      const teto = tetoDoDia(5, n, DIAS.length, geminar[sigla]);
       for (const t of turmas) {
-        const porDia = diario.get(`${t.id}|c_${sigla}|${tipo}`) || new Map();
-        for (const [d, q] of porDia) {
-          if (q > teto) estourou.push(`${t.nome}/${sigla}/${d}=${q} (teto ${teto})`);
+        const porDia = idxPorGrupoDia.get(`${t.id}|c_${sigla}|${tipo}`) || new Map();
+        for (const [d, idx] of porDia) {
+          if (violaRegraDoDia(idx, geminar[sigla] || 2, teto)) {
+            estourou.push(`${t.nome}/${sigla}/${d}=[${[...idx].sort((x, y) => x - y).map(v => v + 1).join(',')}] (teto ${teto})`);
+          }
         }
       }
     }
   }
-  checar('nenhum dia recebeu mais aulas da mesma disciplina do que o teto',
+  checar('nenhum dia quebra a regra do dia',
     estourou.length === 0, estourou.slice(0, 8).join(' ; '));
 
   // Aviso, nao falha: a maioria deveria caber. Se despencar, algo regrediu.
@@ -511,25 +559,37 @@ function cenario4() {
     `sequencias: [${runs.join(',')}]`);
 }
 
-// ─── Cenario 5: carga do dia, o defeito que o teto de sequencia nao pegava ──
-//
-// Relatado na Dona Candida de Freitas: o par geminado em 1-2 mais uma aula
-// solta em 5. Nenhuma sequencia passa de 2 e a turma tem tres aulas da mesma
-// materia no mesmo dia. Nos tres turnos daquela escola isso apareceu 15 vezes,
-// uma delas com QUATRO aulas de Portugues numa segunda — duas duplas.
+// ─── Cenario 5: a regra do dia, na grade herdada ────────────────────────────
 //
 // A grade herdada e o jeito deterministico de exigir a poda: ela entra como
 // incumbente sem passar por validacao nenhuma, entao se o motor nao souber
-// cortar, ela volta intacta — que foi exatamente o que ja aconteceu uma vez.
+// cortar, ela volta intacta — que foi o que ja aconteceu uma vez.
+//
+// Os tres casos cobrem os dois lados da regra. O do meio e o mais importante:
+// ele prova que o afrouxamento de fato chegou. Houve um teto de contagem puro
+// aqui (no maximo 2 no dia), e ele proibia o espacado junto com o colado.
 function cenario5() {
-  console.log('\n5. carga do dia — o par mais a avulsa sao tres aulas no mesmo dia');
+  console.log('\n5. regra do dia na grade herdada — o que respira fica, o que cola sai');
 
   const t1 = montarTurno('t1', 'Matutino', 5, 7);
   const t2 = montarTurno('t2', 'Vespertino', 5, 13);
 
   const casos = [
-    { nome: 'geminada 2x: par em 1-2 e avulsa em 5', grade: [['MAT', 3]], geminar: { MAT: 2 }, indices: [0, 1, 4] },
-    { nome: 'sem geminacao: duas duplas no mesmo dia', grade: [['POR', 4]], geminar: {}, indices: [0, 1, 3, 4] },
+    {
+      nome: 'dupla em 1-2 e avulsa em 4 (vao de 1)',
+      grade: [['MAT', 3]], geminar: { MAT: 2 }, indices: [0, 1, 3],
+      sobrevive: false,
+    },
+    {
+      nome: 'dupla em 1-2 e avulsa em 5 (vao de 2)',
+      grade: [['MAT', 3]], geminar: { MAT: 2 }, indices: [0, 1, 4],
+      sobrevive: true,
+    },
+    {
+      nome: 'duas duplas coladas no mesmo dia, sem geminacao pedida',
+      grade: [['POR', 4]], geminar: {}, indices: [0, 1, 3, 4],
+      sobrevive: false,
+    },
   ];
 
   for (const caso of casos) {
@@ -554,17 +614,73 @@ function cenario5() {
       false,      // permitir mesmo prof / disciplinas / mesmo dia
       400,        // orcamento total
       false,      // diagnostico
-      herdada,    // grade herdada — com o defeito dentro
+      herdada,    // grade herdada
       null,       // pesos iniciais
       0,          // pendentes herdados: a grade se dizia completa
       {}
     ));
 
-    const naSegunda = r.aulas.filter(a => a.dia_semana === 'segunda').length;
+    const naSegunda = r.aulas
+      .filter(a => a.dia_semana === 'segunda')
+      .map(a => a.aula_index)
+      .sort((x, y) => x - y);
+
     checar(`${caso.nome}: as ${total} aulas continuam na grade`,
       r.aulas.length === total, `${r.aulas.length} aulas`);
-    checar(`${caso.nome}: a segunda ficou com no maximo 2`,
-      naSegunda <= 2, `a segunda ficou com ${naSegunda}`);
+
+    const igual = JSON.stringify(naSegunda) === JSON.stringify(caso.indices);
+    if (caso.sobrevive) {
+      checar(`${caso.nome}: a grade herdada sobrevive intacta`,
+        igual, `a segunda ficou [${naSegunda.map(i => i + 1).join(',')}]`);
+    } else {
+      checar(`${caso.nome}: a grade herdada NAO sobrevive`,
+        !igual, `a segunda continuou [${naSegunda.map(i => i + 1).join(',')}]`);
+      const teto = tetoDoDia(5, total, DIAS.length, caso.geminar[sigla]);
+      checar(`${caso.nome}: e o que sobrou respeita a regra`,
+        !violaRegraDoDia(naSegunda, caso.geminar[sigla] || 2, teto),
+        `a segunda ficou [${naSegunda.map(i => i + 1).join(',')}]`);
+    }
+  }
+}
+
+// ─── Cenario 6: a regra do dia, na fonte ────────────────────────────────────
+//
+// Igual ao cenario 0 e pelo mesmo motivo: olhar so a grade pronta nao distingue
+// "o motor respeita a regra" de "a regra e frouxa". Aqui a funcao do motor e
+// confrontada com uma tabela escrita a mao a partir do enunciado.
+function cenario6() {
+  console.log('\n6. regra do dia — a decisao, na fonte');
+
+  if (typeof regraDoDiaViolada !== 'function') {
+    falhas++;
+    console.log('   FALHA  o motor nao exporta `regraDoDiaViolada` — a regra nao e verificavel');
+    return;
+  }
+
+  //        descricao                                indices    run teto proibido?
+  const casos = [
+    ['MAT -- MAT -- MAT (avulsas, vao 1)',           [0, 2, 4],        1, 3, false],
+    ['MAT MAT -- -- MAT (vao 2 depois da dupla)',    [0, 1, 4],        2, 3, false],
+    ['MAT MAT -- MAT -- (vao 1 depois da dupla)',    [0, 1, 3],        2, 3, true],
+    ['MAT MAT MAT (corrida de 3)',                   [0, 1, 2],        2, 3, true],
+    ['4 avulsas espacadas num teto de 3',            [0, 2, 4, 6],     1, 3, true],
+    ['integral: 2 duplas com vao 2',                 [0, 1, 4, 5],     2, 4, false],
+    ['integral: 2 duplas com vao 1',                 [0, 1, 3, 4],     2, 4, true],
+    ['integral: 4 avulsas vao 1, no teto',           [0, 2, 4, 6],     1, 4, false],
+    ['integral: 5 avulsas vao 1, passa do teto',     [0, 2, 4, 6, 8],  1, 4, true],
+    ['integral: dupla mais avulsa com vao 2',        [0, 1, 4],        2, 4, false],
+    ['bloco de 4 pedido na tela',                    [0, 1, 2, 3],     4, 4, false],
+    ['dia vazio',                                    [],               1, 3, false],
+    ['uma aula so',                                  [3],              1, 3, false],
+  ];
+
+  for (const [desc, idx, run, teto, proibido] of casos) {
+    const obtido = regraDoDiaViolada(idx, run, teto);
+    checar(
+      `${desc} -> ${proibido ? 'proibido' : 'permitido'}`,
+      obtido === proibido,
+      `o motor disse ${obtido ? 'proibido' : 'permitido'}`
+    );
   }
 }
 
@@ -577,6 +693,7 @@ cenario2();
 cenario3();
 cenario4();
 cenario5();
+cenario6();
 
 console.log('');
 if (falhas === 0) {
