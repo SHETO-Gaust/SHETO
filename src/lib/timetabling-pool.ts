@@ -16,7 +16,7 @@
 
 import os from 'os';
 import path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { Worker } from 'worker_threads';
 import type { gerarHorarioAlgoritmico } from './timetabling';
 
@@ -92,12 +92,61 @@ function caminhoDoWorker(): string {
   return p;
 }
 
+/**
+ * Assinatura do build do worker: a data de modificacao do .js compilado.
+ *
+ * Existe por uma falha silenciosa que custou uma rodada de teste inteira. Os
+ * workers sao threads longas — o pool os mantem vivos entre geracoes de
+ * proposito — e cada thread carrega o `workers/timetabling.worker.js` do
+ * instante em que foi criada. Alem disso o pool mora em `global`, para
+ * sobreviver ao Fast Refresh. Resultado, em desenvolvimento: recompilar o motor
+ * NAO troca o motor que esta rodando. O servidor devolvia grades do codigo de
+ * ontem enquanto o arquivo em disco ja era outro, e nada na tela dizia isso.
+ *
+ * Comparar a mtime a cada despacho e barato perto de uma geracao, e transforma
+ * "recompilei e nada mudou" num worker novo em vez de um diagnostico perdido.
+ */
+function assinaturaDoBuild(): number {
+  try {
+    return statSync(caminhoDoWorker()).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
 class TimetablingPool {
   private livres: Worker[] = [];
   private ocupados = new Set<Worker>();
   private fila: Job[] = [];
   private emExecucao = new Map<Worker, Job>();
   private proximoJobId = 1;
+
+  /** Build que os workers atuais carregam. 0 = nenhum worker criado ainda. */
+  private assinatura = 0;
+
+  /**
+   * Workers de um build anterior que ainda estao no meio de um job. Nao podem
+   * ser mortos agora — matariam o job — mas tambem nao voltam para `livres`.
+   */
+  private obsoletos = new Set<Worker>();
+
+  /**
+   * Aposenta os workers que carregam um build antigo do motor.
+   *
+   * Os ociosos morrem na hora; os ocupados terminam o job que ja comecaram e
+   * morrem ao devolver. O proximo despacho cria threads com o codigo novo.
+   */
+  private recolherBuildAntigo() {
+    const atual = assinaturaDoBuild();
+    if (atual === 0 || atual === this.assinatura) return;
+
+    if (this.assinatura !== 0) {
+      console.log('[timetabling-pool] worker recompilado: aposentando as threads do build anterior.');
+      for (const w of this.livres.splice(0)) void w.terminate();
+      for (const w of this.ocupados) this.obsoletos.add(w);
+    }
+    this.assinatura = atual;
+  }
 
   private criarWorker(): Worker {
     const worker = new Worker(caminhoDoWorker(), {
@@ -174,7 +223,10 @@ class TimetablingPool {
     if (job.timer) clearTimeout(job.timer);
     this.emExecucao.delete(worker);
     this.ocupados.delete(worker);
-    this.livres.push(worker);
+    // Thread de um build anterior nao volta para a fila: ela terminou este job
+    // com o codigo velho, e reusa-la seria repetir o problema.
+    if (this.obsoletos.delete(worker)) void worker.terminate();
+    else this.livres.push(worker);
     this.despachar();
   }
 
@@ -182,6 +234,7 @@ class TimetablingPool {
   private descartar(worker: Worker) {
     this.emExecucao.delete(worker);
     this.ocupados.delete(worker);
+    this.obsoletos.delete(worker);
     this.livres = this.livres.filter((w) => w !== worker);
   }
 
@@ -193,6 +246,8 @@ class TimetablingPool {
    * try/catch e vira a rejeição do job correspondente.
    */
   private despachar() {
+    this.recolherBuildAntigo();
+
     while (this.fila.length > 0) {
       let worker = this.livres.pop();
 
