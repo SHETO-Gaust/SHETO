@@ -69,8 +69,15 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
     .single();
 
   if (error) {
+    // 23505 = violação de unicidade. Até 08/2026 isto era sempre "CPF repetido
+    // na mesma escola", porque a tabela tinha UNIQUE (escola_id, cpf) e
+    // UNIQUE (escola_id, nome_completo). As duas saíram na migration
+    // 20260827_professor_nome_cpf_repetidos: a mesma pessoa pode ter mais de um
+    // vínculo na mesma unidade, e homônimo existe. Sobrou só a chave primária,
+    // então uma violação aqui não é mais sobre CPF e a mensagem antiga mandaria
+    // o usuário procurar um problema que não existe.
     if (error.code === '23505') {
-        return { error: `Este CPF já está cadastrado nesta unidade escolar.` };
+        return { error: 'Já existe um cadastro com esta identificação.' };
     }
     return { error: 'Não foi possível salvar o professor.' };
   }
