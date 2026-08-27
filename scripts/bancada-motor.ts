@@ -33,6 +33,9 @@ import { gerarHorarioEmWorker } from '../src/lib/timetabling-pool';
 
 type Caso = { escola: string; turno: string; rotulo: string };
 
+/** Distância entre as sementes de duas repetições. Ver o uso, mais abaixo. */
+const PASSO_DA_SEMENTE = 1_000_003;
+
 /** Escolas de referência: uma que não fecha, uma que fecha. */
 const PADRAO: Caso[] = [
     { escola: '1120', turno: '0de2fef3-9115-4b0c-a76a-fd859ea1a0a0', rotulo: '1120 Integral (9 turmas, 405/405 — nao fecha)' },
@@ -329,14 +332,25 @@ async function medir(caso: Caso, orcamento: number, repeticoes: number) {
 
     for (let r = 0; r < repeticoes; r++) {
         const t0 = Date.now();
-        // Cada repetição parte de um offset diferente: a semente é o índice global,
-        // então repetir com offset 0 devolveria exatamente o mesmo resultado e a
-        // "média de 3 execuções" seria uma única execução contada três vezes.
+        /**
+          * Cada repetição varia a SEMENTE, não o offset.
+          *
+          * Variar o offset era o que se fazia aqui, e estragava a medida: o
+          * offset é também a posição na rampa de relaxamento
+          * (`curProg = (offset + tentativa) / orcamento`), então a repetição 2
+          * começava com `curProg` já em 1,0 — todos os relaxamentos ligados na
+          * primeira tentativa, inclusive o que larga a geminação. Duas de cada
+          * três repetições não mediam a busca, mediam o último recurso dela.
+          *
+          * O passo é grande para as faixas de semente das repetições não se
+          * encostarem quando o orçamento for alto.
+          */
         const res = await gerarHorarioEmWorker(
             [
                 dados.turnoData as any, dados.turmasDoTurno, dados.allProfessores, dados.allTurnos,
                 configGerminacao, false, dados.ocupacoes,
-                orcamento, r * orcamento, dados.aulasFixas, false, orcamento, false,
+                orcamento, 0, dados.aulasFixas, false, orcamento, false,
+                null, null, Number.POSITIVE_INFINITY, {}, r * PASSO_DA_SEMENTE,
             ] as any,
             () => { }
         );
