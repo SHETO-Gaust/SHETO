@@ -22,7 +22,27 @@
  * professor termina com a carga que tinha, e só P termina com a aula que era
  * dele desde o começo.
  */
-import type { Turno } from './types';
+import { motivoImpedimento } from './geracao/certificado';
+import type { ProfessorComDados, Turno } from './types';
+
+/**
+ * Empresta o professor à assinatura que `motivoImpedimento` espera.
+ *
+ * A função é do certificado e fala a língua do motor (`ProfessorComDados`); ela
+ * lê três campos, e são exatamente os três que este módulo carrega. O molde
+ * evita duplicar a regra de bloqueio só por causa da forma do objeto.
+ */
+export function paraCertificado(p: {
+  restricoes?: unknown;
+  livre_docencia?: { dia: string; periodo: string }[] | null;
+  sem_preferencia_livre_docencia?: boolean | null;
+}): ProfessorComDados {
+  return {
+    restricoes: p.restricoes,
+    livre_docencia: p.livre_docencia ?? [],
+    sem_preferencia_livre_docencia: p.sem_preferencia_livre_docencia,
+  } as unknown as ProfessorComDados;
+}
 
 export type AulaAlocacao = {
   id: string;
@@ -49,6 +69,15 @@ export type ProfessorAlocacao = {
   componentes: string[];
   /** JSONB de `professores.restricoes`: turno → dia → índice → estado. */
   restricoes: Record<string, Record<string, Record<string, string>>> | null;
+  /**
+   * Livre docência declarada por período do dia, fora de `restricoes`.
+   *
+   * Sem estes dois campos a checagem de bloqueio enxerga só metade da agenda: a
+   * folga do professor mora aqui e não numa célula, e uma alocação que a ignora
+   * marca aula justamente no dia que ele não vem.
+   */
+  livre_docencia?: { dia: string; periodo: string }[] | null;
+  sem_preferencia_livre_docencia?: boolean | null;
   aulas_disponiveis: number;
   aulas_planejamento: number;
 };
@@ -182,9 +211,19 @@ export function calcularAlocacaoComTrocas(
   const professorDaAula = (a: AulaAlocacao, estado: Estado): string | null =>
     estado.trocas.get(a.id) ?? a.professor_id;
 
+  /**
+   * O slot está vedado a este professor?
+   *
+   * Delega para `motivoImpedimento`, a mesma função que o certificado de
+   * inviabilidade usa. A versão anterior daqui lia só duas marcas na célula e
+   * deixava passar `reuniao_fluxo` e — pior — a livre docência declarada por
+   * período, que não fica em célula nenhuma: era possível alocar o professor
+   * exatamente no dia de folga dele.
+   */
   const bloqueadoPorRestricao = (p: ProfessorAlocacao, turnoId: string, dia: string, idx: number): boolean => {
-    const estado = p.restricoes?.[turnoId]?.[dia]?.[String(idx)];
-    return estado === 'indisponivel' || estado === 'livre_docencia';
+    const turno = turnosById.get(turnoId);
+    if (!turno) return false;
+    return motivoImpedimento(paraCertificado(p), turno, dia, idx) !== null;
   };
 
   /**

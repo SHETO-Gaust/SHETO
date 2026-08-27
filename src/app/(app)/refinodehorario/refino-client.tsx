@@ -13,6 +13,7 @@ import {
     DialogFooter,
 } from '@/components/ui/dialog';
 import { analisarMovimento, type ImpactoAnalise, type AulaRefino, type PassoDetalhado } from '@/lib/refino-horario';
+import { PreencherVagasDialog } from './preencher-vagas-dialog';
 import { useToast } from '@/hooks/use-toast';
 import type { Turno } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
@@ -219,6 +220,14 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
     const [calculating, setCalculating] = useState(false);
     const [possibilidadeSelecionadaIndex, setPossibilidadeSelecionadaIndex] = useState(0);
 
+    /**
+     * Sobe de um quando algo fora desta tela mexeu na grade — hoje, o
+     * preenchimento automático de vagas. Sem isso o painel continuaria
+     * calculando impacto sobre as posições antigas das aulas que acabaram de ser
+     * remanejadas, e sugeriria rotas que já não existem.
+     */
+    const [recarga, setRecarga] = useState(0);
+
     useEffect(() => {
         if (!horarioId) {
             setProfessores([]); setTurmas([]); setTodasAulas([]); setProfessorId(''); setTurmaId(''); setTurnos([]); return;
@@ -244,7 +253,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
             setTurnosById(map);
         });
         return () => { active = false; };
-    }, [horarioId, escolaId]);
+    }, [horarioId, escolaId, recarga]);
 
     useEffect(() => {
         if (!aulaSelecionadaId || !slotDestino) {
@@ -375,6 +384,18 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                         </button>
                     ))}
                 </div>
+
+                {horarioId && (
+                    <PreencherVagasDialog
+                        horarioId={horarioId}
+                        aoAplicar={() => {
+                            setAulaSelecionadaId(null);
+                            setSlotDestino(null);
+                            setImpacto(null);
+                            setRecarga(n => n + 1);
+                        }}
+                    />
+                )}
 
                 {modo === 'professor' && (
                     <div data-tutorial="refino-select-professor" className="w-[300px]">
