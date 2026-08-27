@@ -119,6 +119,16 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
      */
     const [dialogProgressoOculto, setDialogProgressoOculto] = useState(false);
 
+    /**
+     * Horário onde a alocação com trocas pode escrever.
+     *
+     * Só existe depois que a grade incompleta foi salva: a troca de professor
+     * mexe em linhas de `horario_aulas`, e enquanto a grade vive só na memória
+     * do job não há linha nenhuma para mexer.
+     */
+    const [horarioSalvoAgora, setHorarioSalvoAgora] = useState<string | null>(null);
+    const [turmaParaAlocar, setTurmaParaAlocar] = useState<string | null>(null);
+
     /** Intervalo do poll. Cada consulta é um SELECT de uma linha. */
     const POLL_MS = 3000;
 
@@ -146,6 +156,22 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
      */
     const certificado = diagnostico?.certificado ?? null;
 
+    /**
+     * Onde a alocação com trocas pode escrever.
+     *
+     * O estado local cobre o instante logo após salvar; `horariosGerados` vem do
+     * job e sobrevive a recarregar a página. Sem o segundo, o botão sumia numa
+     * recarga e o painel de pendências ficava sem saída — que é justamente
+     * quando alguém vai atrás dele.
+     *
+     * Só vale quando a geração produziu UM horário: com vários turnos não dá
+     * para saber qual deles é o da turma sem perguntar, e chutar escreveria no
+     * horário errado.
+     */
+    const horarioAlocavelId =
+        horarioSalvoAgora ??
+        (geracao?.horariosGerados?.length === 1 ? geracao.horariosGerados[0] : null);
+
     /** As pendências agrupadas por turma, na ordem em que aparecem. */
     const pendenciasPorTurma = (() => {
         const mapa = new Map<string, DiagnosticoFalha['pendenciasDetalhadas']>();
@@ -156,16 +182,6 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         return [...mapa.entries()].map(([turma, itens]) => ({ turma, itens }));
     })();
     const provado = certificado?.veredito === 'impossivel';
-
-    /**
-     * Horário onde a alocação com trocas pode escrever.
-     *
-     * Só existe depois que a grade incompleta foi salva: a troca de professor
-     * mexe em linhas de `horario_aulas`, e enquanto a grade vive só na memória
-     * do job não há linha nenhuma para mexer.
-     */
-    const [horarioAlocavelId, setHorarioAlocavelId] = useState<string | null>(null);
-    const [turmaParaAlocar, setTurmaParaAlocar] = useState<string | null>(null);
 
     const [isBaixandoTodos, setIsBaixandoTodos] = useState(false);
     const [baixarProgresso, setBaixarProgresso] = useState<{ atual: number; total: number } | null>(null);
@@ -352,7 +368,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                 // anterior, e era justamente ele que listava o que ficou de fora
                 // — quem salvava perdia de vista o que precisava resolver.
                 setGeracao(prev => (prev ? { ...prev, temGradeParcial: false } : prev));
-                setHorarioAlocavelId((result as any).data?.id ?? null);
+                setHorarioSalvoAgora((result as any).data?.id ?? null);
                 toast({ title: 'Grade salva', description: 'Agora dá para alocar as aulas que ficaram de fora, ali mesmo na lista.' });
                 await loadHorarios(selectedTurnoId);
             }

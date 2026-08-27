@@ -2200,14 +2200,59 @@ export function gerarHorarioAlgoritmico(
   const herdada = herdou
     ? podarSequenciasLongas(gradeHerdada!)
     : { grade: [] as HorarioAulaGeradaAlgoritmo[], removidas: 0 };
+
   /**
-   * O que a poda tirou volta a faltar. Somar aqui é o que impede a grade herdada
-   * de continuar parecendo completa depois de perder aulas — sem isso ela seguiria
-   * como incumbente de custo zero e nada jamais a substituiria.
+   * A grade tem todas as aulas que o cadastro pede?
+   *
+   * Conta direta: para cada `turma|componente|tipo`, quantas aulas existem
+   * contra quantas a série manda existir. As travadas contam, porque a carga
+   * também as inclui.
    */
-  const faltandoHerdado = herdou && Number.isFinite(pendentesHerdados)
-    ? pendentesHerdados + herdada.removidas
-    : Number.POSITIVE_INFINITY;
+  const faltamAulasNaGrade = (grade: HorarioAulaGeradaAlgoritmo[]): boolean => {
+    const posto = new Map<string, number>();
+    for (const a of grade) {
+      const k = `${a.turma_id}|${a.componente_id}|${a.tipo}`;
+      posto.set(k, (posto.get(k) ?? 0) + 1);
+    }
+    for (const t of turmas) {
+      for (const c of t.serie.componentes) {
+        for (const tipo of ['presencial', 'nao_presencial'] as const) {
+          const carga = tipo === 'presencial'
+            ? (c.aulas_presenciais || 0)
+            : (c.aulas_nao_presenciais || 0);
+          if (carga <= 0) continue;
+          if ((posto.get(`${t.id}|${c.componente_id}|${tipo}`) ?? 0) < carga) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  /**
+   * Quanto falta na grade herdada — e por que `pendentesHerdados` não basta.
+   *
+   * Aquele número vem da MEMÓRIA, gravado por uma execução anterior, e era
+   * aceito como verdade. Quando ele mente, a mentira é permanente e cresce
+   * sozinha: a grade entra como incumbente de custo zero, nada consegue
+   * superá-la, ela volta com `success: true` sem nunca ser conferida, e o
+   * resultado é REGRAVADO na memória com zero. A tela então não mostra
+   * pendência nenhuma sobre uma grade furada.
+   *
+   * Aconteceu na 1120 em 27/08: memória com 395 aulas e `pendentes = 0` sobre
+   * uma carga de 405. Dez aulas sumidas em sete turmas, e a tela dizendo que
+   * estava tudo certo — sem lista de pendências, sem diagnóstico, sem nada.
+   *
+   * Agora a grade é conferida contra o cadastro antes de valer como resposta.
+   * Se faltar aula, ela cai no mesmo caminho do "cadastro alterado": continua
+   * servindo de ponto de partida para a busca, mas não vale como incumbente
+   * completa, e o desfecho volta a ser honesto.
+   *
+   * A soma com `herdada.removidas` continua: o que a poda tirou volta a faltar.
+   */
+  const faltandoHerdado =
+    herdou && Number.isFinite(pendentesHerdados) && !faltamAulasNaGrade(herdada.grade)
+      ? pendentesHerdados + herdada.removidas
+      : Number.POSITIVE_INFINITY;
 
   let melhorPendentes = faltandoHerdado;
   let melhorAulas: HorarioAulaGeradaAlgoritmo[] =
