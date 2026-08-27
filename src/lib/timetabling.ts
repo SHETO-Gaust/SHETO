@@ -361,7 +361,10 @@ export function gerarHorarioAlgoritmico(
    *
    * Substituiu o antigo `globalProgress` (uma fração 0–1) porque com o orçamento
    * repartido entre várias threads o motor precisa saber sua posição absoluta:
-   * é dela que saem a semente (única em toda a geração) e a fase de relaxamento.
+   * é dela que saem a semente e a fase de relaxamento.
+   *
+   * ATENÇÃO a quem quer só variar o sorteio: mexer neste número move a rampa de
+   * relaxamento junto. Para isso existe `sementeBase`.
    */
   offsetTentativa: number = 0,
   aulasFixas: TurmaAulaFixa[] = [],
@@ -398,6 +401,23 @@ export function gerarHorarioAlgoritmico(
    * `SHETO_USAR_PADROES_GLOBAIS=0`, e aí a escolha volta a ser sorteio puro.
    */
   padroes: Record<string, number> = {},
+  /**
+   * Desloca a semente sem mexer na rampa de relaxamento.
+   *
+   * `offsetTentativa` fazia as duas coisas: era a semente E a posição em
+   * `curProg`. Quem quisesse repetir a mesma geração com outro sorteio só tinha
+   * essa alavanca — e ao usá-la empurrava `curProg` para além de 1, ligando
+   * TODOS os relaxamentos já na primeira tentativa, `forcarIndividuais`
+   * inclusive. A bancada fazia exatamente isso: de cada três repetições, duas
+   * começavam desistindo da geminação, e a "média de três execuções" media uma
+   * execução honesta e duas de desespero. Era assim que 1344 aparecia com
+   * 88/88, 16/88 e 14/88 geminações.
+   *
+   * A produção nunca dependeu disto: o orquestrador roda `while (offset <
+   * orcamento)` e percorre a rampa de 0 a 1 uma vez só. Existe para medição —
+   * repetições independentes da mesma escola, cada uma com a rampa inteira.
+   */
+  sementeBase: number = 0,
 ): {
   success: boolean;
   aulas: HorarioAulaGeradaAlgoritmo[];
@@ -2184,7 +2204,7 @@ export function gerarHorarioAlgoritmico(
 
     // Semente = índice global: única em toda a geração, inclusive entre as
     // threads que processam pedaços diferentes ao mesmo tempo.
-    const rng = makeRng(indiceGlobal);
+    const rng = makeRng(sementeBase + indiceGlobal);
 
     /**
      * Exploração vira intensificação.
