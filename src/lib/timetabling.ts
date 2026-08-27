@@ -346,6 +346,77 @@ function ordenarDiasComPreferenciaProgressiva(
 
 // ─── Motor principal ─────────────────────────────────────────────────────────
 
+/**
+ * REGRA DO DIA — o que pode acontecer com uma disciplina dentro de um dia.
+ *
+ * Recebe os índices que a disciplina ocuparia naquele dia (já com a colocação
+ * candidata dentro) e responde se isso é aceitável. Três perguntas
+ * independentes, e é importante que sejam três:
+ *
+ *   1. SEQUÊNCIA — nenhuma corrida contígua passa de `limiteRun`. É o que faz
+ *      "geminar 2x" significar duas seguidas e não três.
+ *
+ *   2. ESPAÇAMENTO — entre duas corridas vizinhas da mesma disciplina precisa
+ *      sobrar espaço: pelo menos 1 aula livre entre duas avulsas, pelo menos 2
+ *      quando qualquer uma das duas é dupla. Três aulas de Matemática num dia a
+ *      escola usa, desde que respirem; o par colado numa terceira, não.
+ *
+ *   3. TETO — quantas cabem no dia, no total.
+ *
+ *   segunda, 5 aulas          segunda, 9 aulas (integral)
+ *   MAT -- MAT -- MAT   ok    MAT MAT -- -- MAT MAT -- -- --   ok
+ *   MAT MAT -- -- MAT   ok    MAT -- MAT -- MAT -- MAT -- --   ok (no teto)
+ *   MAT MAT -- MAT --   não   MAT MAT -- MAT MAT -- -- -- --   não (vão de 1)
+ *   MAT MAT MAT -- --   não
+ *
+ * Houve aqui, antes, um teto de CONTAGEM puro: no máximo 2 no dia. Ele matava o
+ * defeito certo — o par mais a avulsa, relatado na Dona Cândida — mas junto
+ * proibia o espalhado, que a escola aceita. Custou 3 pendências na escola mais
+ * apertada da referência, e essas pendências não compravam nada.
+ *
+ * Note que para duas avulsas a regra 2 é automática: corridas distintas já têm
+ * pelo menos um vão. Ela está escrita assim mesmo assim porque descreve a
+ * intenção, e porque volta a ter efeito se um dia o limite de sequência mudar.
+ */
+export function regraDoDiaViolada(
+  indices: number[],
+  limiteRun: number,
+  tetoDeAulas: number,
+): boolean {
+  const ordenados = [...new Set(indices)].sort((a, b) => a - b);
+  if (ordenados.length === 0) return false;
+  if (ordenados.length > tetoDeAulas) return true;
+
+  const corridas: { ini: number; fim: number; tam: number }[] = [];
+  let i = 0;
+  while (i < ordenados.length) {
+    let fim = i;
+    while (fim + 1 < ordenados.length && ordenados[fim + 1] === ordenados[fim] + 1) fim++;
+    corridas.push({ ini: ordenados[i], fim: ordenados[fim], tam: fim - i + 1 });
+    i = fim + 1;
+  }
+
+  for (const c of corridas) {
+    if (c.tam > limiteRun) return true;
+  }
+
+  for (let k = 1; k < corridas.length; k++) {
+    const anterior = corridas[k - 1];
+    const atual = corridas[k];
+    const vao = atual.ini - anterior.fim - 1;
+    const minimo = anterior.tam >= 2 || atual.tam >= 2 ? 2 : 1;
+    if (vao < minimo) return true;
+  }
+
+  return false;
+}
+
+/** Dia longo o bastante para comportar duas duplas espaçadas da mesma matéria. */
+const DIA_LONGO_MIN_AULAS = 7;
+/** Teto de aulas da mesma disciplina no dia: dia longo / dia curto. */
+const TETO_DIA_LONGO = 4;
+const TETO_DIA_CURTO = 3;
+
 export function gerarHorarioAlgoritmico(
   turno: Turno,
   turmas: TurmaComDados[],
@@ -681,6 +752,39 @@ export function gerarHorarioAlgoritmico(
     }
   }
 
+  /** Quantas aulas travadas cada disciplina já tem em cada dia. */
+  const travadasPorGrupoDia = new Map<string, number>();
+  for (const af of aulasFixas) {
+    const k = `${af.turma_id}|${af.componente_id}|${af.tipo_aula}|${af.dia_semana}`;
+    travadasPorGrupoDia.set(k, (travadasPorGrupoDia.get(k) ?? 0) + 1);
+  }
+
+  /**
+   * Quantas aulas da disciplina cabem naquele dia.
+   *
+   * Base: 4 num dia longo (7 aulas ou mais), 3 nos demais. "Longo" é medido por
+   * `aulas_por_dia`, não pelo nome do turno — nome é texto que a escola digita e
+   * varia de unidade para unidade; o tamanho do dia é o fato.
+   *
+   * O teto sobe, nunca desce, por três motivos, todos legítimos:
+   *   - o piso aritmético, quando a carga da semana obriga;
+   *   - o bloco pedido na tela, que precisa caber inteiro num dia;
+   *   - as aulas travadas naquele dia, porque travar é pedir.
+   */
+  const tetoDeAulasNoDia = (
+    turmaId: string, compId: string, tipo: string, turnoId: string, dia: string,
+  ): number => {
+    const alvo = turnosById.get(turnoId);
+    const base = (alvo?.aulas_por_dia ?? 0) >= DIA_LONGO_MIN_AULAS ? TETO_DIA_LONGO : TETO_DIA_CURTO;
+    const grupo = `${turmaId}|${compId}|${tipo}`;
+    return Math.max(
+      base,
+      pisoDiario.get(grupo) ?? 1,
+      limitesGeminacao.get(grupo) ?? 0,
+      travadasPorGrupoDia.get(`${grupo}|${dia}`) ?? 0,
+    );
+  };
+
   /**
    * Confere, na grade pronta, se cada geminação pedida está de fato lá.
    *
@@ -984,23 +1088,17 @@ export function gerarHorarioAlgoritmico(
       limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`) ?? (permitirParAvulso ? 2 : 1);
 
     /**
-     * HARD CONSTRAINT — TAMANHO DA SEQUÊNCIA E CARGA DO DIA
+     * HARD CONSTRAINT — REGRA DO DIA
      *
      * Colocar `size` aulas a partir de `ini` deixaria a disciplina, naquele dia,
-     * com uma sequência contígua maior que o teto — ou com mais aulas no dia do
-     * que o teto, ainda que espalhadas?
+     * num arranjo que a escola não usa?
      *
-     * São duas perguntas porque são dois defeitos diferentes, e por muito tempo
-     * só a primeira era feita. Ela é o que faz "geminar 2x" significar duas
-     * aulas seguidas e não três. Mas ela não enxerga o par em 1-2 mais a avulsa
-     * em 5: três aulas da mesma disciplina no mesmo dia, nenhuma sequência acima
-     * de 2, e ainda assim uma grade que a escola não usa. Foi isso que apareceu
-     * na Dona Cândida de Freitas — 15 dias assim nos três turnos, um deles com
-     * quatro aulas de Português numa segunda-feira.
-     *
-     * Duas avulsas caindo juntas em OUTRO dia continuam permitidas quando o teto
-     * é 2: a sequência delas tem o tamanho do teto, não o excede. O que não pode
-     * é engordar o bloco nem repetir o bloco no mesmo dia.
+     * A decisão inteira mora em `regraDoDiaViolada`, no topo do arquivo, e esta
+     * função só monta a pergunta: quais índices ficariam ocupados, qual o limite
+     * de sequência agora, qual o teto daquele dia. É de propósito que a regra
+     * seja uma função pura e sem estado — a poda da grade herdada precisa
+     * aplicar exatamente a mesma decisão, e foi a divergência entre duas cópias
+     * de uma regra que produziu o defeito que este trecho existe para impedir.
      */
     const colocacaoExcederiaLimite = (
       turmaId: string,
@@ -1016,42 +1114,17 @@ export function gerarHorarioAlgoritmico(
       // qualquer tamanho. Era por essa porta que o último recurso devolvia a
       // disciplina em blocos de quatro.
       const limiteRun = limiteDeSequencia(turmaId, compId, tipo);
-      /**
-       * O teto do DIA não acompanha o relaxamento — é sempre o teto final.
-       *
-       * O teto de sequência começa em 1 e sobe para 2 quando a busca aperta;
-       * essa escada existe para preferir aulas separadas enquanto há folga. O
-       * teto do dia não tem escada: 2 aulas da mesma disciplina no mesmo dia são
-       * permitidas na grade ENTREGUE, então proibi-las durante os primeiros 70%
-       * do orçamento seria negar à busca um arranjo que ela tem direito de usar.
-       *
-       * É escolha de semântica, não de desempenho, e a diferença foi medida em
-       * vez de suposta: a primeira versão usava `limiteRun` aqui, e a suspeita
-       * era que a escada explicasse a piora em 1120. Não explicava — com o teto
-       * fixo o resultado veio idêntico, 5/3/3 pendentes. O custo em 1120 é do
-       * teto diário em si.
-       *
-       * E esse custo é o preço de parar de mentir. Com o motor anterior, 1120
-       * fechava 1 vez em 3 com média de 1,0 pendência — e as TRÊS grades tinham
-       * excesso de aulas no dia (18, 7 e 13 casos); a que "fechou" entregava uma
-       * turma com quatro aulas da mesma disciplina numa terça. Agora são 3,7
-       * pendências de média e nenhuma grade inválida. A escola não perdeu uma
-       * grade boa: ela deixou de receber uma grade que não podia usar.
-       */
-      const limiteDia = Math.max(
-        limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`) ?? 2,
-        pisoDiario.get(`${turmaId}|${compId}|${tipo}`) ?? 1,
-      );
-
       const ocupados = ocupacaoComponente.get(chaveComponenteDia(turmaId, compId, tipo, turnoId, dia));
-      if (!ocupados) return size > limiteRun || size > limiteDia;
 
-      if (ocupados.size + size > limiteDia) return true;
+      const indices: number[] = [];
+      for (let k = 0; k < size; k++) indices.push(ini + k);
+      if (ocupados) for (const x of ocupados) indices.push(x);
 
-      let comprimento = size;
-      for (let p = ini - 1; ocupados.has(p); p--) comprimento++;
-      for (let q = ini + size; ocupados.has(q); q++) comprimento++;
-      return comprimento > limiteRun;
+      return regraDoDiaViolada(
+        indices,
+        limiteRun,
+        tetoDeAulasNoDia(turmaId, compId, tipo, turnoId, dia),
+      );
     };
 
     /**
@@ -2061,8 +2134,7 @@ export function gerarHorarioAlgoritmico(
   ): number => limitesGeminacao.get(`${turmaId}|${compId}|${tipo}`) ?? 2;
 
   /**
-   * Corta da grade as aulas que fazem uma sequência passar do teto — ou o dia
-   * receber mais aulas da mesma disciplina do que o teto permite.
+   * Corta da grade as aulas que quebram a regra do dia.
    *
    * Existe por causa da memória. A grade lembrada pode ter sido produzida sob um
    * contrato de geminação diferente — ou por uma versão do motor que ainda não
@@ -2088,38 +2160,28 @@ export function gerarHorarioAlgoritmico(
 
     const descartadas = new Set<HorarioAulaGeradaAlgoritmo>();
     for (const [k, aulas] of porGrupo) {
-      const [turmaId, componenteId, tipo] = k.split('|');
+      const [turmaId, componenteId, tipo, turnoIdDoGrupo, diaDoGrupo] = k.split('|');
       const limite = limiteFinalDeSequencia(turmaId, componenteId, tipo);
+      const teto = tetoDeAulasNoDia(turmaId, componenteId, tipo, turnoIdDoGrupo, diaDoGrupo);
       aulas.sort((x, y) => x.aula_index - y.aula_index);
 
-      let i = 0;
-      while (i < aulas.length) {
-        let fim = i;
-        while (fim + 1 < aulas.length && aulas[fim + 1].aula_index === aulas[fim].aula_index + 1) fim++;
-
-        let excedente = fim - i + 1 - limite;
-        for (let q = fim; q >= i && excedente > 0; q--) {
-          if (aulas[q].aula_fixa_id) continue;
-          descartadas.add(aulas[q]);
-          excedente--;
-        }
-        i = fim + 1;
-      }
-
-      // Sobra do DIA: todas as sequências dentro do teto e ainda assim aulas
-      // demais. Duas duplas de Português na segunda são quatro aulas de
-      // Português na segunda. A grade lembrada pode ter sido salva antes de este
-      // teto existir, e entra como incumbente sem passar por validação nenhuma —
-      // sem esta poda o defeito volta inteiro, como já voltou uma vez.
-      const tetoDoDia = Math.max(
-        limite,
-        pisoDiario.get(`${turmaId}|${componenteId}|${tipo}`) ?? 1,
-      );
-      let sobra = aulas.filter(a => !descartadas.has(a)).length - tetoDoDia;
-      for (let q = aulas.length - 1; q >= 0 && sobra > 0; q--) {
-        if (aulas[q].aula_fixa_id || descartadas.has(aulas[q])) continue;
+      /**
+       * Corta do fim para o começo até a MESMA regra que o motor aplica passar a
+       * valer. Escrito como laço sobre a regra, e não como três podas separadas,
+       * porque poda e motor divergirem é exatamente o defeito que esta função
+       * existe para consertar: uma grade lembrada só volta como incumbente se
+       * for aceitável pelas regras de hoje.
+       *
+       * Aula travada nunca é cortada — o usuário a fixou naquele slot, e mover
+       * uma delas seria desobedecer a tela. Se o que sobrar ainda violar a regra,
+       * é porque a violação está nas travadas, e aí não há o que podar.
+       */
+      let sobreviventes = aulas.slice();
+      for (let q = aulas.length - 1; q >= 0; q--) {
+        if (!regraDoDiaViolada(sobreviventes.map(a => a.aula_index), limite, teto)) break;
+        if (aulas[q].aula_fixa_id) continue;
         descartadas.add(aulas[q]);
-        sobra--;
+        sobreviventes = sobreviventes.filter(a => a !== aulas[q]);
       }
     }
 
