@@ -16,6 +16,13 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { requireEscolaDoRecurso } from '@/lib/auth/guards';
+import { aplicarMudancasRefino } from '@/app/(app)/refinodehorario/actions';
+import {
+    calcularPreenchimentoAutomatico,
+    type MovimentoPreenchimento,
+    type PendenciaVaga,
+    type ResultadoPreenchimento,
+} from '@/lib/preencher-vagas';
 import type { Turno } from '@/lib/types';
 import {
     calcularAlocacaoComTrocas,
@@ -132,7 +139,10 @@ async function carregarContexto(horarioId: string): Promise<{ ctx?: Contexto; er
 
     const { data: profs, error: pErr } = await supabase
         .from('professores')
-        .select('id, nome_horario, cpf, restricoes, aulas_disponiveis, aulas_planejamento')
+        .select(
+            'id, nome_horario, cpf, restricoes, aulas_disponiveis, aulas_planejamento,' +
+            ' livre_docencia, sem_preferencia_livre_docencia',
+        )
         .eq('escola_id', escolaId);
     if (pErr) return { error: 'Não foi possível ler os professores da escola.' };
 
@@ -150,6 +160,8 @@ async function carregarContexto(horarioId: string): Promise<{ ctx?: Contexto; er
         cpf: p.cpf ?? null,
         componentes: porProfessor.get(p.id) ?? [],
         restricoes: p.restricoes ?? null,
+        livre_docencia: p.livre_docencia ?? [],
+        sem_preferencia_livre_docencia: p.sem_preferencia_livre_docencia ?? null,
         aulas_disponiveis: p.aulas_disponiveis ?? 0,
         aulas_planejamento: p.aulas_planejamento ?? 0,
     }));
@@ -403,6 +415,163 @@ export async function aplicarAlocacao(
                         `incompleto. Recarregue a página e confira. Detalhe: ${error.message}`,
                 };
             }
+        }
+    }
+
+    revalidatePath('/gerarhorarios');
+    revalidatePath('/visualizarhorario');
+    revalidatePath('/refinodehorario');
+    return { success: true };
+}
+
+/**
+ * Monta a lista de aulas que faltam, no formato que o preenchimento espera.
+ *
+ * Uma pendência por aula, e não por disciplina: uma turma pode dever duas aulas
+ * do mesmo componente, e cada uma precisa do seu próprio horário — contá-las
+ * como um item só faria a busca achar um lugar e declarar as duas resolvidas.
+ */
+function montarPendencias(ctx: Contexto): PendenciaVaga[] {
+    const doTurno = ctx.turmas.filter(t => t.serie?.turno_id === ctx.turno.id);
+    const dias = (ctx.turno.dias_semana ?? []).length || 5;
+    const pendencias: PendenciaVaga[] = [];
+
+    for (const turma of doTurno) {
+        const colocadas = new Map<string, number>();
+        for (const a of ctx.aulasDoHorario) {
+            if (a.turma_id !== turma.id) continue;
+            const k = `${a.componente_id}|${a.tipo}`;
+            colocadas.set(k, (colocadas.get(k) ?? 0) + 1);
+        }
+
+        const professorDe = new Map<string, { id: string | null; nome: string }>();
+        for (const tp of turma.professores ?? []) {
+            professorDe.set(tp.componente_id, {
+                id: tp.professor?.id ?? null,
+                nome: tp.professor?.nome_horario ?? 'Sem professor',
+            });
+        }
+
+        for (const c of turma.serie?.componentes ?? []) {
+            for (const tipo of ['presencial', 'nao_presencial'] as const) {
+                const carga = tipo === 'presencial' ? c.aulas_presenciais ?? 0 : c.aulas_nao_presenciais ?? 0;
+                if (carga <= 0) continue;
+                const posto = colocadas.get(`${c.componente.id}|${tipo}`) ?? 0;
+                const prof = professorDe.get(c.componente.id);
+
+                for (let n = 0; n < carga - posto; n++) {
+                    pendencias.push({
+                        turma_id: turma.id,
+                        turma_nome: turma.nome,
+                        componente_id: c.componente.id,
+                        componente_nome: c.componente.nome ?? '',
+                        componente_sigla: c.componente.sigla ?? '',
+                        tipo,
+                        turno_id: ctx.turno.id,
+                        professor_id: prof?.id ?? null,
+                        professor_nome: prof?.nome ?? 'Sem professor',
+                        tetoDoDia: tetoDoDia(ctx.turno.aulas_por_dia ?? 0, carga, dias),
+                    });
+                }
+            }
+        }
+    }
+
+    return pendencias;
+}
+
+/**
+ * Calcula, de uma vez, como encaixar TODAS as aulas que ficaram de fora.
+ *
+ * Não grava nada: devolve o plano para a tela mostrar antes de aplicar. Mover
+ * dez aulas de uma turma sem que ninguém tenha visto o que vai mudar é o tipo
+ * de automação que a escola desliga depois do primeiro susto.
+ */
+export async function calcularPreenchimentoDeVagas(
+    horarioId: string,
+): Promise<{ data?: ResultadoPreenchimento; error?: string }> {
+    await requireEscolaDoRecurso('horarios', horarioId, 'horarios');
+    const { ctx, error } = await carregarContexto(horarioId);
+    if (!ctx) return { error };
+
+    const pendencias = montarPendencias(ctx);
+    if (pendencias.length === 0) {
+        return {
+            data: {
+                movimentos: [], passos: [], resolvidas: 0, total: 0, falhas: [],
+                mensagem: 'Este horário já tem todas as aulas do cadastro. Não há nada a preencher.',
+            },
+        };
+    }
+
+    const externas = ctx.aulasParaConflito.filter(
+        a => !ctx.aulasDoHorario.some(d => d.id === a.id),
+    );
+
+    return {
+        data: calcularPreenchimentoAutomatico(
+            ctx.aulasDoHorario,
+            externas,
+            ctx.professores,
+            ctx.turnosById,
+            pendencias,
+        ),
+    };
+}
+
+/**
+ * Grava o plano.
+ *
+ * Os deslocamentos vão pelo caminho do refino (`aplicarMudancasRefino`), que já
+ * resolve a parte difícil: a rota inteira entra numa transação só, e o fallback
+ * cobre o PostgREST sem a RPC no cache. As aulas novas entram depois, porque só
+ * existe lugar para elas depois que os buracos caminharam.
+ */
+export async function aplicarPreenchimentoDeVagas(
+    horarioId: string,
+    movimentos: MovimentoPreenchimento[],
+): Promise<{ success?: true; error?: string }> {
+    await requireEscolaDoRecurso('horarios', horarioId, 'horarios');
+    if (!movimentos || movimentos.length === 0) return { error: 'Nenhum movimento recebido.' };
+
+    const mudancas = movimentos
+        .filter((m): m is Extract<MovimentoPreenchimento, { tipo: 'mover' }> => m.tipo === 'mover')
+        .map(m => ({
+            aulaId: m.aulaId,
+            novoDia: m.dia_semana,
+            novoSlot: m.aula_index,
+            novoTurnoId: m.turno_id,
+        }));
+
+    if (mudancas.length > 0) {
+        const r = await aplicarMudancasRefino(mudancas);
+        if ((r as any)?.error) {
+            return { error: `Nenhuma alteração foi gravada. ${(r as any).error}` };
+        }
+    }
+
+    const novas = movimentos
+        .filter((m): m is Extract<MovimentoPreenchimento, { tipo: 'criar' }> => m.tipo === 'criar')
+        .map(m => ({
+            horario_id: horarioId,
+            turma_id: m.turma_id,
+            componente_id: m.componente_id,
+            professor_id: m.professor_id,
+            dia_semana: m.dia_semana,
+            aula_index: m.aula_index,
+            tipo: m.tipo_aula,
+            turno_id: m.turno_id,
+        }));
+
+    if (novas.length > 0) {
+        const supabase = await createClient();
+        const { error } = await supabase.from('horario_aulas').insert(novas);
+        if (error) {
+            return {
+                error:
+                    'As aulas foram remanejadas, mas a criação das aulas que faltavam falhou — o horário ficou ' +
+                    `com os buracos em outro lugar. Recarregue e calcule de novo. Detalhe: ${error.message}`,
+            };
         }
     }
 
