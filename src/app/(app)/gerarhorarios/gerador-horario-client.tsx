@@ -7,9 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, Settings2, AlertTriangle, Info, FolderDown, ChevronDown } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, ArrowRightLeft, Settings2, AlertTriangle, Info, FolderDown, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, getHorariosSalvosTodasTurnos, deleteHorario, iniciarGeracao, getEstadoGeracao, cancelarGeracao, salvarGradeParcial, getHorarioDetalhado, getDisciplinasParaConfigGerminacao, type EstadoGeracao } from './actions';
+import { AlocarComTrocasDialog } from './alocar-com-trocas-dialog';
 import { exportarTodosHorariosZIP } from '@/lib/export-horario';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -144,7 +145,27 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
      * acesso opcional — o painel simplesmente não mostra a seção nesses casos.
      */
     const certificado = diagnostico?.certificado ?? null;
+
+    /** As pendências agrupadas por turma, na ordem em que aparecem. */
+    const pendenciasPorTurma = (() => {
+        const mapa = new Map<string, DiagnosticoFalha['pendenciasDetalhadas']>();
+        for (const p of diagnostico?.pendenciasDetalhadas ?? []) {
+            const lista = mapa.get(p.turma_nome);
+            if (lista) lista.push(p); else mapa.set(p.turma_nome, [p]);
+        }
+        return [...mapa.entries()].map(([turma, itens]) => ({ turma, itens }));
+    })();
     const provado = certificado?.veredito === 'impossivel';
+
+    /**
+     * Horário onde a alocação com trocas pode escrever.
+     *
+     * Só existe depois que a grade incompleta foi salva: a troca de professor
+     * mexe em linhas de `horario_aulas`, e enquanto a grade vive só na memória
+     * do job não há linha nenhuma para mexer.
+     */
+    const [horarioAlocavelId, setHorarioAlocavelId] = useState<string | null>(null);
+    const [turmaParaAlocar, setTurmaParaAlocar] = useState<string | null>(null);
 
     const [isBaixandoTodos, setIsBaixandoTodos] = useState(false);
     const [baixarProgresso, setBaixarProgresso] = useState<{ atual: number; total: number } | null>(null);
@@ -327,9 +348,12 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             if (result.error) {
                 toast({ title: 'Erro ao salvar', description: result.error, variant: 'destructive' });
             } else {
-                setResultadoVisivel(false);
+                // O painel de resultado FICA. Ele some daqui a pouco na versão
+                // anterior, e era justamente ele que listava o que ficou de fora
+                // — quem salvava perdia de vista o que precisava resolver.
                 setGeracao(prev => (prev ? { ...prev, temGradeParcial: false } : prev));
-                toast({ title: 'Grade Salva!', description: 'A grade foi salva mesmo com aulas pendentes. Ajuste manualmente os horários vagos.' });
+                setHorarioAlocavelId((result as any).data?.id ?? null);
+                toast({ title: 'Grade salva', description: 'Agora dá para alocar as aulas que ficaram de fora, ali mesmo na lista.' });
                 await loadHorarios(selectedTurnoId);
             }
         });
@@ -649,40 +673,61 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                             </div>
                                         </div>
 
+                                        {/*
+                                            Agrupado por TURMA, e não uma tabela plana de aulas.
+                                            Quem vai resolver resolve por turma: é a turma que tem
+                                            horário vago, e é olhando a turma que se decide qual
+                                            aula entra onde.
+                                        */}
                                         <div>
                                             <h4 className="text-sm font-bold text-destructive flex items-center gap-2 mb-3">
                                                 <Info className="h-4 w-4" /> Aulas que ficaram de fora ({diagnostico.pendenciasDetalhadas.length})
                                             </h4>
-                                            <div className="max-h-60 overflow-y-auto rounded-xl border bg-background/50 shadow-inner pr-2">
-                                                <table className="w-full text-xs text-left">
-                                                    <thead className="sticky top-0 bg-secondary/90 backdrop-blur-sm z-10 text-secondary-foreground shadow-sm">
-                                                        <tr>
-                                                            <th className="px-3 py-2.5 font-semibold">Turma</th>
-                                                            <th className="px-3 py-2.5 font-semibold">Componente</th>
-                                                            <th className="px-3 py-2.5 font-semibold">Professor</th>
-                                                            <th className="px-3 py-2.5 font-semibold">Tipo</th>
-                                                            <th className="px-3 py-2.5 font-semibold w-1/3">O que bloqueou</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-border/50">
-                                                        {diagnostico.pendenciasDetalhadas.map((pend, idx) => (
-                                                            <tr key={idx} className="hover:bg-muted/30 transition-colors">
-                                                                <td className="px-3 py-2 font-medium">{pend.turma_nome}</td>
-                                                                <td className="px-3 py-2">{pend.disciplina_nome}</td>
-                                                                <td className="px-3 py-2 text-muted-foreground">{pend.professor_nome || 'Sem Professor'}</td>
-                                                                <td className="px-3 py-2">
+                                            <div className="max-h-[420px] overflow-y-auto space-y-3 pr-1">
+                                                {pendenciasPorTurma.map(({ turma, itens }) => (
+                                                    <div key={turma} className="rounded-xl border bg-background/70 p-3 shadow-sm">
+                                                        <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+                                                            <div className="min-w-0">
+                                                                <p className="font-bold text-sm">{turma}</p>
+                                                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                                                    {itens.length} aula(s) sem encaixe:{' '}
+                                                                    {itens.map(i => `${i.disciplina_nome} (${i.professor_nome || 'sem professor'})`).join(', ')}.
+                                                                </p>
+                                                            </div>
+                                                            {horarioAlocavelId ? (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="h-8 text-xs shrink-0"
+                                                                    onClick={() => setTurmaParaAlocar(turma)}
+                                                                >
+                                                                    <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
+                                                                    Alocar com trocas
+                                                                </Button>
+                                                            ) : (
+                                                                <span className="text-[10px] text-muted-foreground italic shrink-0 max-w-[190px] text-right leading-snug">
+                                                                    salve a grade incompleta abaixo para alocar com trocas
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <ul className="space-y-1">
+                                                            {itens.map((pend, idx) => (
+                                                                <li key={idx} className="text-xs flex flex-wrap items-baseline gap-x-2 border-t pt-1.5">
+                                                                    <span className="font-medium">{pend.disciplina_nome}</span>
                                                                     <span className={cn(
-                                                                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                                                                        pend.tipo_aula === 'presencial' ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" : "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300"
+                                                                        'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider',
+                                                                        pend.tipo_aula === 'presencial'
+                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                                                            : 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
                                                                     )}>
                                                                         {pend.tipo_aula === 'presencial' ? 'Pres.' : 'NP'}
                                                                     </span>
-                                                                </td>
-                                                                <td className="px-3 py-2 text-destructive font-medium">{pend.motivo_real}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                                                    <span className="text-destructive font-medium">{pend.motivo_real}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
 
@@ -1056,6 +1101,16 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             </Card>
 
             {/* DIALOG DE CONFIGURAÇÃO */}
+            {horarioAlocavelId && (
+                <AlocarComTrocasDialog
+                    horarioId={horarioAlocavelId}
+                    turmaNome={turmaParaAlocar}
+                    aberto={!!turmaParaAlocar}
+                    onOpenChange={aberto => { if (!aberto) setTurmaParaAlocar(null); }}
+                    onAplicado={() => { void loadHorarios(selectedTurnoId); }}
+                />
+            )}
+
             <Dialog open={isConfigDialogOpen} onOpenChange={setIsConfigDialogOpen}>
                 <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-[600px] max-h-[90vh] flex flex-col p-0">
                     <DialogHeader className="p-6 pb-2">
