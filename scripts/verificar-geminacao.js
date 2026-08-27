@@ -684,6 +684,96 @@ function cenario6() {
   }
 }
 
+// ─── Cenario 7: memoria que mente sobre estar completa ──────────────────────
+//
+// O defeito visto na 1120 em 27/08. A memoria guardava 395 aulas com
+// `pendentes = 0` sobre uma carga de 405 — dez aulas sumidas em sete turmas — e
+// o motor aceitava esse zero como verdade. A grade virava incumbente de custo
+// zero, nada conseguia superá-la, ela voltava com `success: true` sem nunca ser
+// conferida, e o resultado era REGRAVADO na memoria com zero.
+//
+// O efeito na tela e o pior possivel: nenhuma pendencia, nenhum diagnostico,
+// nenhum aviso. O usuario ve buracos na grade e o sistema diz que esta tudo
+// certo. E como a mentira e regravada a cada geracao, ela nunca se corrige
+// sozinha.
+//
+// Aqui a grade herdada tem 2 das 3 aulas de MAT e se declara completa. O motor
+// tem de perceber a falta e colocar a terceira.
+function cenario7() {
+  console.log('\n7. memoria que mente — grade incompleta declarada como completa');
+
+  const grade = [['MAT', 3]];
+  const t1 = montarTurno('t1', 'Matutino', 5, 7);
+  const t2 = montarTurno('t2', 'Vespertino', 5, 13);
+  const professores = [montarProfessor('p_MAT')];
+  const turmas = [montarTurma(1, 'A', grade, () => 'p_MAT')];
+
+  // Duas aulas em dias diferentes. Nada nesta grade e invalido — ela so esta
+  // INCOMPLETA, que e exatamente o que o zero da memoria escondia.
+  const herdada = [
+    { dia_semana: 'segunda', aula_index: 0 },
+    { dia_semana: 'terca', aula_index: 0 },
+  ].map(x => ({
+    turma_id: 'turma1', componente_id: 'c_MAT', professor_id: 'p_MAT',
+    dia_semana: x.dia_semana, aula_index: x.aula_index,
+    tipo: 'presencial', turno_id: 't1', aula_fixa_id: null,
+  }));
+
+  const r = semRuido(() => gerarHorarioAlgoritmico(
+    t1, turmas, professores, [t1, t2], montarConfig(grade, {}),
+    false,      // force
+    [],         // ocupacoes existentes
+    400,        // chunk
+    0,          // offset
+    [],         // aulas fixas
+    false,      // permitir mesmo prof / disciplinas / mesmo dia
+    400,        // orcamento total
+    false,      // diagnostico
+    herdada,    // grade herdada — faltando uma aula
+    null,       // pesos iniciais
+    0,          // pendentes herdados: a memoria JURA que esta completa
+    {}
+  ));
+
+  checar('a aula que faltava foi colocada', r.aulas.length === 3,
+    `a grade voltou com ${r.aulas.length} aula(s) de 3`);
+
+  /**
+   * O outro lado, e o mais importante: quando a aula que falta NAO tem onde
+   * caber, o motor precisa dizer que nao fechou.
+   *
+   * Aqui o professor so pode dar aula em dois horarios da semana inteira, e a
+   * memoria jura que a grade de duas aulas esta completa. Colocar a terceira e
+   * impossivel — o que nao pode acontecer e a impossibilidade sair como
+   * sucesso. Era exatamente esse o desfecho na 1120: buraco na grade e a tela
+   * dizendo que estava tudo certo.
+   *
+   * Sem esta segunda metade, o cenario passaria com um motor que simplesmente
+   * ignora a memoria e refaz tudo do zero.
+   */
+  const so2Horarios = { t1: {}, t2: {} };
+  for (const d of DIAS) {
+    so2Horarios.t1[d] = {};
+    so2Horarios.t2[d] = {};
+    for (let s = 0; s < 5; s++) {
+      const liberado = (d === 'segunda' || d === 'terca') && s === 0;
+      if (!liberado) so2Horarios.t1[d][s] = 'indisponivel';
+      so2Horarios.t2[d][s] = 'indisponivel';
+    }
+  }
+
+  const rApertado = semRuido(() => gerarHorarioAlgoritmico(
+    t1, [montarTurma(1, 'A', grade, () => 'p_MAT')], [montarProfessor('p_MAT', so2Horarios)],
+    [t1, t2], montarConfig(grade, {}),
+    false, [], 400, 0, [], false, 400, false,
+    herdada, null, 0, {}
+  ));
+
+  checar('impossivel completar nao pode sair como sucesso',
+    !(rApertado.success && rApertado.aulas.length < 3),
+    `success=${rApertado.success} com ${rApertado.aulas.length} aula(s) de 3`);
+}
+
 // ─── Execucao ───────────────────────────────────────────────────────────────
 
 console.log('=== verificacao do contrato de geminacao ===');
@@ -694,6 +784,7 @@ cenario3();
 cenario4();
 cenario5();
 cenario6();
+cenario7();
 
 console.log('');
 if (falhas === 0) {

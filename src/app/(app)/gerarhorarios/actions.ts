@@ -15,6 +15,7 @@ import {
     lerJob,
     lerJobRelevante,
     limparGradeParcial,
+    registrarHorarioGerado,
     solicitarCancelamento,
     type GeracaoJob,
 } from '@/lib/geracao/job-store';
@@ -253,6 +254,19 @@ export async function salvarGradeParcial(jobId: string, nome: string) {
         parcial.pendencias
     );
     if (resultado.error) return { error: resultado.error };
+
+    /**
+     * O horário salvo entra no job, e não só na resposta.
+     *
+     * Quem vai alocar as aulas que ficaram de fora precisa saber em qual
+     * horário escrever, e essa informação vivia apenas no estado do componente:
+     * bastava recarregar a página para o botão sumir, com o painel de
+     * pendências ainda na tela. Gravado no job, sobrevive a recarregar, a fechar
+     * a aba e a voltar no dia seguinte.
+     */
+    if (resultado.data?.id) {
+        await registrarHorarioGerado(jobId, resultado.data.id);
+    }
 
     await limparGradeParcial(jobId);
     revalidatePath('/gerarhorarios');
