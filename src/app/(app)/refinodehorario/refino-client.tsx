@@ -195,7 +195,21 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
     const [loadingData, setLoadingData] = useState(false);
     const [todasAulas, setTodasAulas] = useState<AulaRefino[]>([]);
     const [professores, setProfessores] = useState<{id: string, nome: string}[]>([]);
+    const [turmas, setTurmas] = useState<{id: string, nome: string}[]>([]);
     const [turnos, setTurnos] = useState<Turno[]>([]);
+
+    /**
+     * Por onde se entra na grade.
+     *
+     * O motor nao muda com isto: `analisarMovimento` sempre recebeu TODAS as
+     * aulas da escola, nao so as do professor escolhido. O eixo e recorte de
+     * tela, e era essa a razao de so existir um — ninguem tinha precisado dos
+     * outros. O modo TURMA e o unico que mostra as celulas vazias dela, que e
+     * onde uma aula que ficou de fora poderia entrar.
+     */
+    const [modo, setModo] = useState<'professor' | 'turma' | 'slot'>('professor');
+    const [turmaId, setTurmaId] = useState<string>('');
+    const [slotFoco, setSlotFoco] = useState<{ dia: string; slot: number; turnoId: string } | null>(null);
     const [turnosById, setTurnosById] = useState<Map<string, Turno>>(new Map());
 
     const [aulaSelecionadaId, setAulaSelecionadaId] = useState<string | null>(null);
@@ -207,11 +221,12 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
 
     useEffect(() => {
         if (!horarioId) {
-            setProfessores([]); setTodasAulas([]); setProfessorId(''); setTurnos([]); return;
+            setProfessores([]); setTurmas([]); setTodasAulas([]); setProfessorId(''); setTurmaId(''); setTurnos([]); return;
         }
         let active = true;
         setLoadingData(true);
-        setProfessorId(''); setAulaSelecionadaId(null); setSlotDestino(null); setImpacto(null);
+        setProfessorId(''); setTurmaId(''); setSlotFoco(null);
+        setAulaSelecionadaId(null); setSlotDestino(null); setImpacto(null);
 
         getDadosRefinoHorario(escolaId, horarioId).then((res) => {
             if (!active) return;
@@ -222,6 +237,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
             }
             setTodasAulas(res.data.todasAulas);
             setProfessores(res.data.professores);
+            setTurmas((res.data as any).turmas ?? []);
             setTurnos(res.data.turnos);
             const map = new Map<string, Turno>();
             res.data.turnos.forEach(t => map.set(t.id, t));
@@ -283,8 +299,37 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
         }
     };
 
-    const selectedProfAulas = todasAulas.filter(a => a.professor_id === professorId);
-    const turnosDoProf = Array.from(new Set(selectedProfAulas.map(a => a.turno_id)));
+    /** As aulas que a grade da tela mostra, conforme o eixo escolhido. */
+    const aulasEmFoco = modo === 'turma'
+        ? todasAulas.filter(a => a.turma_id === turmaId)
+        : todasAulas.filter(a => a.professor_id === professorId);
+    const turnosEmFoco = Array.from(new Set(aulasEmFoco.map(a => a.turno_id)));
+
+    /** Ha um recorte escolhido? E o que destrava a grade. */
+    const temFoco = modo === 'turma' ? !!turmaId : modo === 'professor' ? !!professorId : !!slotFoco;
+
+    /**
+     * Modo SLOT: quem esta onde num horario, e quem esta livre nele.
+     *
+     * Nao usa a grade: a pergunta e outra. Aqui se olha uma coluna do dia
+     * inteiro da escola de uma vez, que e como se procura espaco para encaixar
+     * uma aula que ficou de fora.
+     */
+    const panoramaDoSlot = (() => {
+        if (!slotFoco) return null;
+        const turnoObj = turnosById.get(slotFoco.turnoId);
+        const horario = turnoObj?.horarios?.[slotFoco.slot];
+        const noSlot = todasAulas.filter(a =>
+            a.dia_semana === slotFoco.dia && a.aula_index === slotFoco.slot && a.turno_id === slotFoco.turnoId);
+
+        const ocupadas = new Map(noSlot.map(a => [a.turma_id, a]));
+        const linhas = turmas.map(t => ({ turma: t, aula: ocupadas.get(t.id) ?? null }));
+
+        const profsOcupados = new Set(noSlot.map(a => a.professor_id).filter(Boolean) as string[]);
+        const livres = professores.filter(p => !profsOcupados.has(p.id));
+
+        return { turnoObj, horario, linhas, livres };
+    })();
 
     const [modalAberto, setModalAberto] = useState(false);
 
@@ -309,28 +354,155 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                     </Select>
                 </div>
 
-                <div data-tutorial="refino-select-professor" className="w-[300px]">
-                    <Select value={professorId} onValueChange={setProfessorId} disabled={!horarioId || loadingData}>
-                        <SelectTrigger>
-                           {loadingData ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <SelectValue placeholder="Selecione o professor..." />}
-                        </SelectTrigger>
-                        <SelectContent>
-                            {professores.map(p => (
-                                <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                <div className="flex rounded-lg border overflow-hidden">
+                    {([['professor', 'Professor'], ['turma', 'Turma'], ['slot', 'Horário']] as const).map(([valor, rotulo]) => (
+                        <button
+                            key={valor}
+                            type="button"
+                            disabled={!horarioId || loadingData}
+                            onClick={() => {
+                                setModo(valor);
+                                setAulaSelecionadaId(null);
+                                setSlotDestino(null);
+                                setImpacto(null);
+                            }}
+                            className={cn(
+                                'px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50',
+                                modo === valor ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'
+                            )}
+                        >
+                            {rotulo}
+                        </button>
+                    ))}
                 </div>
+
+                {modo === 'professor' && (
+                    <div data-tutorial="refino-select-professor" className="w-[300px]">
+                        <Select value={professorId} onValueChange={setProfessorId} disabled={!horarioId || loadingData}>
+                            <SelectTrigger>
+                            {loadingData ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <SelectValue placeholder="Selecione o professor..." />}
+                            </SelectTrigger>
+                            <SelectContent>
+                                {professores.map(p => (
+                                    <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
+
+                {modo === 'turma' && (
+                    <div className="w-[300px]">
+                        <Select value={turmaId} onValueChange={setTurmaId} disabled={!horarioId || loadingData}>
+                            <SelectTrigger>
+                            {loadingData ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : <SelectValue placeholder="Selecione a turma..." />}
+                            </SelectTrigger>
+                            <SelectContent>
+                                {turmas.map(t => (
+                                    <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
+
+                {modo === 'slot' && (
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <Select
+                            value={slotFoco ? `${slotFoco.turnoId}|${slotFoco.dia}|${slotFoco.slot}` : ''}
+                            onValueChange={v => {
+                                const [turnoId, dia, slot] = v.split('|');
+                                setSlotFoco({ turnoId, dia, slot: Number(slot) });
+                            }}
+                            disabled={!horarioId || loadingData}
+                        >
+                            <SelectTrigger className="w-[300px]">
+                                <SelectValue placeholder="Selecione o dia e a aula..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {/* Só os turnos que têm aula nesta grade: listar os quatro
+                                    turnos cadastrados daria uma lista de quase duzentos itens,
+                                    a maioria de horário que não existe. */}
+                                {turnos.filter(t => todasAulas.some(a => a.turno_id === t.id)).flatMap(t =>
+                                    [...(t.dias_semana || [])]
+                                        .sort((a, b) => DIAS.indexOf(a) - DIAS.indexOf(b))
+                                        .flatMap(d =>
+                                            (t.horarios || []).map((h, i) => (
+                                                <SelectItem key={`${t.id}|${d}|${i}`} value={`${t.id}|${d}|${i}`}>
+                                                    {t.nome} — {DIA_LABELS[d]} {ordinal(i + 1)} ({h.inicio}–{h.fim})
+                                                </SelectItem>
+                                            ))
+                                        )
+                                )}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
             </div>
 
-            {professorId && !loadingData && (
+            {modo === 'slot' && slotFoco && !loadingData && panoramaDoSlot && (
+                <div className="border rounded-xl shadow-sm bg-background overflow-hidden">
+                    <div className="bg-primary text-primary-foreground px-4 py-2 font-bold uppercase tracking-wider text-xs flex justify-between items-center">
+                        <span>
+                            {panoramaDoSlot.turnoObj?.nome} — {DIA_LABELS[slotFoco.dia]} {ordinal(slotFoco.slot + 1)}
+                            {panoramaDoSlot.horario ? ` (${panoramaDoSlot.horario.inicio}–${panoramaDoSlot.horario.fim})` : ''}
+                        </span>
+                        <span className="opacity-70 font-normal">
+                            {panoramaDoSlot.linhas.filter(l => !l.aula).length} turma(s) sem aula neste horário
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                        <div className="lg:col-span-2 overflow-x-auto">
+                            <table className="w-full text-sm text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-muted/50 text-muted-foreground">
+                                        <th className="border-b border-r p-2 font-semibold">Turma</th>
+                                        <th className="border-b border-r p-2 font-semibold">Disciplina</th>
+                                        <th className="border-b p-2 font-semibold">Professor</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {panoramaDoSlot.linhas.map(({ turma, aula }) => (
+                                        <tr key={turma.id} className={cn('hover:bg-muted/40', !aula && 'bg-amber-50/60 dark:bg-amber-950/20')}>
+                                            <td className="border-b border-r p-2 font-medium">{turma.nome}</td>
+                                            <td className="border-b border-r p-2">
+                                                {aula ? (aula.componente_sigla || aula.componente_nome) : <span className="text-amber-700 dark:text-amber-500 italic">vago</span>}
+                                            </td>
+                                            <td className="border-b p-2 text-muted-foreground">{aula?.professor_nome ?? '—'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="border-l p-3">
+                            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
+                                Sem aula neste horário ({panoramaDoSlot.livres.length})
+                            </p>
+                            <div className="flex flex-wrap gap-1.5 max-h-[420px] overflow-y-auto">
+                                {panoramaDoSlot.livres.map(p => (
+                                    <Badge key={p.id} variant="outline" className="text-[10px]">{p.nome}</Badge>
+                                ))}
+                                {panoramaDoSlot.livres.length === 0 && (
+                                    <p className="text-xs text-muted-foreground italic">Todos os professores da grade estão ocupados aqui.</p>
+                                )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
+                                Esta lista é leitura, não ação: mostra onde há folga. Para mover uma aula, volte ao
+                                modo Professor ou Turma e escolha origem e destino na grade.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {modo !== 'slot' && temFoco && !loadingData && (
                 <div className="flex flex-1 gap-6 min-h-0 flex-col md:flex-row">
                     {/* Left: Grade */}
                     <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar">
-                        {turnosDoProf.map(tid => {
+                        {turnosEmFoco.map(tid => {
                             const turnoObj = turnosById.get(tid);
                             if (!turnoObj) return null;
-                            const aulasTurno = selectedProfAulas.filter(a => a.turno_id === tid);
+                            const aulasTurno = aulasEmFoco.filter(a => a.turno_id === tid);
                             const diasTurno = [...(turnoObj.dias_semana || [])].sort((a,b) => DIAS.indexOf(a) - DIAS.indexOf(b));
 
                             return (
@@ -399,7 +571,9 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                                                         a.tipo === 'presencial' ? "bg-primary/10 hover:bg-primary/20 border-primary/20 text-primary" : "bg-orange-500/10 hover:bg-orange-500/20 border-orange-500/20 text-orange-600 dark:text-orange-400"
                                                                     )}>
                                                                         <span className="text-[11px] font-bold leading-tight">{a.componente_sigla || a.componente_nome}</span>
-                                                                        <span className="text-[9px] opacity-70 line-clamp-1">{a.turma_nome} • {a.tipo === 'nao_presencial' ? 'NP' : 'P'}</span>
+                                                                        <span className="text-[9px] opacity-70 line-clamp-1">
+                                                                            {modo === 'turma' ? a.professor_nome : a.turma_nome} • {a.tipo === 'nao_presencial' ? 'NP' : 'P'}
+                                                                        </span>
                                                                     </div>
                                                                 ))}
                                                             </td>
@@ -414,9 +588,11 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                             );
                         })}
 
-                        {!turnosDoProf.length && (
+                        {!turnosEmFoco.length && (
                              <div className="flex items-center justify-center h-40 text-muted-foreground border-2 border-dashed rounded-xl">
-                                Nenhuma aula vinculada a este professor neste horário.
+                                {modo === 'turma'
+                                    ? 'Nenhuma aula desta turma neste horário.'
+                                    : 'Nenhuma aula vinculada a este professor neste horário.'}
                             </div>
                         )}
                     </div>
