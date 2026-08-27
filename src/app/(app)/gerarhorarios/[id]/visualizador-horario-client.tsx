@@ -6,13 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
-import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, FileDown, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee, Layers, CalendarDays, Users } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Loader2, Save, User, Calendar, Undo2, Printer, FileDown, Layout, Move, MousePointer2, X, Star, PenSquare, Coffee, Layers, CalendarDays, Users, Ban, Users2, Tag } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { consolidarHorario, reverterParaRascunho, swapAulasManualmente } from '../actions';
+import { consolidarHorario, reverterParaRascunho } from '../actions';
 import { useToast } from '@/hooks/use-toast';
 import { exportarHorarioXLSX } from '@/lib/export-horario';
 import { Badge } from '@/components/ui/badge';
+import { etiquetaDoSlot, temRestricaoNoTurno, type EtiquetaSlot, type TomEtiqueta } from '@/lib/restricoes-slot';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,7 +30,44 @@ type Props = {
   horario: HorarioCompleto;
   forceView?: 'single' | 'all' | 'teachers' | 'by-day';
   forceTeacherId?: string;
+  /**
+   * Turnos da unidade, para a agenda consolidada do professor.
+   *
+   * Sem esta lista a agenda só sabe olhar o turno do `horario` recebido e o
+   * contraturno dele. No portal de consulta o `horario` é um qualquer da escola,
+   * então esses dois turnos não têm relação nenhuma com o professor escolhido.
+   */
+  turnosDisponiveis?: Turno[];
 };
+
+/** Fundo da célula por tipo de etiqueta. */
+const TOM_CELULA: Record<TomEtiqueta, string> = {
+  vermelho: 'bg-red-50/60 dark:bg-red-950/20',
+  roxo: 'bg-purple-50/60 dark:bg-purple-950/20',
+  ambar: 'bg-amber-50/50 dark:bg-amber-950/20',
+  azul: 'bg-blue-50/50 dark:bg-blue-950/20',
+  neutro: 'bg-muted/40',
+};
+
+const TOM_TEXTO: Record<TomEtiqueta, string> = {
+  vermelho: 'text-red-600 dark:text-red-400',
+  roxo: 'text-purple-600 dark:text-purple-400',
+  ambar: 'text-amber-600 dark:text-amber-400',
+  azul: 'text-blue-600 dark:text-blue-400',
+  neutro: 'text-muted-foreground',
+};
+
+const ICONE_ETIQUETA: Record<string, typeof Star> = {
+  indisponivel: Ban,
+  planejamento: PenSquare,
+  livre_docencia: Star,
+  reuniao_fluxo: Users2,
+};
+
+function IconeDaEtiqueta({ etiqueta }: { etiqueta: EtiquetaSlot }) {
+  const Icone = ICONE_ETIQUETA[etiqueta.id] ?? Tag;
+  return <Icone className={cn('h-3 w-3', etiqueta.id === 'livre_docencia' && 'fill-amber-500 dark:fill-amber-400')} />;
+}
 
 const DIAS_SEMANA_MAP = [
   { id: 'segunda', label: 'Segunda' }, { id: 'terca', label: 'Terça' },
@@ -54,7 +92,7 @@ function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
     return aulaIdx < 5 ? 'matutino' : 'vespertino';
 }
 
-export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }: Props) {
+export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, turnosDisponiveis }: Props) {
   const [viewMode, setViewMode] = useState<'none' | 'single' | 'all' | 'teachers' | 'by-day'>(forceView || 'none');
   const [teacherViewMode, setTeacherViewMode] = useState<'individual' | 'all'>(forceTeacherId ? 'individual' : 'all');
   const [isActionPending, startAction] = useTransition();
@@ -162,21 +200,34 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
         );
     };
 
-    const isLivreDocencia = (dia: string, index: number) => {
-        if (!isProfessorView) return false;
-        const prof = professores.find(p => p.id === targetId);
-        if (!prof || prof.sem_preferencia_livre_docencia) return false;
-        const periodo = getPeriodoDaAula(turnoInfo, index);
-        return prof.livre_docencia?.some((ld: any) => ld.dia === dia && ld.periodo === periodo);
-    };
-
-    const isPlanejamento = (dia: string, index: number) => {
-        if (!isProfessorView) return false;
-        const prof = professores.find(p => p.id === targetId);
-        return prof?.restricoes?.[turnoInfo.id]?.[dia]?.[index] === 'planejamento';
-    };
+    /**
+     * Etiqueta de restrição do slot na grade do professor.
+     *
+     * Vale para todos os tipos que o professor cadastrou — indisponibilidade,
+     * reunião de fluxo, planejamento, livre docência (por período ou marcada
+     * célula a célula) e os tipos personalizados. A regra de quais bloqueiam de
+     * fato é a mesma que o motor aplica; ver `@/lib/restricoes-slot`.
+     */
+    const profDaGrade = isProfessorView ? professores.find(p => p.id === targetId) : undefined;
+    const getEtiqueta = (dia: string, index: number): EtiquetaSlot | null =>
+        isProfessorView ? etiquetaDoSlot(profDaGrade, turnoInfo, dia, index) : null;
 
     const diasAtivosLocal = DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
+
+    /** Legenda: só os tipos que realmente aparecem nesta grade. */
+    const etiquetasNaGrade: EtiquetaSlot[] = [];
+    if (isProfessorView) {
+        const vistas = new Set<string>();
+        for (const dia of diasAtivosLocal) {
+            for (let i = 0; i < turnoInfo.aulas_por_dia; i++) {
+                const et = getEtiqueta(dia.id, i);
+                if (et && !vistas.has(et.id)) {
+                    vistas.add(et.id);
+                    etiquetasNaGrade.push(et);
+                }
+            }
+        }
+    }
 
     /**
      * Pendências desta turma. Elas não têm dia/horário — justamente por não
@@ -196,6 +247,17 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                 <div className={cn("w-2 h-2 rounded-full", tipo === 'nao_presencial' ? "bg-orange-400" : "bg-primary")} />
                 {label} ({turnoInfo.nome})
             </h3>
+
+            {etiquetasNaGrade.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                    {etiquetasNaGrade.map(et => (
+                        <span key={et.id} className={cn("flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide", TOM_TEXTO[et.tom])}>
+                            <IconeDaEtiqueta etiqueta={et} />
+                            {et.label}
+                        </span>
+                    ))}
+                </div>
+            )}
 
             {temPendencias && (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-1.5">
@@ -242,16 +304,14 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                                 </td>
                                 {diasAtivosLocal.map(dia => {
                                     const aula = getAulaNoSlot(dia.id, aulaIndex);
-                                    const isLD = isLivreDocencia(dia.id, aulaIndex);
-                                    const isPlan = isPlanejamento(dia.id, aulaIndex);
+                                    const etiqueta = getEtiqueta(dia.id, aulaIndex);
 
                                     return (
                                     <td 
                                         key={dia.id} 
                                         className={cn(
                                             "p-1 text-center border-r last:border-r-0 print:border-black", 
-                                            isPlan && !aula && "bg-blue-50/50 dark:bg-blue-950/20",
-                                            isLD && !aula && "bg-amber-50/50 dark:bg-amber-950/20"
+                                            etiqueta && !aula && TOM_CELULA[etiqueta.tom]
                                         )}
                                     >
                                         {aula ? (
@@ -276,15 +336,10 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
                                                 {isProfessorView ? `Turma ${aula.turma.nome}` : (aula.professor?.nome_horario || 'SEM PROFESSOR')}
                                             </div>
                                         </div>
-                                        ) : isLD ? (
-                                            <div className="flex flex-col items-center justify-center gap-0.5 text-amber-600 dark:text-amber-400">
-                                                <Star className="h-3 w-3 fill-amber-500 dark:fill-amber-400" />
-                                                <span className="text-[8px] font-black uppercase">Livre Docência</span>
-                                            </div>
-                                        ) : isPlan ? (
-                                            <div className="flex flex-col items-center justify-center gap-0.5 text-blue-600 dark:text-blue-400">
-                                                <PenSquare className="h-3 w-3 text-blue-500 dark:text-blue-400" />
-                                                <span className="text-[8px] font-black uppercase">Planejamento</span>
+                                        ) : etiqueta ? (
+                                            <div className={cn("flex flex-col items-center justify-center gap-0.5", TOM_TEXTO[etiqueta.tom])}>
+                                                <IconeDaEtiqueta etiqueta={etiqueta} />
+                                                <span className="text-[8px] font-black uppercase leading-tight">{etiqueta.label}</span>
                                             </div>
                                         ) : temPendencias ? (
                                             // Slot vago numa turma que ficou com aulas de fora. Sem esta marca
@@ -331,52 +386,52 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId }
         ...(horario.outras_aulas_publicadas?.filter(a => a.professor_id === professorId) || [])
     ];
 
-    const turnosEnvolvidos = useMemo(() => {
-        const globalTurnos = new Map<string, Turno>();
-        globalTurnos.set(horario.turno.id, horario.turno);
-        if (horario.turno_oposto) globalTurnos.set(horario.turno_oposto.id, horario.turno_oposto);
-        
-        allTeacherAulas.forEach(a => {
-            const baseT = (a as any).horario?.turno;
-            if (baseT) globalTurnos.set(baseT.id, baseT);
-        });
+    const globalTurnos = new Map<string, Turno>();
+    globalTurnos.set(horario.turno.id, horario.turno);
+    if (horario.turno_oposto) globalTurnos.set(horario.turno_oposto.id, horario.turno_oposto);
+    turnosDisponiveis?.forEach(t => globalTurnos.set(t.id, t));
+    allTeacherAulas.forEach(a => {
+        const baseT = (a as any).horario?.turno;
+        if (baseT) globalTurnos.set(baseT.id, baseT);
+    });
 
-        const turnosMap = new Map<string, Turno>();
-        allTeacherAulas.forEach(aula => {
-            let turnoFisico: Turno | undefined;
-            if (aula.turno_id && globalTurnos.has(aula.turno_id)) {
-                turnoFisico = globalTurnos.get(aula.turno_id);
-            } else if (aula.horario_id === horario.id) {
-                turnoFisico = aula.tipo === 'nao_presencial' ? horario.turno_oposto : horario.turno;
-            } else {
-                turnoFisico = (aula as any).horario?.turno;
-            }
+    // 1. Todo turno onde o professor tem aula entra na agenda.
+    const turnosMap = new Map<string, Turno>();
+    allTeacherAulas.forEach(aula => {
+        let turnoFisico: Turno | undefined;
+        if (aula.turno_id && globalTurnos.has(aula.turno_id)) {
+            turnoFisico = globalTurnos.get(aula.turno_id);
+        } else if (aula.horario_id === horario.id) {
+            turnoFisico = aula.tipo === 'nao_presencial' ? horario.turno_oposto : horario.turno;
+        } else {
+            turnoFisico = (aula as any).horario?.turno;
+        }
 
-            if (turnoFisico) {
-                turnosMap.set(turnoFisico.id, turnoFisico);
-            }
-        });
+        if (turnoFisico) {
+            turnosMap.set(turnoFisico.id, turnoFisico);
+        }
+    });
 
-        const possibleBaseTurnos = [horario.turno];
-        if (horario.turno_oposto) possibleBaseTurnos.push(horario.turno_oposto);
-        
-        possibleBaseTurnos.forEach(t => {
-            const hasRestricao = prof.restricoes?.[t.id] && Object.keys(prof.restricoes[t.id]).length > 0;
-            const hasLivreDocencia = prof.livre_docencia?.some(ld => {
-                const nomeT = t.nome.toLowerCase();
-                if (ld.periodo === 'matutino' && (nomeT.includes('matutino') || nomeT.includes('integral'))) return true;
-                if (ld.periodo === 'vespertino' && (nomeT.includes('vespertino') || nomeT.includes('integral'))) return true;
-                if (ld.periodo === 'noturno') return nomeT.includes('noturno');
-                return false;
-            });
+    /**
+     * 2. Turno sem aula só entra se o professor for lotado nele E tiver
+     * restrição cadastrada lá.
+     *
+     * Os dois filtros importam. Antes os candidatos eram o turno do `horario`
+     * recebido e o contraturno dele — no portal de consulta esse `horario` é um
+     * qualquer da escola, e `turno_oposto` de um Integral cai num turno
+     * arbitrário. Bastava a livre docência do professor ser de manhã para um
+     * Matutino fantasma, sem nenhuma aula, aparecer ao lado do Integral dele.
+     */
+    const lotacao = prof.turnos_ids ?? [];
+    const candidatos = turnosDisponiveis?.length ? turnosDisponiveis : Array.from(globalTurnos.values());
 
-            if (hasRestricao || hasLivreDocencia) {
-                turnosMap.set(t.id, t);
-            }
-        });
+    candidatos.forEach(t => {
+        if (turnosMap.has(t.id)) return;
+        if (!lotacao.includes(t.id)) return;
+        if (temRestricaoNoTurno(prof, t)) turnosMap.set(t.id, t);
+    });
 
-        return Array.from(turnosMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
-    }, [professorId, allTeacherAulas, prof, horario]);
+    const turnosEnvolvidos = Array.from(turnosMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
 
     return (
         <div className="space-y-8 pt-4 break-after-page print:pt-0">
