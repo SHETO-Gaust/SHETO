@@ -719,18 +719,37 @@ export function gerarHorarioAlgoritmico(
    *   - o bloco pedido na tela, que precisa caber inteiro num dia;
    *   - as aulas travadas naquele dia, porque travar é pedir.
    */
+  /**
+   * Memória do teto do dia.
+   *
+   * O teto não muda durante a geração: `pisoDiario`, `limitesGeminacao`,
+   * `travadasPorGrupoDia` e os turnos são montados antes da busca e ficam
+   * parados. Sem esta memória, cada pergunta montava duas chaves de texto e
+   * fazia quatro buscas em Map — e a pergunta é feita dentro do laço mais
+   * quente que existe aqui, o que a colocou em 10% do tempo total no perfil da
+   * escola de 22 turmas.
+   */
+  const memoTeto = new Map<string, number>();
+
   const tetoDeAulasNoDia = (
     turmaId: string, compId: string, tipo: string, turnoId: string, dia: string,
   ): number => {
+    const chave = `${turmaId}|${compId}|${tipo}|${turnoId}|${dia}`;
+    const guardado = memoTeto.get(chave);
+    if (guardado !== undefined) return guardado;
+
     const alvo = turnosById.get(turnoId);
     const base = (alvo?.aulas_por_dia ?? 0) >= DIA_LONGO_MIN_AULAS ? TETO_DIA_LONGO : TETO_DIA_CURTO;
     const grupo = `${turmaId}|${compId}|${tipo}`;
-    return Math.max(
+    const teto = Math.max(
       base,
       pisoDiario.get(grupo) ?? 1,
       limitesGeminacao.get(grupo) ?? 0,
       travadasPorGrupoDia.get(`${grupo}|${dia}`) ?? 0,
     );
+
+    memoTeto.set(chave, teto);
+    return teto;
   };
 
   /**
@@ -1242,9 +1261,6 @@ export function gerarHorarioAlgoritmico(
     const slotKeyOf = (turmaId: string, turnoId: string, dia: string, idx: number) =>
       `${turmaId}|${turnoId}|${dia}|${idx}`;
 
-    const aulaKeyOf = (a: HorarioAulaGeradaAlgoritmo) =>
-      `${a.turma_id}|${a.turno_id}|${a.dia_semana}|${a.aula_index}|${a.professor_id}|${a.componente_id}|${a.tipo}`;
-
     const getMetaFromAula = (a: HorarioAulaGeradaAlgoritmo): BlocoGeracao | null => {
       const turmaData = turmasById.get(a.turma_id);
       if (!turmaData) return null;
@@ -1275,8 +1291,31 @@ export function gerarHorarioAlgoritmico(
       };
     };
 
+    /**
+     * Tira a aula da grade e desfaz tudo que ela ocupava.
+     *
+     * A busca dela era `findIndex(x => aulaKeyOf(x) === aulaKeyOf(a))`, e essa
+     * linha sozinha respondia por um terço do tempo de geração da escola de 22
+     * turmas. Para cada uma das 990 aulas da grade ela montava DUAS strings de
+     * sete campos — a chave do alvo era recalculada dentro do laço, a cada
+     * iteração —, o que dá perto de dois mil objetos por remoção, todos
+     * descartados em seguida; o coletor de lixo aparecia no perfil logo abaixo.
+     *
+     * Comparar os campos direto responde exatamente a mesma pergunta e não aloca
+     * nada. A ordem não é arbitrária: `aula_index` e `dia_semana` primeiro
+     * porque são o que descarta a maioria das linhas na primeira comparação.
+     */
     const removeAulaState = (a: HorarioAulaGeradaAlgoritmo) => {
-      const idxArr = aulasGeradas.findIndex(x => aulaKeyOf(x) === aulaKeyOf(a));
+      const idxArr = aulasGeradas.findIndex(
+        x =>
+          x.aula_index === a.aula_index &&
+          x.dia_semana === a.dia_semana &&
+          x.turma_id === a.turma_id &&
+          x.turno_id === a.turno_id &&
+          x.componente_id === a.componente_id &&
+          x.professor_id === a.professor_id &&
+          x.tipo === a.tipo,
+      );
       if (idxArr >= 0) aulasGeradas.splice(idxArr, 1);
       desmarcarComponente(a);
 
