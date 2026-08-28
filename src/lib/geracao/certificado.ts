@@ -18,6 +18,7 @@
 import type { Turno, ProfessorComDados } from '@/lib/types';
 import { resolverTurnoOposto } from '@/lib/turno-oposto';
 import { getSlotMinutes, minutesConflitam } from '@/lib/horario-slots';
+import { capacidadeSemanalDaSerie } from '@/lib/capacidade-serie';
 
 export type CausaInviabilidade = {
     tipo: 'carga_turma' | 'carga_professor' | 'horario_sem_cobertura' | 'turno_sem_horario';
@@ -200,23 +201,35 @@ export function certificar(dados: DadosCertificado): Certificado {
     );
 
     // ── 1. Cada turma cabe no turno? ─────────────────────────────────────────
-    const semFolga: string[] = [];
+    const semFolga: { nome: string; cap: number; fechados: number }[] = [];
     for (const t of dados.turmasDoTurno) {
         const comps = t.serie?.componentes || [];
         const demanda = comps.reduce((s: number, c: any) => s + (c.aulas_presenciais || 0), 0);
 
-        if (demanda > capacidade) {
+        /**
+         * A capacidade da TURMA é a da série dela, não a grade bruta do turno: os
+         * slots que a série fechou na aba Restrições não recebem aula nenhuma, e
+         * o motor os pula. Contar a grade bruta fazia o certificado aprovar uma
+         * turma que não cabe — uma série de 17 aulas em 20 slots com 3 fechados
+         * está no limite, e o certificado a via com 3 de folga.
+         */
+        const capacidadeSerie = capacidadeSemanalDaSerie(turno, t.serie?.restricoes);
+        const fechados = capacidade - capacidadeSerie;
+
+        if (demanda > capacidadeSerie) {
             causas.push({
                 tipo: 'carga_turma',
                 titulo: `A turma ${t.nome} tem mais aulas do que horários`,
                 detalhe: `A matriz da série pede ${demanda} aulas presenciais, e o turno ${turno.nome} ` +
-                    `tem ${aulasPorDia} aulas × ${dias.length} dias = ${capacidade} horários. ` +
-                    `Sobram ${demanda - capacidade} aula(s) sem onde caber.`,
-                correcao: `Reduza ${demanda - capacidade} aula(s) na carga horária da série ${t.serie?.nome ?? ''}, ` +
+                    `tem ${aulasPorDia} aulas × ${dias.length} dias = ${capacidade} horários` +
+                    `${fechados > 0 ? `, dos quais ${fechados} estão fechados nas restrições da série — restam ${capacidadeSerie}` : ''}. ` +
+                    `Sobram ${demanda - capacidadeSerie} aula(s) sem onde caber.`,
+                correcao: `Reduza ${demanda - capacidadeSerie} aula(s) na carga horária da série ${t.serie?.nome ?? ''}` +
+                    `${fechados > 0 ? `, libere ${demanda - capacidadeSerie} slot(s) nas restrições dela` : ''}, ` +
                     `ou acrescente aulas ao dia / dias à semana no turno.`,
             });
-        } else if (demanda === capacidade) {
-            semFolga.push(t.nome);
+        } else if (demanda === capacidadeSerie) {
+            semFolga.push({ nome: t.nome, cap: capacidadeSerie, fechados });
         }
 
         const demandaNP = comps.reduce((s: number, c: any) => s + (c.aulas_nao_presenciais || 0), 0);
@@ -239,11 +252,31 @@ export function certificar(dados: DadosCertificado): Certificado {
 
     // ── 2. Cada professor cabe na própria agenda? ────────────────────────────
     const cargaPorProf = new Map<string, number>();
+    /**
+     * Slots deste turno em que o professor pode, em tese, ter aula.
+     *
+     * É a união dos slots que as séries das turmas dele deixam abertas. Um slot
+     * fechado por TODAS as séries que ele atende não é horário livre para ele:
+     * não existe turma que possa recebê-lo ali. Contar a grade bruta do turno
+     * dava a um professor com 20 aulas em 3 turmas de uma série de 17 slots a
+     * aparência de encaixe exato, e o certificado não provava nada — a geração
+     * ficava rodando atrás de uma grade que não existe.
+     */
+    const slotsPossiveisPorProf = new Map<string, Set<string>>();
     for (const t of dados.turmasDoTurno) {
         for (const v of t.professores || []) {
             const comp = (t.serie?.componentes || []).find((c: any) => c.componente_id === v.componente_id);
             if (!comp) continue;
             cargaPorProf.set(v.professor_id, (cargaPorProf.get(v.professor_id) ?? 0) + (comp.aulas_presenciais || 0));
+
+            if (!(comp.aulas_presenciais > 0)) continue;
+            const abertos = slotsPossiveisPorProf.get(v.professor_id) ?? new Set<string>();
+            for (const d of dias) {
+                for (let i = 0; i < aulasPorDia; i++) {
+                    if ((t.serie as any)?.restricoes?.[d]?.[i] !== 'proibido') abertos.add(`${d}|${i}`);
+                }
+            }
+            slotsPossiveisPorProf.set(v.professor_id, abertos);
         }
     }
 
@@ -289,6 +322,7 @@ export function certificar(dados: DadosCertificado): Certificado {
          * a 1ª aula da manhã consumir a 1ª aula da tarde, que acontece horas
          * depois; comparar por minutos só desconta o que de fato colide.
          */
+        const possiveis = slotsPossiveisPorProf.get(profId) ?? new Set<string>();
         let bloqueados = 0;
         let ocupados = 0;
         /** Parte de `ocupados` que só existe porque falta horário em algum turno. */
@@ -297,6 +331,8 @@ export function certificar(dados: DadosCertificado): Certificado {
         for (const d of dias) {
             const externas = ocupacoesPorProfDia.get(`${profId}|${d}`) ?? [];
             for (let i = 0; i < aulasPorDia; i++) {
+                // Slot que nenhuma série dele deixa aberta já não entra na conta.
+                if (!possiveis.has(`${d}|${i}`)) continue;
                 if (bloqueadoParaSempre(prof, turno, d, i)) { bloqueados++; continue; }
                 const [inicio, fim] = getSlotMinutes(turno, i);
                 const colisao = externas.find(o => minutesConflitam(
@@ -314,8 +350,9 @@ export function certificar(dados: DadosCertificado): Certificado {
                 }
             }
         }
+        const fechadosPelaSerie = capacidade - possiveis.size;
         // Nunca negativo: `bloqueados` e `ocupados` são slots distintos do turno.
-        const livres = capacidade - bloqueados - ocupados;
+        const livres = possiveis.size - bloqueados - ocupados;
 
         if (carga > livres) {
             // Sem os slots tomados no escuro a carga caberia: a causa raiz é o
@@ -334,11 +371,13 @@ export function certificar(dados: DadosCertificado): Certificado {
                 tipo: 'carga_professor',
                 titulo: `${prof.nome_horario} tem mais aulas do que horários livres`,
                 detalhe: `São ${carga} aulas atribuídas e apenas ${livres} horários disponíveis ` +
-                    `(${capacidade} do turno, menos ${bloqueados} bloqueados por indisponibilidade, ` +
-                    `livre docência ou reunião de fluxo` +
+                    `(${capacidade} do turno` +
+                    `${fechadosPelaSerie ? `, menos ${fechadosPelaSerie} fechados nas restrições da série das turmas dele` : ''}` +
+                    `${bloqueados ? `, menos ${bloqueados} bloqueados por indisponibilidade, livre docência ou reunião de fluxo` : ''}` +
                     `${ocupados ? `, menos ${ocupados} já ocupados por aula em outro turno no mesmo horário` : ''}).`,
-                correcao: `Tire ${carga - livres} aula(s) de ${prof.nome_horario}, ou libere ` +
-                    `${carga - livres} dos horários bloqueados dele.`,
+                correcao: `Tire ${carga - livres} aula(s) de ${prof.nome_horario}` +
+                    `${fechadosPelaSerie ? `, passe-as para outro professor` : ''}, ou libere ` +
+                    `${carga - livres} horário(s) — nas restrições dele ou nas da série.`,
             });
         } else if (livres - carga <= 2) {
             apertados.push(`${prof.nome_horario} (${carga} aulas em ${livres} horários)`);
@@ -418,11 +457,16 @@ export function certificar(dados: DadosCertificado): Certificado {
 
     // ── Observações: não provam nada, mas explicam a dificuldade ─────────────
     if (semFolga.length > 0) {
+        const caps = new Set(semFolga.map(s => s.cap));
+        const quantos = caps.size === 1 ? `os ${[...caps][0]}` : 'todos os';
+        const temFechados = semFolga.some(s => s.fechados > 0);
         observacoes.push(
-            `${semFolga.length === dados.turmasDoTurno.length ? 'Todas as turmas' : `As turmas ${semFolga.join(', ')}`} ` +
-            `preenchem exatamente os ${capacidade} horários do turno, sem nenhuma folga. Só uma arrumação ` +
+            `${semFolga.length === dados.turmasDoTurno.length ? 'Todas as turmas' : `As turmas ${semFolga.map(s => s.nome).join(', ')}`} ` +
+            `preenchem exatamente ${quantos} horários disponíveis, sem nenhuma folga. Só uma arrumação ` +
             `perfeita fecha a grade: qualquer bloqueio de professor num horário de que a turma precise a torna ` +
-            `impossível, não apenas difícil. Acrescentar uma aula ao dia daria margem de manobra à busca.`
+            `impossível, não apenas difícil. Acrescentar uma aula ao dia` +
+            `${temFechados ? ', ou liberar um dos horários fechados nas restrições da série,' : ''} ` +
+            `daria margem de manobra à busca.`
         );
     }
     if (apertados.length > 0) {
