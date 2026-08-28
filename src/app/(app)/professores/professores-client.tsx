@@ -47,6 +47,7 @@ import { Label } from '@/components/ui/label';
 type ProfessoresClientProps = {
   initialProfessores: ProfessorComDados[];
   escolaId: string;
+  escolaNome?: string | null;
   turnosDaEscola: Turno[];
   componentesDaEscola: ComponenteCurricular[];
 };
@@ -84,6 +85,7 @@ function temLivreDocenciaPersonalizadaPreenchida(restricoes: any): boolean {
 export function ProfessoresClient({
   initialProfessores,
   escolaId,
+  escolaNome,
   turnosDaEscola,
   componentesDaEscola,
 }: ProfessoresClientProps) {
@@ -241,7 +243,7 @@ export function ProfessoresClient({
   return (
     <TooltipProvider>
       <div className="flex justify-end items-center gap-2 mb-4">
-        <ExportarRestricoes professores={professores} turnosDaEscola={turnosDaEscola} />
+        <ExportarRestricoes professores={professores} turnosDaEscola={turnosDaEscola} escolaNome={escolaNome} />
         <Button data-tutorial="professores-btn-adicionar" onClick={() => openSheet(null, 'edit')}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Adicionar Professor

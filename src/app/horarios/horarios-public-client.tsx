@@ -234,7 +234,17 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
                             />
                         </div>
                         
-                        {currentHorario.turno_oposto && (
+                        {/*
+                            Só desenha o contraturno se a turma tiver aula não
+                            presencial. `turno_oposto` é um palpite do servidor —
+                            na falta de par matutino/vespertino ele elege outro
+                            turno qualquer da escola —, e numa escola sem
+                            contraturno isso mostrava uma tabela inteira vazia,
+                            sugerindo um turno que a turma não frequenta.
+                        */}
+                        {currentHorario.turno_oposto && currentHorario.aulas.some(
+                            (a: any) => a.turma_id === selectedTurmaId && a.tipo === 'nao_presencial'
+                        ) && (
                             <div className="animate-in fade-in zoom-in-95 duration-500 delay-150">
                                 <GradeHoraria 
                                     aulas={currentHorario.aulas}

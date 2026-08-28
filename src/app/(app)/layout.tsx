@@ -16,6 +16,7 @@ import type { Profile, Escola } from '@/lib/types';
 import { AccessDenied } from '@/components/access-denied';
 import { UserX, LogOut } from 'lucide-react';
 import Image from 'next/image';
+import { RODAPE_SISTEMA } from '@/lib/branding';
 import Link from 'next/link';
 import { SchoolSelector } from '@/components/school-selector';
 import { TutorialProvider } from '@/components/tutorial/tutorial-provider';
@@ -191,7 +192,7 @@ export default async function AppLayout({
           </div>
         </div>
         <footer className="border-t bg-background p-4 text-center text-xs text-muted-foreground">
-          Desenvolvido pela Secretaria da Educação do Tocantins - Todos os direitos reservados © 2026
+          {RODAPE_SISTEMA}
           {' · '}
           <Link href="/politica-de-privacidade" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
             Política de Privacidade

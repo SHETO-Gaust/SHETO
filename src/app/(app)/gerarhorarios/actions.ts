@@ -547,7 +547,7 @@ export async function getHorarioDetalhado(id: string): Promise<{ data?: HorarioC
 
     const { data: aulas } = await supabase
         .from('horario_aulas')
-        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario, cpf, restricoes, livre_docencia, sem_preferencia_livre_docencia, turnos_ids), turma:turmas(id, nome)')
+        .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario, nome_completo, cpf, restricoes, livre_docencia, sem_preferencia_livre_docencia, turnos_ids), turma:turmas(id, nome)')
         .eq('horario_id', id)
         .order('aula_index', { ascending: true });
 

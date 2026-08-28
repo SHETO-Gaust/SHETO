@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho } from '../actions';
 import { useToast } from '@/hooks/use-toast';
 import { exportarHorarioXLSX, exportarHorarioPDF } from '@/lib/export-horario';
+import { exportarGradeProfessorPDF } from '@/lib/export-grade-professor';
 import { Badge } from '@/components/ui/badge';
 import { etiquetaDoSlot, temRestricaoNoTurno, type EtiquetaSlot, type TomEtiqueta } from '@/lib/restricoes-slot';
 import {
@@ -38,6 +39,8 @@ type Props = {
    * então esses dois turnos não têm relação nenhuma com o professor escolhido.
    */
   turnosDisponiveis?: Turno[];
+  /** Nome da unidade, para o cabecalho dos PDFs. */
+  escolaNome?: string | null;
 };
 
 /** Fundo da célula por tipo de etiqueta. */
@@ -92,7 +95,7 @@ function getPeriodoDaAula(turno: Turno, aulaIdx: number): LivreDocenciaPeriodo {
     return aulaIdx < 5 ? 'matutino' : 'vespertino';
 }
 
-export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, turnosDisponiveis }: Props) {
+export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, turnosDisponiveis, escolaNome }: Props) {
   const [viewMode, setViewMode] = useState<'none' | 'single' | 'all' | 'teachers' | 'by-day'>(forceView || 'none');
   const [teacherViewMode, setTeacherViewMode] = useState<'individual' | 'all'>(forceTeacherId ? 'individual' : 'all');
   const [isActionPending, startAction] = useTransition();
@@ -377,6 +380,37 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
     );
   };
 
+  /**
+   * A grade do contraturno de uma turma — ou nada, quando não há contraturno.
+   *
+   * A condição era só `!isIntegral`, e `turno_oposto` vem de um palpite: na
+   * falta de um par matutino/vespertino, `getHorarioDetalhado` elege qualquer
+   * outro turno da escola. Numa escola que não tem contraturno nenhum isso
+   * desenhava uma tabela inteira vazia embaixo de cada turma, sugerindo um turno
+   * que a turma não frequenta.
+   *
+   * O que manda agora é o dado: existe aula não presencial nesta turma? Se
+   * existe mas o turno oposto não está configurado, a grade sai assim mesmo,
+   * usando o próprio turno como régua — os horários ficam deslocados, mas
+   * nenhuma aula salva desaparece da tela. É a mesma regra do .xlsx e do PDF
+   * (ver `@/lib/export-horario`).
+   */
+  const ContraturnoDaTurma = (turmaId: string) => {
+    if (isIntegral) return null;
+
+    const temNaoPresencial = horario.aulas.some(a => a.turma_id === turmaId && a.tipo === 'nao_presencial');
+    if (!temNaoPresencial) return null;
+
+    return (
+      <GradeHoraria
+        targetId={turmaId}
+        label={horario.turno_oposto ? 'Grade do Contraturno' : 'Grade do Contraturno — turno oposto não configurado'}
+        turnoInfo={horario.turno_oposto ?? horario.turno}
+        tipo="nao_presencial"
+      />
+    );
+  };
+
   const TeacherIndividualView = ({ professorId }: { professorId: string }) => {
     const prof = professores.find(p => p.id === professorId);
     if (!prof) return null;
@@ -433,6 +467,24 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
 
     const turnosEnvolvidos = Array.from(turnosMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
 
+    /**
+     * Um bloco por turno, já com as aulas do professor naquele turno. A tela
+     * desenha uma tabela por bloco; o PDF individual funde os blocos numa régua
+     * de horários só. Os dois partem daqui para não divergirem.
+     */
+    const blocos = turnosEnvolvidos.map(turno => ({
+        turno,
+        aulas: allTeacherAulas.filter(a => {
+            if (a.turno_id) return a.turno_id === turno.id;
+
+            // Fallback legado se a.turno_id não estiver presente:
+            if (a.horario_id === horario.id) {
+                return a.tipo === 'nao_presencial' ? turno.id === horario.turno_oposto?.id : turno.id === horario.turno_id;
+            }
+            return (a as any).horario?.turno_id === turno.id;
+        }),
+    }));
+
     return (
         <div className="space-y-8 pt-4 break-after-page print:pt-0">
             <div className="flex items-center gap-3 border-b pb-4">
@@ -443,30 +495,28 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                     <h2 className="text-xl font-bold tracking-tight">{prof.nome_horario}</h2>
                     <p className="text-sm text-muted-foreground">Grade Docente Consolidada</p>
                 </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto gap-2 print:hidden text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/30 dark:hover:text-rose-300"
+                    onClick={() => exportarGradeProfessorPDF({ professor: prof, blocos, escolaNome })}
+                    title="A semana do professor em uma folha, com todos os turnos na mesma régua de horários"
+                >
+                    <FileText className="h-4 w-4" /> PDF do professor
+                </Button>
             </div>
-            
-            {turnosEnvolvidos.length > 0 ? (
-                turnosEnvolvidos.map(turno => {
-                    const aulasDesteTurno = allTeacherAulas.filter(a => {
-                        if (a.turno_id) return a.turno_id === turno.id;
-                        
-                        // Fallback legado se a.turno_id não estiver presente:
-                        if (a.horario_id === horario.id) {
-                            return a.tipo === 'nao_presencial' ? turno.id === horario.turno_oposto?.id : turno.id === horario.turno_id;
-                        }
-                        return (a as any).horario?.turno_id === turno.id;
-                    });
-                    return (
-                        <GradeHoraria 
-                            key={turno.id} 
-                            targetId={professorId} 
-                            isProfessorView={true} 
-                            label={`Turno: ${turno.nome}`} 
-                            turnoInfo={turno} 
-                            dataset={aulasDesteTurno} 
-                        />
-                    );
-                })
+
+            {blocos.length > 0 ? (
+                blocos.map(({ turno, aulas }) => (
+                    <GradeHoraria
+                        key={turno.id}
+                        targetId={professorId}
+                        isProfessorView={true}
+                        label={`Turno: ${turno.nome}`}
+                        turnoInfo={turno}
+                        dataset={aulas}
+                    />
+                ))
             ) : (
                 <div className="p-12 text-center border-2 border-dashed rounded-2xl bg-muted/5">
                     <p className="text-muted-foreground">Este professor não possui aulas ou restrições em nenhum turno publicado.</p>
@@ -605,7 +655,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                   ou "por dia" ele sai com uma turma só, que é o que se esperava
                   dele mas não o que se espera de um PDF do horário.
               */}
-              <Button variant="outline" size="sm" onClick={() => exportarHorarioPDF(horario)} className="gap-2 text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/30 dark:hover:text-rose-300">
+              <Button variant="outline" size="sm" onClick={() => exportarHorarioPDF(horario, escolaNome)} className="gap-2 text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/30 dark:hover:text-rose-300">
                   <FileText className="h-4 w-4" /> PDF completo
               </Button>
               <Button variant="outline" size="sm" onClick={() => window.print()} title="Imprime exatamente o que está sendo exibido nesta tela">
@@ -670,7 +720,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
           {viewMode === 'single' ? (
             <div className="space-y-8 animate-in fade-in duration-500">
                 <GradeHoraria targetId={selectedTurmaId} label="Grade Regular" turnoInfo={horario.turno} tipo="presencial" />
-                {!isIntegral && <GradeHoraria targetId={selectedTurmaId} label="Grade do Contraturno" turnoInfo={horario.turno_oposto} tipo="nao_presencial" />}
+                {ContraturnoDaTurma(selectedTurmaId)}
             </div>
           ) : viewMode === 'all' ? (
             <div className="space-y-16 animate-in fade-in duration-500">
@@ -678,7 +728,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                     <div key={turma.id} className="space-y-6 break-after-page">
                         <h2 className="text-xl font-black uppercase">TURMA {turma.nome}</h2>
                         <GradeHoraria targetId={turma.id} label="Grade Regular" turnoInfo={horario.turno} tipo="presencial" />
-                        {!isIntegral && <GradeHoraria targetId={turma.id} label="Grade do Contraturno" turnoInfo={horario.turno_oposto} tipo="nao_presencial" />}
+                        {ContraturnoDaTurma(turma.id)}
                     </div>
                 ))}
             </div>

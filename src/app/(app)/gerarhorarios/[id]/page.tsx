@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { VisualizadorHorarioClient } from "./visualizador-horario-client";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function DetalhesHorarioPage({ params }: { params: { id: string } }) {
   const { id } = await params;
@@ -29,6 +30,14 @@ export default async function DetalhesHorarioPage({ params }: { params: { id: st
     );
   }
 
+  // Nome da unidade para o cabecalho dos PDFs (ver src/lib/pdf-layout.ts).
+  const supabase = await createClient();
+  const { data: escola } = await supabase
+    .from('escolas')
+    .select('escolar')
+    .eq('id', horario.escola_id)
+    .maybeSingle();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between print:hidden">
@@ -43,7 +52,7 @@ export default async function DetalhesHorarioPage({ params }: { params: { id: st
         </Link>
       </div>
 
-      <VisualizadorHorarioClient horario={horario} />
+      <VisualizadorHorarioClient horario={horario} escolaNome={escola?.escolar ?? null} />
     </div>
   );
 }

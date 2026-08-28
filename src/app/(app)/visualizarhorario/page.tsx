@@ -14,11 +14,13 @@ export default async function VisualizarHorarioPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('ue')
+    .select('ue, escolas(escolar)')
     .eq('id', user.id)
     .single();
 
   const escolaId = profile?.ue;
+  // Nome da unidade para o cabecalho dos PDFs (ver src/lib/pdf-layout.ts).
+  const escolaNome = (profile as any)?.escolas?.escolar ?? null;
 
   if (!escolaId) {
     return (
@@ -45,7 +47,7 @@ export default async function VisualizarHorarioPage() {
             <p className="text-sm text-muted-foreground">Portal de consulta da unidade escolar. Selecione o modo de visualização desejado.</p>
         </div>
         
-        <VisualizadorOperacionalClient escolaId={escolaId} />
+        <VisualizadorOperacionalClient escolaId={escolaId} escolaNome={escolaNome} />
         
         <StepNavigation currentStep={8} />
     </div>

@@ -12,11 +12,13 @@ import { getHorariosEscolaCompletos } from './actions';
 
 type Props = {
   escolaId: string;
+  /** Nome da unidade, para o cabecalho dos PDFs. */
+  escolaNome?: string | null;
 };
 
 type ViewState = 'portal' | 'professores' | 'turmas';
 
-export function VisualizadorOperacionalClient({ escolaId }: Props) {
+export function VisualizadorOperacionalClient({ escolaId, escolaNome }: Props) {
   const [viewState, setViewState] = useState<ViewState>('portal');
   const [data, setData] = useState<{ turnos: Turno[], horariosCompletos: HorarioCompleto[], allAulas: any[] } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -159,6 +161,7 @@ export function VisualizadorOperacionalClient({ escolaId }: Props) {
                     // O `horario` acima é um qualquer da escola, só para reaproveitar a
                     // consolidação; os turnos do professor têm que vir da lista real.
                     turnosDisponiveis={data!.turnos}
+                    escolaNome={escolaNome}
                 />
             ) : (
                 <div className="flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-3xl bg-muted/5">
@@ -168,7 +171,7 @@ export function VisualizadorOperacionalClient({ escolaId }: Props) {
             )
         ) : (
             selectedTurnoId && currentHorario ? (
-                <VisualizadorHorarioClient horario={currentHorario} />
+                <VisualizadorHorarioClient horario={currentHorario} escolaNome={escolaNome} />
             ) : (
                 <div className="flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-3xl bg-muted/5">
                     <Clock className="h-16 w-16 text-muted-foreground/20 mb-4" />
