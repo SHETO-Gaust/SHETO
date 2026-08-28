@@ -7,6 +7,7 @@ import { registrarLog } from '@/lib/log-geracao';
 import { requireEscolaDoRecurso, requireEscolaDosRecursos, requireEscolaEModulo } from '@/lib/auth/guards';
 import { inepDaEscola, invalidarCacheGeracao, mensagemDeErro } from '@/lib/geracao/dados';
 import { salvarGrade } from '@/lib/geracao/salvar-grade';
+import { sincronizarPendencias } from './alocacao-actions';
 import { ORCAMENTO_PADRAO, dispararJob } from '@/lib/geracao/orquestrador';
 import {
     GeracaoEmAndamentoError,
@@ -266,6 +267,22 @@ export async function salvarGradeParcial(jobId: string, nome: string) {
      */
     if (resultado.data?.id) {
         await registrarHorarioGerado(jobId, resultado.data.id);
+
+        /**
+         * A grade salva manda mais que o relatorio da geracao.
+         *
+         * O nome ganha "(Com Pendencias)" e a lista de pendencias vem do
+         * diagnostico do motor — que e uma leitura de dentro da busca, e pode
+         * discordar da grade que acabou de ser gravada. Aconteceu na Girassol em
+         * 28/08: 405 de 405 aulas, nenhuma turma devendo nada ao cadastro, e a
+         * tela anunciou "Geracao incompleta" com uma pendencia de uma aula que
+         * estava la, com o sufixo carimbado no nome.
+         *
+         * Aqui a conta e refeita contra o cadastro e a grade recem-gravada. Se
+         * nao falta nada, nao ha pendencia nem sufixo — independente do que o
+         * diagnostico tenha dito.
+         */
+        await sincronizarPendencias(resultado.data.id);
     }
 
     await limparGradeParcial(jobId);
