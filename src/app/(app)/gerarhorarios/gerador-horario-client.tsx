@@ -704,10 +704,11 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                                     <div key={turma} className="rounded-xl border bg-background/70 p-3 shadow-sm">
                                                         <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                                                             <div className="min-w-0">
-                                                                <p className="font-bold text-sm">{turma}</p>
-                                                                <p className="text-xs text-muted-foreground leading-relaxed">
-                                                                    {itens.length} aula(s) sem encaixe:{' '}
-                                                                    {itens.map(i => `${i.disciplina_nome} (${i.professor_nome || 'sem professor'})`).join(', ')}.
+                                                                <p className="font-bold text-sm">
+                                                                    {turma}
+                                                                    <span className="ml-2 font-normal text-xs text-muted-foreground">
+                                                                        {itens.length} aula(s) sem encaixe
+                                                                    </span>
                                                                 </p>
                                                             </div>
                                                             {horarioAlocavelId ? (
@@ -726,19 +727,30 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                                                 </span>
                                                             )}
                                                         </div>
+                                                        {/*
+                                                            Uma linha por aula, com tudo que ela tem a dizer.
+
+                                                            Havia acima desta lista uma frase que repetia disciplina e
+                                                            professor de cada item — a mesma informacao duas vezes na mesma
+                                                            caixa, o que dobrava o tamanho do painel sem acrescentar nada.
+                                                            O professor passou para a linha, que e onde ele faz falta.
+
+                                                            A etiqueta de tipo so aparece em aula nao presencial: "Pres." em
+                                                            toda linha de uma lista onde quase tudo e presencial e ruido.
+                                                        */}
                                                         <ul className="space-y-1">
                                                             {itens.map((pend, idx) => (
                                                                 <li key={idx} className="text-xs flex flex-wrap items-baseline gap-x-2 border-t pt-1.5">
                                                                     <span className="font-medium">{pend.disciplina_nome}</span>
-                                                                    <span className={cn(
-                                                                        'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider',
-                                                                        pend.tipo_aula === 'presencial'
-                                                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
-                                                                            : 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300'
-                                                                    )}>
-                                                                        {pend.tipo_aula === 'presencial' ? 'Pres.' : 'NP'}
-                                                                    </span>
-                                                                    <span className="text-destructive font-medium">{pend.motivo_real}</span>
+                                                                    {pend.professor_nome && (
+                                                                        <span className="text-muted-foreground">{pend.professor_nome}</span>
+                                                                    )}
+                                                                    {pend.tipo_aula !== 'presencial' && (
+                                                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
+                                                                            NP
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="text-destructive">{pend.motivo_real}</span>
                                                                 </li>
                                                             ))}
                                                         </ul>

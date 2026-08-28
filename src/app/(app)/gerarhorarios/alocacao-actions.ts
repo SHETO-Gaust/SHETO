@@ -418,6 +418,8 @@ export async function aplicarAlocacao(
         }
     }
 
+    await sincronizarPendencias(horarioId);
+
     revalidatePath('/gerarhorarios');
     revalidatePath('/visualizarhorario');
     revalidatePath('/refinodehorario');
@@ -575,8 +577,112 @@ export async function aplicarPreenchimentoDeVagas(
         }
     }
 
+    await sincronizarPendencias(horarioId);
+
     revalidatePath('/gerarhorarios');
     revalidatePath('/visualizarhorario');
     revalidatePath('/refinodehorario');
     return { success: true };
+}
+
+/**
+ * Reconcilia o que o horário DIZ que está pendente com o que de fato falta.
+ *
+ * `horarios.pendencias` e o sufixo "(Com Pendências)" no nome são carimbados no
+ * momento em que a grade incompleta é salva, e ninguém os apagava depois. O
+ * efeito: a aula entrava — pelo preenchimento automático, pela alocação com
+ * trocas —, a grade ficava completa, e a tela continuava anunciando a pendência
+ * em cima do horário e o nome continuava dizendo que faltava alguma coisa. Só
+ * saía regerando tudo.
+ *
+ * A conta é feita contra o cadastro, não contra a lista guardada: para cada
+ * turma e disciplina, quantas aulas a série pede e quantas a grade tem. O que
+ * já foi suprido some da lista; o que ainda falta permanece com o motivo
+ * original, porque esse motivo veio do motor e não há como recalculá-lo aqui.
+ *
+ * Só REMOVE, nunca acrescenta. Uma pendência que aparecesse por outro caminho
+ * teria de vir com motivo apurado, e inventar um seria pior que não ter.
+ */
+async function sincronizarPendencias(horarioId: string): Promise<void> {
+    const supabase = await createClient();
+
+    const { data: horario } = await supabase
+        .from('horarios')
+        .select('id, nome, escola_id, pendencias')
+        .eq('id', horarioId)
+        .single();
+    if (!horario) return;
+
+    const guardadas = ((horario as any).pendencias ?? []) as {
+        turma_nome?: string;
+        disciplina_nome?: string;
+        tipo_aula?: string;
+    }[];
+
+    const nomeLimpo = ((horario as any).nome as string).replace(/\s*\(Com Pendências\)\s*$/, '');
+
+    // Nada guardado: só garante que o nome não mente.
+    if (guardadas.length === 0) {
+        if (nomeLimpo !== (horario as any).nome) {
+            await supabase.from('horarios').update({ nome: nomeLimpo }).eq('id', horarioId);
+        }
+        return;
+    }
+
+    const { data: aulas } = await supabase
+        .from('horario_aulas')
+        .select('turma_id, componente_id, tipo, turma:turmas(nome), componente:componentes_curriculares(nome)')
+        .eq('horario_id', horarioId);
+
+    const colocadas = new Map<string, number>();
+    for (const a of (aulas ?? []) as any[]) {
+        const k = `${a.turma?.nome ?? ''}|${a.componente?.nome ?? ''}|${a.tipo}`;
+        colocadas.set(k, (colocadas.get(k) ?? 0) + 1);
+    }
+
+    const { data: turmas } = await supabase
+        .from('turmas')
+        .select(
+            'nome, serie:series(componentes:series_componentes(aulas_presenciais, aulas_nao_presenciais,' +
+            ' componente:componentes_curriculares(nome)))',
+        )
+        .eq('escola_id', (horario as any).escola_id);
+
+    const exigidas = new Map<string, number>();
+    for (const t of (turmas ?? []) as any[]) {
+        for (const c of t.serie?.componentes ?? []) {
+            const nome = c.componente?.nome ?? '';
+            exigidas.set(`${t.nome}|${nome}|presencial`, c.aulas_presenciais ?? 0);
+            exigidas.set(`${t.nome}|${nome}|nao_presencial`, c.aulas_nao_presenciais ?? 0);
+        }
+    }
+
+    /**
+     * A pendência guardada continua valendo?
+     *
+     * Vale enquanto a turma ainda deve aulas daquela disciplina. Se a série pede
+     * 2 e a grade tem 2, a aula entrou e a pendência morreu — mesmo que outra
+     * linha da lista fale da mesma dupla, porque uma turma pode dever duas aulas
+     * do mesmo componente e as duas terem sido preenchidas.
+     */
+    const restanteAcumulado = new Map<string, number>();
+    const sobreviventes = guardadas.filter(p => {
+        const k = `${p.turma_nome ?? ''}|${p.disciplina_nome ?? ''}|${p.tipo_aula ?? 'presencial'}`;
+        if (!exigidas.has(k)) return true; // fora do cadastro conhecido: não é nossa conta apagar
+        const falta = (exigidas.get(k) ?? 0) - (colocadas.get(k) ?? 0);
+        const jaContadas = restanteAcumulado.get(k) ?? 0;
+        if (jaContadas >= falta) return false;
+        restanteAcumulado.set(k, jaContadas + 1);
+        return true;
+    });
+
+    if (sobreviventes.length === guardadas.length && nomeLimpo === (horario as any).nome) return;
+
+    await supabase
+        .from('horarios')
+        .update({
+            pendencias: sobreviventes,
+            nome: sobreviventes.length === 0 ? nomeLimpo : (horario as any).nome,
+        })
+        .eq('id', horarioId);
 }
