@@ -25,11 +25,36 @@ export function timeToMinutes(hhmm: string | undefined | null): number {
  * Retorna [inicio_min, fim_min] para um slot de um turno.
  * Se o turno não tiver horários definidos, retorna [-1, -1].
  */
+const cacheMinutos = new WeakMap<Turno, [number, number][]>();
+
 export function getSlotMinutes(turno: Turno | undefined, aulaIdx: number): [number, number] {
-  const h = turno?.horarios?.[aulaIdx];
-  const ini = timeToMinutes(h?.inicio);
-  const fim = timeToMinutes(h?.fim);
-  return [ini, fim];
+  if (!turno) return [-1, -1];
+
+  /**
+   * Os minutos de um slot são fixos: dependem só do turno e do índice, e o
+   * turno não muda durante uma geração. Sem esta memória, `timeToMinutes`
+   * refazia o `split(':')` e dois `parseInt` a cada pergunta de conflito —
+   * milhões de vezes por geração, e 5% do tempo total no perfil da escola de
+   * 22 turmas. `WeakMap` para o cache morrer junto com o turno, sem prender
+   * objeto nenhum na memória.
+   *
+   * Isto assume que `turno.horarios` não é reescrito com o turno em uso. Hoje
+   * ele é lido do banco e tratado como imutável em toda a geração; quem passar
+   * a editá-lo em memória precisa invalidar aqui.
+   */
+  let porIndice = cacheMinutos.get(turno);
+  if (!porIndice) {
+    porIndice = [];
+    cacheMinutos.set(turno, porIndice);
+  }
+
+  const guardado = porIndice[aulaIdx];
+  if (guardado) return guardado;
+
+  const h = turno.horarios?.[aulaIdx];
+  const calculado: [number, number] = [timeToMinutes(h?.inicio), timeToMinutes(h?.fim)];
+  porIndice[aulaIdx] = calculado;
+  return calculado;
 }
 
 /**
