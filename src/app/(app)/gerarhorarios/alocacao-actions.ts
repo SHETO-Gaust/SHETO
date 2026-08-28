@@ -603,7 +603,7 @@ export async function aplicarPreenchimentoDeVagas(
  * Só REMOVE, nunca acrescenta. Uma pendência que aparecesse por outro caminho
  * teria de vir com motivo apurado, e inventar um seria pior que não ter.
  */
-async function sincronizarPendencias(horarioId: string): Promise<void> {
+export async function sincronizarPendencias(horarioId: string): Promise<void> {
     const supabase = await createClient();
 
     const { data: horario } = await supabase

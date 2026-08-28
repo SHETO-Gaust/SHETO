@@ -401,6 +401,46 @@ async function medir(caso: Caso, orcamento: number, repeticoes: number) {
             );
         }
 
+        /**
+         * O que o motor DECLARA pendente tem de bater com o que a grade DEVE.
+         *
+         * Sem esta conferencia passou o defeito visto em 28/08 na Girassol: a
+         * grade fechou 405 de 405 aulas, nenhuma turma devendo nada, e o motor
+         * declarou uma pendencia — de uma aula que estava la. `pendentes` saia
+         * da anotacao `placed` do bloco, e o reparo coloca aula sem sempre achar
+         * o bloco para marcar. A tela entao anunciava "Geracao incompleta" sobre
+         * uma grade completa e carimbava "(Com Pendencias)" no nome.
+         *
+         * A conta aqui e independente do motor: cadastro menos grade.
+         */
+        const posto = new Map<string, number>();
+        for (const a of res.aulas) {
+            posto.set(`${a.turma_id}|${a.componente_id}|${a.tipo}`, (posto.get(`${a.turma_id}|${a.componente_id}|${a.tipo}`) ?? 0) + 1);
+        }
+        let faltamDeVerdade = 0;
+        for (const t of dados.turmasDoTurno as any[]) {
+            for (const c of t.serie?.componentes ?? []) {
+                for (const tipo of ['presencial', 'nao_presencial'] as const) {
+                    const carga = tipo === 'presencial' ? c.aulas_presenciais ?? 0 : c.aulas_nao_presenciais ?? 0;
+                    if (carga <= 0) continue;
+                    const k = `${t.id}|${c.componente_id}|${tipo}`;
+                    faltamDeVerdade += Math.max(0, carga - (posto.get(k) ?? 0));
+                }
+            }
+        }
+        const declaradasPend = res.success ? 0 : res.melhorPendentes;
+        if (faltamDeVerdade === 0 && declaradasPend > 0) {
+            problemas.push(
+                `grade COMPLETA declarada com ${declaradasPend} pendencia(s): ` +
+                'nenhuma turma deve aula ao cadastro'
+            );
+        }
+        if (faltamDeVerdade > 0 && declaradasPend === 0) {
+            problemas.push(
+                `grade INCOMPLETA declarada como fechada: faltam ${faltamDeVerdade} aula(s) ao cadastro`
+            );
+        }
+
         resultados.push({
             pendentes: res.success ? 0 : res.melhorPendentes,
             aulas: res.aulas.length,

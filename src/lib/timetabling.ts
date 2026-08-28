@@ -2020,6 +2020,25 @@ export function gerarHorarioAlgoritmico(
 
     tentarRepairPendencias();
 
+    /**
+     * Reler a grade antes de declarar o que ficou pendente.
+     *
+     * `placed` e uma anotacao no bloco; a verdade e a grade. O reparo coloca
+     * aula chamando `addAulaState` com metas reconstruidas e nem sempre acha o
+     * bloco original para marcar — o proprio comentario de `recomputarColocados`
+     * avisa disso. Sem esta releitura, `pendentes` saia da anotacao velha.
+     *
+     * O estrago era visivel: a Girassol fechou 405 de 405 aulas, com nenhuma
+     * turma devendo nada, e a tela anunciou "Geracao incompleta", gravou uma
+     * pendencia de uma aula que estava la (34.02 / Nivelamento de Matematica) e
+     * carimbou "(Com Pendencias)" no nome do horario. Grade completa nao pode
+     * voltar com pendencia.
+     *
+     * Vale nos dois sentidos: se o reparo desmanchou uma geminacao ao remendar,
+     * o bloco volta a contar como pendente, que tambem e a verdade da grade.
+     */
+    recomputarColocados();
+
     const pendentes = todosOsBlocos.filter(b => !b.placed);
     return {
       success: pendentes.length === 0,
