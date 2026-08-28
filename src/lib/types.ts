@@ -221,6 +221,12 @@ export type HorarioAulaGerada = {
   dia_semana: string;
   aula_index: number;
   tipo: 'presencial' | 'nao_presencial';
+  /**
+   * Turno físico onde a aula acontece. Existe na tabela desde sempre; faltava
+   * no tipo, e sem ele a agenda do professor não conseguia dizer em que grade
+   * cada aula entra sem cair no `any`.
+   */
+  turno_id?: string | null;
   // Fixed/shared class tracking (mirrors DB columns added in aulas_fixas migration)
   aula_fixa_id?: string | null;
   compartilhada?: boolean;
@@ -251,12 +257,12 @@ export type HorarioCompleto = Horario & {
     turno_oposto?: Turno;
     aulas: (HorarioAulaGerada & {
         componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
-        professor: Pick<Professor, 'id' | 'nome_horario' | 'restricoes' | 'livre_docencia' | 'sem_preferencia_livre_docencia'> | null;
+        professor: Pick<Professor, 'id' | 'nome_horario' | 'restricoes' | 'livre_docencia' | 'sem_preferencia_livre_docencia' | 'turnos_ids'> | null;
         turma: Pick<Turma, 'id' | 'nome'>;
     })[];
     outras_aulas_publicadas?: (HorarioAulaGerada & {
         componente: Pick<ComponenteCurricular, 'id' | 'nome' | 'sigla'>;
-        professor: Pick<Professor, 'id' | 'nome_horario' | 'restricoes' | 'livre_docencia' | 'sem_preferencia_livre_docencia'> | null;
+        professor: Pick<Professor, 'id' | 'nome_horario' | 'restricoes' | 'livre_docencia' | 'sem_preferencia_livre_docencia' | 'turnos_ids'> | null;
         turma: Pick<Turma, 'id' | 'nome'>;
         horario: { turno: Turno };
     })[];

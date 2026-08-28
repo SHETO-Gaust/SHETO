@@ -46,7 +46,7 @@ export async function getHorariosEscolaCompletos(escolaId: string) {
                 *, 
                 aula_fixa_id, compartilhada, aula_compartilhada_id,
                 componente:componentes_curriculares(id, nome, sigla), 
-                professor:professores(id, nome_horario, restricoes, livre_docencia, sem_preferencia_livre_docencia), 
+                professor:professores(id, nome_horario, restricoes, livre_docencia, sem_preferencia_livre_docencia, turnos_ids), 
                 turma:turmas(id, nome),
                 horario:horarios!inner(id, status, turno_id, turno:turnos(*))
             `)
