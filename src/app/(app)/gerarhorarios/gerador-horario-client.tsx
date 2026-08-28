@@ -70,6 +70,40 @@ function getTurnoColor(nome: string): string {
     return TURNO_COLORS[Math.abs(hash) % TURNO_COLORS.length];
 }
 
+/**
+ * Dispensa do painel de resultado da geração.
+ *
+ * O desfecho mora na tabela `geracao_jobs` e é relido a cada visita à página, e
+ * o "Dispensar" só apagava o estado local: bastava recarregar, navegar e voltar,
+ * ou salvar a grade e seguir o fluxo, para o mesmo painel reaparecer — de fora
+ * parece que o botão não funciona. Guardar qual job foi dispensado faz a decisão
+ * durar. É preferência de leitura de um usuário, não dado da geração: fica no
+ * navegador, e não custa uma coluna nova no banco.
+ *
+ * Uma chave só, com o id do último job dispensado: `lerJobRelevante` devolve no
+ * máximo um job por escola, então não há o que acumular. Geração nova tem id
+ * novo e volta a aparecer, que é o comportamento desejado.
+ */
+const CHAVE_DISPENSA = 'she:geracao-dispensada';
+
+function foiDispensado(jobId: string): boolean {
+    try {
+        return window.localStorage.getItem(CHAVE_DISPENSA) === jobId;
+    } catch {
+        // Navegador com armazenamento bloqueado: o painel aparece, e o botão
+        // continua funcionando dentro da sessão.
+        return false;
+    }
+}
+
+function marcarDispensado(jobId: string): void {
+    try {
+        window.localStorage.setItem(CHAVE_DISPENSA, jobId);
+    } catch {
+        /* sem persistência; a dispensa vale só para esta visita */
+    }
+}
+
 export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioClientProps) {
     const router = useRouter();
     const [selectedTurnoId, setSelectedTurnoId] = useState<string>('todos');
@@ -222,10 +256,21 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         getEstadoGeracao(escolaId).then(({ data }) => {
             if (data) {
                 setGeracao(data);
-                setResultadoVisivel(!data.emAndamento && Boolean(data.erro || data.diagnostico));
+                setResultadoVisivel(
+                    !data.emAndamento && Boolean(data.erro || data.diagnostico) && !foiDispensado(data.id)
+                );
             }
         });
     }, [escolaId]);
+
+    /**
+     * Dispensar não é só esconder: o desfecho continua no banco e seria relido na
+     * próxima visita. Grava a decisão antes de fechar o painel.
+     */
+    const handleDispensarResultado = () => {
+        if (geracao) marcarDispensado(geracao.id);
+        setResultadoVisivel(false);
+    };
 
     /**
      * Poll do andamento.
@@ -572,7 +617,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                 um jeito de dispensar, ele ficaria na tela para sempre. */}
                             <button
                                 type="button"
-                                onClick={() => setResultadoVisivel(false)}
+                                onClick={handleDispensarResultado}
                                 aria-label="Dispensar este resultado"
                                 className={cn(
                                     'absolute right-4 top-4 text-xs font-bold uppercase tracking-wider',
