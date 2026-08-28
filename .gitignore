@@ -65,3 +65,6 @@ __pycache__/
 
 # dumps de log trazidos da VM para investigacao — contem nomes de professores
 log-vm*.txt
+
+# build de verificacao (npm run build:check), para nao derrubar o dev server
+/.next-check/
