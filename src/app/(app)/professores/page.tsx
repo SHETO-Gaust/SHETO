@@ -22,11 +22,13 @@ export default async function ProfessoresPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('ue')
+    .select('ue, escolas(escolar)')
     .eq('id', user.id)
     .single();
 
   const escolaId = profile?.ue;
+  // Nome da unidade para o cabeçalho dos PDFs (ver `@/lib/pdf-layout`).
+  const escolaNome = (profile as any)?.escolas?.escolar ?? null;
 
   if (!escolaId) {
     return (
@@ -63,6 +65,7 @@ export default async function ProfessoresPage() {
             <ProfessoresClient 
                 initialProfessores={professores || []} 
                 escolaId={escolaId}
+                escolaNome={escolaNome}
                 turnosDaEscola={turnos as Turno[] || []}
                 componentesDaEscola={componentes as ComponenteCurricular[] || []}
             />

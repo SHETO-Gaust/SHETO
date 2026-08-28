@@ -6,6 +6,7 @@
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import type { HorarioCompleto, Turno } from '@/lib/types';
+import { abrirImpressaoPDF, cabecalhoPDF, dataPorExtenso, esc, rodapePDF } from '@/lib/pdf-layout';
 
 /** Remove caracteres proibidos em nomes de aba do Excel: : \ / ? * [ ] */
 function sanitizeSheetName(name: string): string {
@@ -266,13 +267,6 @@ export function exportarHorarioXLSX(horario: HorarioCompleto): void {
 
 // ─── PDF ────────────────────────────────────────────────────────────────────
 
-/** Escapa texto vindo do banco antes de entrar no HTML da impressão. */
-function esc(valor: unknown): string {
-  return String(valor ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
 /** Uma tabela de grade (uma turma, um tipo) como HTML. */
 function tabelaHTML(
   turmaId: string,
@@ -336,16 +330,34 @@ function tabelaHTML(
     </section>`;
 }
 
+const CSS_GRADE = `
+  .grade { margin-bottom: 22px; break-inside: avoid; page-break-inside: avoid; }
+  .grade h2 { font-size: 13px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .grade h2 small { font-weight: 500; text-transform: none; color: #6b7280; margin-left: 8px; letter-spacing: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #d1d5db; padding: 5px 6px; font-size: 10px; text-align: center; vertical-align: middle; }
+  thead th { background: #f3f4f6; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  th.hora { width: 78px; background: #f9fafb; font-weight: 700; }
+  th.hora small { display: block; font-weight: 400; color: #6b7280; font-size: 8px; }
+  td .disc { display: block; font-weight: 700; }
+  td .prof { display: block; color: #4b5563; font-size: 9px; }
+  td.vazia { background: #fafafa; }
+  td.choque { background: #fef2f2; outline: 1.5px solid #dc2626; }
+  hr.sep { border: 0; border-top: 1px dashed #dc2626; margin: 3px 0; }
+  tr.intervalo td { background: #f9fafb; font-size: 9px; letter-spacing: .18em; color: #6b7280; padding: 2px; }
+  p.fora { font-size: 9px; color: #b45309; margin: 4px 0 0; }
+`;
+
 /**
  * Abre a janela de impressão com o horário COMPLETO — todas as turmas, e o
  * contraturno quando existe. O usuário escolhe "Salvar como PDF".
  *
  * Sem biblioteca de PDF de propósito: a VM do estado onde o sistema roda não
  * tem acesso à internet (ver `migracao/ESTADO.md`), e o diálogo de impressão do
- * navegador já gera PDF em qualquer máquina. É o mesmo caminho que a exportação
- * de restrições dos professores já usa.
+ * navegador já gera PDF em qualquer máquina. Cabeçalho e rodapé vêm de
+ * `@/lib/pdf-layout`, comuns a todos os relatórios.
  */
-export function exportarHorarioPDF(horario: HorarioCompleto): void {
+export function exportarHorarioPDF(horario: HorarioCompleto, escolaNome?: string | null): void {
   const turno = horario.turno;
   const isIntegral = turno.nome.toLowerCase().includes('integral');
 
@@ -372,54 +384,16 @@ export function exportarHorarioPDF(horario: HorarioCompleto): void {
     return regular + contraturno;
   }).join('');
 
-  const win = window.open('', '_blank');
-  if (!win) {
-    alert('O navegador bloqueou a janela de impressão. Libere os pop-ups para este site e tente de novo.');
-    return;
-  }
+  const cabecalho = cabecalhoPDF({
+    escolaNome,
+    titulo: `${horario.nome} — Turno ${turno.nome}`,
+    subtitulo: `${turmas.length} turma(s) · gerado em ${dataPorExtenso()}`,
+  });
 
-  const gerado = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-
-  win.document.write(`<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(horario.nome)}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #111827; }
-  header { border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 20px; }
-  header h1 { font-size: 18px; margin: 0 0 4px; }
-  header p { font-size: 11px; color: #6b7280; margin: 0; }
-  .grade { margin-bottom: 22px; break-inside: avoid; page-break-inside: avoid; }
-  .grade h2 { font-size: 13px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .04em; }
-  .grade h2 small { font-weight: 500; text-transform: none; color: #6b7280; margin-left: 8px; letter-spacing: 0; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #d1d5db; padding: 5px 6px; font-size: 10px; text-align: center; vertical-align: middle; }
-  thead th { background: #f3f4f6; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
-  th.hora { width: 78px; background: #f9fafb; font-weight: 700; }
-  th.hora small { display: block; font-weight: 400; color: #6b7280; font-size: 8px; }
-  td .disc { display: block; font-weight: 700; }
-  td .prof { display: block; color: #4b5563; font-size: 9px; }
-  td.vazia { background: #fafafa; }
-  td.choque { background: #fef2f2; outline: 1.5px solid #dc2626; }
-  hr.sep { border: 0; border-top: 1px dashed #dc2626; margin: 3px 0; }
-  tr.intervalo td { background: #f9fafb; font-size: 9px; letter-spacing: .18em; color: #6b7280; padding: 2px; }
-  p.fora { font-size: 9px; color: #b45309; margin: 4px 0 0; }
-  footer { margin-top: 24px; text-align: center; font-size: 9px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; }
-  @page { size: A4 landscape; margin: 12mm; }
-  @media print { body { padding: 0; } }
-</style></head>
-<body>
-  <header>
-    <h1>${esc(horario.nome)}</h1>
-    <p>Turno ${esc(turno.nome)} &middot; ${turmas.length} turma(s) &middot; gerado em ${esc(gerado)}</p>
-  </header>
-  ${secoes}
-  <footer>SHE — Sistema de Horário Escolar</footer>
-  <script>
-    window.onload = function () {
-      window.print();
-      window.onafterprint = function () { window.close(); };
-    };
-  </script>
-</body></html>`);
-  win.document.close();
+  abrirImpressaoPDF({
+    titulo: horario.nome,
+    css: CSS_GRADE,
+    orientacao: 'paisagem',
+    corpo: `${cabecalho}${secoes}${rodapePDF()}`,
+  });
 }

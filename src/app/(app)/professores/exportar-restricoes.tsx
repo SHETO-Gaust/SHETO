@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import type { ProfessorComDados, Turno, LivreDocenciaPeriodo } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { FileDown } from 'lucide-react';
+import { abrirImpressaoPDF, cabecalhoPDF, dataPorExtenso, rodapePDF } from '@/lib/pdf-layout';
 
 const DIAS_SEMANA_ORDERED = [
   { id: 'segunda', label: 'Segunda' },
@@ -20,62 +21,12 @@ const PERIODOS_LABELS: Record<LivreDocenciaPeriodo, string> = {
   noturno:    'Noite',
 };
 
-interface ExportarRestricoesProps {
-  professores: ProfessorComDados[];
-  turnosDaEscola: Turno[];
-}
-
-export function ExportarRestricoes({ professores, turnosDaEscola }: ExportarRestricoesProps) {
-  const printRef = useRef<HTMLDivElement>(null);
-
-  const handleExport = () => {
-    if (!printRef.current) return;
-
-    const printContent = printRef.current.innerHTML;
-    const win = window.open('', '_blank', 'width=900,height=700');
-    if (!win) return;
-
-    win.document.write(`<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <title>Restrições de Horário — Professores</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      font-size: 11px;
-      color: #1a1a2e;
-      background: #fff;
-      padding: 24px;
-    }
-
-    .print-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 3px solid #4f46e5;
-      padding-bottom: 12px;
-      margin-bottom: 24px;
-    }
-    .print-header h1 {
-      font-size: 20px;
-      font-weight: 900;
-      color: #4f46e5;
-      letter-spacing: -0.5px;
-    }
-    .print-header .subtitle {
-      font-size: 10px;
-      color: #6b7280;
-      margin-top: 2px;
-    }
-    .print-header .date {
-      font-size: 10px;
-      color: #9ca3af;
-      text-align: right;
-    }
-
+/**
+ * Estilos próprios deste relatório. Cabeçalho, rodapé e a base da página vêm de
+ * `@/lib/pdf-layout`, iguais aos dos demais PDFs do sistema.
+ */
+const CSS_RESTRICOES = `
+  body { font-size: 11px; color: #1a1a2e; }
     /* --- Professor card --- */
     .professor-card {
       break-inside: avoid;
@@ -283,40 +234,33 @@ export function ExportarRestricoes({ professores, turnosDaEscola }: ExportarRest
       gap: 6px;
       font-size: 10px;
     }
+`;
 
-    /* Footer */
-    .print-footer {
-      margin-top: 28px;
-      text-align: center;
-      font-size: 9px;
-      color: #d1d5db;
-      border-top: 1px solid #f3f4f6;
-      padding-top: 10px;
-    }
+interface ExportarRestricoesProps {
+  professores: ProfessorComDados[];
+  turnosDaEscola: Turno[];
+  escolaNome?: string | null;
+}
 
-    @media print {
-      body { padding: 16px; }
-      .professor-card { break-inside: avoid; }
-    }
-  </style>
-</head>
-<body>
-  ${printContent}
-  <script>
-    window.onload = function() {
-      window.print();
-      window.onafterprint = function() { window.close(); };
-    };
-  </script>
-</body>
-</html>`);
-    win.document.close();
+export function ExportarRestricoes({ professores, turnosDaEscola, escolaNome }: ExportarRestricoesProps) {
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const handleExport = () => {
+    if (!printRef.current) return;
+
+    abrirImpressaoPDF({
+      titulo: 'Restrições de Horário — Professores',
+      css: CSS_RESTRICOES,
+      corpo:
+        cabecalhoPDF({
+          escolaNome,
+          titulo: 'Relatório de Restrições de Horário (Consolidado)',
+          subtitulo: `${professores.length} professor(es) · gerado em ${dataPorExtenso()}`,
+        }) +
+        printRef.current.innerHTML +
+        rodapePDF(),
+    });
   };
-
-  // Renderiza o conteúdo invisível que será clonado para a janela de impressão
-  const now = new Date().toLocaleDateString('pt-BR', {
-    day: '2-digit', month: 'long', year: 'numeric',
-  });
 
   return (
     <>
@@ -327,15 +271,6 @@ export function ExportarRestricoes({ professores, turnosDaEscola }: ExportarRest
 
       {/* Conteúdo oculto para impressão — renderizado no DOM mas invisível */}
       <div ref={printRef} style={{ display: 'none' }}>
-        {/* Cabeçalho */}
-        <div className="print-header">
-          <div>
-            <h1>Restrições de Horário</h1>
-            <div className="subtitle">Relatório consolidado de disponibilidades, livre docência e indisponibilidades</div>
-          </div>
-          <div className="date">Gerado em {now}</div>
-        </div>
-
         {/* Um card por professor */}
         {professores.map((prof) => {
           const temRestricoes = prof.turnos.some((turno) => {
@@ -502,10 +437,6 @@ export function ExportarRestricoes({ professores, turnosDaEscola }: ExportarRest
           </div>
         </div>
 
-        {/* Rodapé */}
-        <div className="print-footer">
-          Sistema de Gestão de Horários · Exportado em {now} · {professores.length} professor(es) listados
-        </div>
       </div>
     </>
   );
