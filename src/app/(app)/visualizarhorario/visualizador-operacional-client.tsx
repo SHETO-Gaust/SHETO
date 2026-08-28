@@ -156,6 +156,9 @@ export function VisualizadorOperacionalClient({ escolaId }: Props) {
                     }}
                     forceView="teachers"
                     forceTeacherId={selectedProfessorId}
+                    // O `horario` acima é um qualquer da escola, só para reaproveitar a
+                    // consolidação; os turnos do professor têm que vir da lista real.
+                    turnosDisponiveis={data!.turnos}
                 />
             ) : (
                 <div className="flex flex-col items-center justify-center p-20 text-center border-2 border-dashed rounded-3xl bg-muted/5">
