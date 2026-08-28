@@ -25,11 +25,22 @@ import type {
 export async function lerTurmas(escolaId: string): Promise<{ data?: TurmaComDados[]; error?: string }> {
     const supabase = await createClient();
     try {
+        /*
+         * `restricoes` da série é obrigatório no select abaixo.
+         *
+         * O motor lê `serie_restricoes` em seis pontos de `timetabling.ts` para
+         * nunca pôr aula num slot que a série fechou, e o certificado de
+         * inviabilidade desconta esses slots da capacidade da turma. Como toda a
+         * leitura passa por `?.`, a coluna ausente não dá erro: vira `undefined`,
+         * toda comparação com 'proibido' dá falso, e a grade sai violando as
+         * restrições em silêncio. O tipo `TurmaComDados` sempre declarou o campo,
+         * então o TypeScript também não acusava.
+         */
         const { data: turmas, error: turmasError } = await supabase
             .from('turmas')
             .select(`
         *,
-        serie:series(id, nome, turno_id, componentes:series_componentes(*, componente:componentes_curriculares(id, nome, sigla))),
+        serie:series(id, nome, turno_id, restricoes, componentes:series_componentes(*, componente:componentes_curriculares(id, nome, sigla))),
         professores:turmas_professores(*, professor:professores(id, nome_horario)),
         aulas_fixas:turmas_aulas_fixas(*)
       `)
