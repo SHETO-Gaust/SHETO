@@ -43,7 +43,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
             Política de Privacidade
           </Link>
           <Image
-            src="/img/brasao_pb.svg"
+            src="/img/brasao_pb.png"
             alt="Brasão do Estado do Tocantins"
             width={53}
             height={64}

@@ -17,4 +17,4 @@ export const LINK_PRIVACIDADE = '/politica-de-privacidade';
 export const LOGO_SISTEMA = '/img/elements/02.png';
 
 /** Brasão do Estado do Tocantins, o mesmo das telas públicas de autenticação. */
-export const LOGO_BRASAO = '/img/brasao_pb.svg';
+export const LOGO_BRASAO = '/img/brasao_pb.png';

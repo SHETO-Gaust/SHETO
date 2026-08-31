@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useTransition, useEffect } from 'react';
+import { useState, useMemo, useTransition, useEffect, useCallback } from 'react';
 import type { HorarioCompleto, Turno, LivreDocenciaPeriodo } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho } from '../actions';
 import { useToast } from '@/hooks/use-toast';
 import { exportarHorarioXLSX, exportarHorarioPDF } from '@/lib/export-horario';
-import { exportarGradeProfessorPDF } from '@/lib/export-grade-professor';
+import { exportarGradeProfessorPDF, exportarGradeTodosProfessoresPDF, type MarcaSlotLivre } from '@/lib/export-grade-professor';
 import { Badge } from '@/components/ui/badge';
 import { etiquetaDoSlot, temRestricaoNoTurno, type EtiquetaSlot, type TomEtiqueta } from '@/lib/restricoes-slot';
 import {
@@ -411,9 +411,15 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
     );
   };
 
-  const TeacherIndividualView = ({ professorId }: { professorId: string }) => {
-    const prof = professores.find(p => p.id === professorId);
-    if (!prof) return null;
+  /**
+   * Os blocos (um por turno) que compõem a agenda consolidada de um professor.
+   *
+   * Vive fora da view porque três lugares precisam do mesmo resultado: a tela,
+   * o "PDF do professor" e o "PDF completo" da consulta por docente, que roda
+   * isto para a unidade inteira.
+   */
+  const blocosDoProfessor = useCallback((prof: any) => {
+    const professorId = prof.id;
 
     const allTeacherAulas = [
         ...horario.aulas.filter(a => a.professor_id === professorId),
@@ -469,10 +475,10 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
 
     /**
      * Um bloco por turno, já com as aulas do professor naquele turno. A tela
-     * desenha uma tabela por bloco; o PDF individual funde os blocos numa régua
-     * de horários só. Os dois partem daqui para não divergirem.
+     * desenha uma tabela por bloco; os PDFs fundem os blocos numa régua de
+     * horários só. Todos partem daqui para não divergirem.
      */
-    const blocos = turnosEnvolvidos.map(turno => ({
+    return turnosEnvolvidos.map(turno => ({
         turno,
         aulas: allTeacherAulas.filter(a => {
             if (a.turno_id) return a.turno_id === turno.id;
@@ -484,6 +490,60 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
             return (a as any).horario?.turno_id === turno.id;
         }),
     }));
+  }, [horario, turnosDisponiveis]);
+
+  /**
+   * O "PDF completo" segue a visão aberta: por turma sai a grade de todas as
+   * turmas; por professor sai a semana de todos os docentes, um por folha.
+   */
+  const visaoPorProfessor = viewMode === 'teachers';
+
+  const tituloPdfCompleto = visaoPorProfessor
+    ? 'A semana de todos os professores da unidade, um por folha'
+    : 'Todas as turmas do turno, montado a partir dos dados salvos';
+
+  /**
+   * PDF de professor pedido, à espera de como imprimir o horário livre.
+   *
+   * O relatório só é montado depois da resposta — guardar aqui o escopo (um
+   * docente ou a unidade inteira) evita duas cópias do diálogo na árvore, já
+   * que os dois botões fazem a mesma pergunta.
+   */
+  const [pdfProfessorPendente, setPdfProfessorPendente] =
+    useState<{ escopo: 'individual'; professorId: string } | { escopo: 'todos' } | null>(null);
+
+  const handlePdfCompleto = () => {
+    if (visaoPorProfessor) {
+      setPdfProfessorPendente({ escopo: 'todos' });
+      return;
+    }
+    exportarHorarioPDF(horario, escolaNome);
+  };
+
+  const gerarPdfProfessor = (slotLivre: MarcaSlotLivre) => {
+    const pedido = pdfProfessorPendente;
+    setPdfProfessorPendente(null);
+    if (!pedido) return;
+
+    if (pedido.escopo === 'todos') {
+      exportarGradeTodosProfessoresPDF({
+        grades: professores.map(prof => ({ professor: prof, blocos: blocosDoProfessor(prof) })),
+        escolaNome,
+        slotLivre,
+      });
+      return;
+    }
+
+    const prof = professores.find(p => p.id === pedido.professorId);
+    if (!prof) return;
+    exportarGradeProfessorPDF({ professor: prof, blocos: blocosDoProfessor(prof), escolaNome, slotLivre });
+  };
+
+  const TeacherIndividualView = ({ professorId }: { professorId: string }) => {
+    const prof = professores.find(p => p.id === professorId);
+    if (!prof) return null;
+
+    const blocos = blocosDoProfessor(prof);
 
     return (
         <div className="space-y-8 pt-4 break-after-page print:pt-0">
@@ -499,7 +559,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                     variant="outline"
                     size="sm"
                     className="ml-auto gap-2 print:hidden text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/30 dark:hover:text-rose-300"
-                    onClick={() => exportarGradeProfessorPDF({ professor: prof, blocos, escolaNome })}
+                    onClick={() => setPdfProfessorPendente({ escopo: 'individual', professorId })}
                     title="A semana do professor em uma folha, com todos os turnos na mesma régua de horários"
                 >
                     <FileText className="h-4 w-4" /> PDF do professor
@@ -654,8 +714,12 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                   tela" reproduz a visualização atual, então em modo "turma única"
                   ou "por dia" ele sai com uma turma só, que é o que se esperava
                   dele mas não o que se espera de um PDF do horário.
+
+                  "Inteiro" depende de por onde se está olhando: na consulta por
+                  professor o assunto é o corpo docente, e sair com as turmas ali
+                  era o completo do outro relatório.
               */}
-              <Button variant="outline" size="sm" onClick={() => exportarHorarioPDF(horario, escolaNome)} className="gap-2 text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/30 dark:hover:text-rose-300">
+              <Button variant="outline" size="sm" onClick={handlePdfCompleto} title={tituloPdfCompleto} className="gap-2 text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/30 dark:hover:text-rose-300">
                   <FileText className="h-4 w-4" /> PDF completo
               </Button>
               <Button variant="outline" size="sm" onClick={() => window.print()} title="Imprime exatamente o que está sendo exibido nesta tela">
@@ -739,6 +803,58 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
           ) : <RenderByDay />}
         </CardContent>
       </Card>
+
+      {/*
+          Os horários livres do professor são o único ponto em que os dois PDFs
+          docentes admitem duas leituras igualmente corretas, e a unidade é que
+          sabe qual vale — daí a pergunta em vez de um padrão fixo. Aula e
+          restrição saem iguais nas duas opções.
+      */}
+      <AlertDialog
+        open={pdfProfessorPendente !== null}
+        onOpenChange={aberto => { if (!aberto) setPdfProfessorPendente(null); }}
+      >
+        <AlertDialogContent className="print:hidden">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Como imprimir os horários livres?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pdfProfessorPendente?.escopo === 'todos'
+                ? 'Nos horários em que o professor não tem aula nem restrição cadastrada, o relatório de todos os docentes pode sair de duas formas:'
+                : 'Nos horários em que o professor não tem aula nem restrição cadastrada, o relatório pode sair de duas formas:'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="grid gap-3 sm:grid-cols-2 py-2">
+            <button
+              type="button"
+              onClick={() => gerarPdfProfessor('traco')}
+              className="rounded-lg border-2 p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+            >
+              <span className="block font-bold text-sm">Deixar em branco</span>
+              <span className="mt-2 block text-2xl leading-none tracking-widest text-muted-foreground">———</span>
+              <span className="mt-2 block text-xs text-muted-foreground">
+                A célula sai tracejada, como um horário sem compromisso definido.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => gerarPdfProfessor('planejamento')}
+              className="rounded-lg border-2 p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+            >
+              <span className="block font-bold text-sm">Escrever o destino</span>
+              <span className="mt-2 block text-sm font-semibold uppercase tracking-wide text-muted-foreground">Plan. Individual</span>
+              <span className="mt-2 block text-xs text-muted-foreground">
+                A célula afirma que o tempo é de planejamento individual do docente.
+              </span>
+            </button>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
