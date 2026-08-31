@@ -114,6 +114,24 @@ export function dispararJob(job: GeracaoJob): void {
     void executarJob(job)
         .catch(async (err) => {
             console.error(`[geracao] job ${job.id} morreu de forma inesperada:`, err);
+            /**
+             * O stack vai para o log.txt, não só para o stdout do pm2.
+             *
+             * A tela mostra apenas `err.message`, e uma mensagem como "Cannot
+             * read properties of undefined" sem o rastro não localiza nada — foi
+             * exatamente o que aconteceu com uma falha em produção que não deixou
+             * uma única linha atribuída à escola. O `catch` de fora existe porque
+             * um erro ao registrar o erro não pode impedir o job de ser encerrado.
+             */
+            try {
+                const inep = await inepDaEscola(job.escola_id);
+                registrarLog(
+                    inep,
+                    `JOB MORREU | id=${job.id} | ${err instanceof Error && err.stack ? err.stack : mensagemDeErro(err)}`
+                );
+            } catch (err2) {
+                console.error(`[geracao] job ${job.id}: falha ao registrar o rastro:`, err2);
+            }
             try {
                 await finalizarJob(job.id, 'falhou', { erro: mensagemDeErro(err) });
             } catch (err2) {

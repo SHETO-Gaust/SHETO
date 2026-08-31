@@ -114,6 +114,61 @@ function assinaturaDoBuild(): number {
   }
 }
 
+/**
+ * Campos do resultado que o orquestrador lê sem perguntar.
+ *
+ * O worker é compilado à parte e carregado por caminho absoluto: nada garante
+ * que o `.js` em disco seja do mesmo build que o servidor. Quando ele fica para
+ * trás, o motor devolve um resultado com MENOS campos do que quem chama espera
+ * — e o sintoma, em produção, foi um `Cannot read properties of undefined
+ * (reading 'length')` gravado como erro do job, sobre `geminacoesQuebradas`,
+ * que só existe no motor desde 21/08. A mensagem não dizia nem onde nem o que
+ * fazer, e a tela a exibia como "não foi possível fechar a grade".
+ *
+ * A conferência é estrutural de propósito: não há número de versão para manter
+ * em dia, e qualquer campo que o worker deixe de mandar aparece aqui pelo nome.
+ */
+const CAMPOS_OBRIGATORIOS: [campo: string, valido: (r: any) => boolean][] = [
+  ['success', (r) => typeof r.success === 'boolean'],
+  ['aulas', (r) => Array.isArray(r.aulas)],
+  ['attemptsMade', (r) => typeof r.attemptsMade === 'number'],
+  ['melhorPendentes', (r) => typeof r.melhorPendentes === 'number'],
+  ['pesos', (r) => !!r.pesos && typeof r.pesos === 'object'],
+  ['geminacoesQuebradas', (r) => Array.isArray(r.geminacoesQuebradas)],
+];
+
+/** Nomes dos campos que faltaram, ou `null` quando o resultado está inteiro. */
+function camposAusentes(resultado: unknown): string | null {
+  if (!resultado || typeof resultado !== 'object') return 'resultado (resposta vazia)';
+  const faltando = CAMPOS_OBRIGATORIOS
+    .filter(([, valido]) => !valido(resultado))
+    .map(([campo]) => campo);
+  return faltando.length > 0 ? faltando.join(', ') : null;
+}
+
+function mensagemDeBuildAntigo(faltando: string): string {
+  return (
+    `O motor compilado respondeu sem ${faltando} — ele é de um build anterior ao do servidor. ` +
+    `Rode "npm run build:worker" (o "npm run build" já faz isso) e reinicie o processo. ` +
+    `Arquivo em uso: ${caminhoDoWorker()}.`
+  );
+}
+
+/**
+ * Erro do motor com o rastro do motor.
+ *
+ * `job.reject(new Error(resp.erro))` cria a exceção AQUI, e o stack dela aponta
+ * para este arquivo — nunca para a linha do motor que estourou. O worker manda
+ * o stack verdadeiro junto dos logs; sem colá-lo de volta, ele só chegaria ao
+ * log.txt no pedaço que por acaso estivesse com o registro ligado.
+ */
+function erroDoWorker(mensagem: string | undefined, logs: string[] | undefined): Error {
+  const erro = new Error(mensagem ?? 'Falha desconhecida na geração.');
+  const rastro = (logs ?? []).filter((l) => l.startsWith('ERRO: '));
+  if (rastro.length > 0) erro.stack = `${erro.message}\n${rastro.join('\n')}`;
+  return erro;
+}
+
 class TimetablingPool {
   private livres: Worker[] = [];
   private ocupados = new Set<Worker>();
@@ -179,8 +234,17 @@ class TimetablingPool {
           }
         }
 
-        if (resp.ok) job.resolve(resp.resultado as ResultadoGeracao);
-        else job.reject(new Error(resp.erro ?? 'Falha desconhecida na geração.'));
+        if (resp.ok) {
+          const faltando = camposAusentes(resp.resultado);
+          if (faltando) {
+            job.reject(new Error(mensagemDeBuildAntigo(faltando)));
+            return;
+          }
+          job.resolve(resp.resultado as ResultadoGeracao);
+          return;
+        }
+
+        job.reject(erroDoWorker(resp.erro, resp.logs));
       }
     );
 

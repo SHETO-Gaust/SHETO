@@ -20,7 +20,7 @@ export function esc(valor: unknown): string {
 
 /**
  * A janela de impressão nasce de `about:blank` e não tem base para resolver
- * caminho relativo: com `/img/brasao_pb.svg` as duas logos saem quebradas.
+ * caminho relativo: com `/img/brasao_pb.png` as duas logos saem quebradas.
  */
 function urlAbsoluta(caminho: string): string {
   const origem = typeof window !== 'undefined' ? window.location.origin : '';
