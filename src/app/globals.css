@@ -103,6 +103,99 @@
   animation: tutorial-pulso 2s ease-out infinite;
 }
 
+/*
+ * Estilos do conteudo rico (editor + pre-visualizacao do e-mail).
+ *
+ * O Preflight do Tailwind zera h2 (font-size/weight: inherit) e ul/ol
+ * (list-style: none), e o plugin @tailwindcss/typography nao esta instalado
+ * neste projeto — ou seja, as classes `prose` nao geram nada. Sem as regras
+ * abaixo, clicar em H2 ou Lista altera o HTML mas nao muda nada na tela.
+ *
+ * Os valores espelham o template de `sendMassCommunicationEmail` em
+ * src/lib/mail.ts, para o que aparece na tela ser o que chega no e-mail.
+ */
+.rich-content {
+  font-size: 15px;
+  line-height: 1.6;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.rich-content p {
+  margin: 0 0 15px;
+}
+
+.rich-content p:last-child {
+  margin-bottom: 0;
+}
+
+.rich-content strong {
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+
+.rich-content em { font-style: italic; }
+.rich-content s { text-decoration: line-through; }
+
+.rich-content h1,
+.rich-content h2,
+.rich-content h3 {
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 24px 0 12px;
+  color: hsl(var(--foreground));
+}
+
+.rich-content h1 { font-size: 1.5em; }
+.rich-content h2 { font-size: 1.3em; }
+.rich-content h3 { font-size: 1.15em; }
+
+.rich-content > :first-child { margin-top: 0; }
+
+.rich-content ul,
+.rich-content ol {
+  margin: 0 0 15px;
+  padding-left: 24px;
+}
+
+.rich-content ul { list-style: disc; }
+.rich-content ol { list-style: decimal; }
+
+.rich-content li { margin-bottom: 5px; }
+.rich-content li > p { margin-bottom: 0; }
+
+.rich-content ul ul { list-style: circle; }
+
+.rich-content a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+
+.rich-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: hsl(var(--muted));
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.rich-content blockquote {
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 12px;
+  margin: 0 0 15px;
+  color: hsl(var(--muted-foreground));
+}
+
+.rich-content hr {
+  border: 0;
+  border-top: 1px solid hsl(var(--border));
+  margin: 20px 0;
+}
+
+.rich-content.ProseMirror {
+  outline: none;
+}
+
 @media print {
   @page {
     size: A4 landscape;

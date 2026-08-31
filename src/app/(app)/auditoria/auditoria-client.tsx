@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { limparRascunhosEscola, limparRascunhosAntigos, getResumoLimpeza, getUsersForCommunication, enviarComunicadoMassaAction } from './actions';
-import type { AuditoriaRow, AuditoriaStats, ResumoLimpeza, UserListItem } from './actions';
+import { limparRascunhosEscola, limparRascunhosAntigos, getResumoLimpeza } from './actions';
+import type { AuditoriaRow, AuditoriaStats, ResumoLimpeza } from './actions';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import {
 import {
     AlertCircle, Trash2, Database, Calendar,
     Search, Filter, Info, CheckCircle2, Clock, XCircle,
-    ChevronLeft, ChevronRight, Loader2, Send, Users, Mail
+    ChevronLeft, ChevronRight, Loader2, Send
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -37,10 +38,6 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { RichEditor } from '@/components/ui/rich-editor';
-import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Checkbox } from '@/components/ui/checkbox';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 type Props = {
@@ -64,19 +61,6 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
 
     const [bulkState, setBulkState] = useState<{ open: boolean; dias: number; resumo: ResumoLimpeza[] | null; loading: boolean }>({
         open: false, dias: 0, resumo: null, loading: false
-    });
-
-    const [comunicadoState, setComunicadoState] = useState<{
-        open: boolean;
-        loadingInfo: boolean;
-        users: UserListItem[];
-        targetType: 'all' | 'specific';
-        selectedUserIds: string[];
-        titulo: string;
-        htmlContent: string;
-        sending: boolean;
-    }>({
-        open: false, loadingInfo: false, users: [], targetType: 'all', selectedUserIds: [], titulo: '', htmlContent: '', sending: false
     });
 
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -153,51 +137,6 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                 router.refresh();
             }
         });
-    };
-
-    const handleOpenComunicadoModal = async () => {
-        setComunicadoState(prev => ({ ...prev, open: true, loadingInfo: true, titulo: '', htmlContent: '', targetType: 'all', selectedUserIds: [] }));
-        const { data, error } = await getUsersForCommunication();
-        if (error) {
-            toast({ title: 'Erro', description: error, variant: 'destructive' });
-            setComunicadoState(prev => ({ ...prev, open: false }));
-        } else {
-            setComunicadoState(prev => ({ ...prev, loadingInfo: false, users: data || [] }));
-        }
-    };
-
-    const handleToggleUserSelection = (userId: string) => {
-        setComunicadoState(prev => {
-            const isSelected = prev.selectedUserIds.includes(userId);
-            const newSelection = isSelected
-                ? prev.selectedUserIds.filter(id => id !== userId)
-                : [...prev.selectedUserIds, userId];
-            return { ...prev, selectedUserIds: newSelection };
-        });
-    };
-
-    const handleSendComunicado = async () => {
-        if (!comunicadoState.titulo.trim()) return toast({ title: 'Atenção', description: 'Informe um título.', variant: 'destructive' });
-        if (!comunicadoState.htmlContent.trim() || comunicadoState.htmlContent === '<p></p>') return toast({ title: 'Atenção', description: 'Escreva a mensagem.', variant: 'destructive' });
-        if (comunicadoState.targetType === 'specific' && comunicadoState.selectedUserIds.length === 0) return toast({ title: 'Atenção', description: 'Selecione ao menos um destinatário.', variant: 'destructive' });
-
-        setComunicadoState(prev => ({ ...prev, sending: true }));
-        const targetIds = comunicadoState.targetType === 'all' ? 'all' : comunicadoState.selectedUserIds;
-
-        const res = await enviarComunicadoMassaAction({
-            titulo: comunicadoState.titulo,
-            html: comunicadoState.htmlContent,
-            targetIds
-        });
-
-        setComunicadoState(prev => ({ ...prev, sending: false }));
-
-        if (res.error) {
-            toast({ title: 'Erro de Envio', description: res.error, variant: 'destructive' });
-        } else {
-            toast({ title: 'Comunicado Enviado', description: `${res.count} e-mails disparados com sucesso via cópia oculta (BCC).` });
-            setComunicadoState(prev => ({ ...prev, open: false }));
-        }
     };
 
     const totalNaoPublicadas = stats.totalEscolas - stats.totalPublicados;
@@ -430,8 +369,10 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 shrink-0">
-                    <Button onClick={handleOpenComunicadoModal} variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700 mr-2 text-xs h-9">
-                        <Send className="h-4 w-4 mr-2" /> E-mail em Massa
+                    <Button asChild variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700 mr-2 text-xs h-9">
+                        <Link href="/auditoria/email">
+                            <Send className="h-4 w-4 mr-2" /> E-mail em Massa
+                        </Link>
                     </Button>
                     <div className="h-5 w-px bg-border mx-1"></div>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase whitespace-nowrap hidden sm:inline-block">Limpar Rascunhos:</span>
@@ -684,113 +625,6 @@ export function AuditoriaClient({ data, stats, totalItems, currentPage, pageSize
                             <Button variant="outline" className="mt-4" onClick={() => setBulkState(prev => ({ ...prev, open: false }))}>Fechar</Button>
                         </div>
                     )}
-                </DialogContent>
-            </Dialog>
-
-            {/* Email Communication Dialog */}
-            <Dialog open={comunicadoState.open} onOpenChange={(val) => {
-                if (!val && !comunicadoState.sending) setComunicadoState(prev => ({ ...prev, open: false }));
-            }}>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-xl font-bold text-primary">
-                            <Mail className="h-5 w-5" /> Enviar Comunicado em Massa
-                        </DialogTitle>
-                        <DialogDescription>
-                            Dispare um e-mail com layout institucional para os usuários ativos do sistema.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {comunicadoState.loadingInfo ? (
-                        <div className="flex justify-center items-center h-32">
-                            <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                        </div>
-                    ) : (
-                        <div className="space-y-4 py-2">
-                            <div className="space-y-1.5 focus-within:text-primary">
-                                <Label className="font-bold uppercase text-xs tracking-wider text-muted-foreground mb-1 block">Destinatários</Label>
-                                <Select
-                                    value={comunicadoState.targetType}
-                                    onValueChange={(val: 'all' | 'specific') => setComunicadoState(prev => ({ ...prev, targetType: val }))}
-                                >
-                                    <SelectTrigger className="font-medium bg-muted/30">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">
-                                            <div className="flex items-center gap-2">
-                                                <Users className="h-4 w-4 text-blue-500" />
-                                                Todos os Usuários Ativos ({comunicadoState.users.length})
-                                            </div>
-                                        </SelectItem>
-                                        <SelectItem value="specific">Selecionar Manualmente...</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {comunicadoState.targetType === 'specific' && (
-                                <div className="border rounded-md p-3 bg-muted/20">
-                                    <Label className="text-[11px] uppercase font-bold text-muted-foreground mb-2 block">
-                                        Selecione os usuários ({comunicadoState.selectedUserIds.length} de {comunicadoState.users.length})
-                                    </Label>
-                                    <ScrollArea className="h-[120px] rounded border border-input bg-background px-3 py-2">
-                                        {comunicadoState.users.map(u => (
-                                            <label key={u.id} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-muted/50 rounded px-1 group">
-                                                <Checkbox
-                                                    checked={comunicadoState.selectedUserIds.includes(u.id)}
-                                                    onCheckedChange={() => handleToggleUserSelection(u.id)}
-                                                />
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-semibold leading-none group-hover:text-primary">{u.nome}</span>
-                                                    <span className="text-[10px] text-muted-foreground">{u.email}</span>
-                                                </div>
-                                            </label>
-                                        ))}
-                                    </ScrollArea>
-                                </div>
-                            )}
-
-                            <div className="space-y-1.5 focus-within:text-primary pt-2">
-                                <Label className="font-bold uppercase text-xs tracking-wider text-muted-foreground mb-1 block">Assunto da Mensagem</Label>
-                                <Input
-                                    placeholder="Título do seu e-mail..."
-                                    className="font-medium text-sm bg-muted/10 h-11"
-                                    value={comunicadoState.titulo}
-                                    onChange={(e) => setComunicadoState(prev => ({ ...prev, titulo: e.target.value }))}
-                                />
-                            </div>
-
-                            <div className="space-y-1.5 pt-2">
-                                <Label className="font-bold uppercase text-xs tracking-wider text-muted-foreground mb-1 block">Corpo do E-mail</Label>
-                                <RichEditor
-                                    value={comunicadoState.htmlContent}
-                                    onChange={(val) => setComunicadoState(prev => ({ ...prev, htmlContent: val }))}
-                                    placeholder="Escreva sua mensagem aqui. O cabeçalho com a logo da SEDUC será incluído automaticamente."
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <DialogFooter className="mt-2">
-                        <Button variant="ghost" onClick={() => setComunicadoState(prev => ({ ...prev, open: false }))} disabled={comunicadoState.sending}>
-                            Cancelar
-                        </Button>
-                        <Button
-                            className="bg-blue-600 hover:bg-blue-700 min-w-[120px]"
-                            onClick={handleSendComunicado}
-                            disabled={comunicadoState.sending || comunicadoState.loadingInfo}
-                        >
-                            {comunicadoState.sending ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enviando...
-                                </>
-                            ) : (
-                                <>
-                                    <Send className="h-4 w-4 mr-2" /> Enviar Agora
-                                </>
-                            )}
-                        </Button>
-                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
