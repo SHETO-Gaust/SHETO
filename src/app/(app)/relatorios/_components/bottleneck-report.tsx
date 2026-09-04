@@ -18,12 +18,12 @@ const DIAS_LONGOS: Record<string, string> = {
 /** Os três impedimentos que o motor nunca relaxa, na mesma ordem do certificado. */
 const MOTIVOS = [
     { id: 'indisponivel',  label: 'Bloqueio',         icon: Ban,    color: 'text-red-600 dark:text-red-400' },
-    { id: 'reuniao_fluxo', label: 'Reunião de fluxo', icon: Users2, color: 'text-purple-600 dark:text-purple-400' },
+    { id: 'reuniao_fluxo', label: 'Planejamento coletivo', icon: Users2, color: 'text-purple-600 dark:text-purple-400' },
     { id: 'livre_docencia',label: 'Livre docência',   icon: Star,   color: 'text-amber-600 dark:text-amber-400' },
 ] as const;
 
 const MOTIVO_LABEL: Record<string, string> = {
-    indisponivel: 'Bloqueio', reuniao_fluxo: 'Reunião de fluxo', livre_docencia: 'Livre docência'
+    indisponivel: 'Bloqueio', reuniao_fluxo: 'Planejamento coletivo', livre_docencia: 'Livre docência'
 };
 
 export function BottleneckReport({ data }: { data: any }) {
@@ -47,7 +47,7 @@ export function BottleneckReport({ data }: { data: any }) {
           </p>
           <p>
             Entram na conta como <strong>impossibilitadores</strong> — exatamente como no gerador, que nunca os
-            ignora — <strong>bloqueio (indisponível)</strong>, <strong>reunião de fluxo</strong> e{' '}
+            ignora — <strong>bloqueio (indisponível)</strong>, <strong>planejamento coletivo</strong> e{' '}
             <strong>livre docência</strong> (na livre docência o <em>período inteiro</em> fica vedado, não só a aula
             marcada). <strong>Planejamento</strong> não é impedimento: o motor pode invadi-lo como último recurso, e
             por isso aparece à parte.
@@ -110,7 +110,7 @@ export function BottleneckReport({ data }: { data: any }) {
         <CardHeader>
           <CardTitle>Mapa de Disponibilidade Docente</CardTitle>
           <CardDescription>
-            Gargalos por horário, considerando bloqueio, reunião de fluxo e livre docência. Passe o mouse na célula
+            Gargalos por horário, considerando bloqueio, planejamento coletivo e livre docência. Passe o mouse na célula
             para ver quem foi impedido.
           </CardDescription>
         </CardHeader>

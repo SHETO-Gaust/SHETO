@@ -832,7 +832,7 @@ export function calcularPreenchimentoAutomatico(
     const detalhes: string[] = [];
     detalhes.push(
       `${pend.professor_nome} tem ${total - restritos - reservados} de ${total} horários do turno liberados` +
-        ` (${restritos} bloqueados por indisponibilidade, livre docência ou reunião de fluxo` +
+        ` (${restritos} bloqueados por indisponibilidade, livre docência ou planejamento coletivo` +
         (reservados > 0 ? `, ${reservados} reservados para planejamento` : '') +
         ').',
     );

@@ -16,6 +16,7 @@
  */
 
 import type { Turno, ProfessorComDados } from '@/lib/types';
+import { bloqueadoParaSempre } from '@/lib/restricoes-professor';
 import { resolverTurnoOposto } from '@/lib/turno-oposto';
 import { getSlotMinutes, minutesConflitam } from '@/lib/horario-slots';
 import { capacidadeSemanalDaSerie } from '@/lib/capacidade-serie';
@@ -55,65 +56,19 @@ type DadosCertificado = {
     ocupacoes: any[];
 };
 
-/** Período de um slot, para casar com a livre docência por período. */
-function periodoDaAula(turno: Turno, idx: number): string {
-    const n = turno.nome.toLowerCase();
-    if (n.includes('matutino') || n.includes('manhã')) return 'matutino';
-    if (n.includes('vespertino') || n.includes('tarde')) return 'vespertino';
-    if (n.includes('noturno') || n.includes('noite')) return 'noturno';
-    const h = turno.horarios?.[idx];
-    if (h?.inicio) {
-        const hora = parseInt(String(h.inicio).split(':')[0], 10);
-        if (hora < 13) return 'matutino';
-        if (hora < 18) return 'vespertino';
-        return 'noturno';
-    }
-    return idx < 5 ? 'matutino' : 'vespertino';
-}
-
 /**
- * Motivos que vedam um slot ao professor de forma permanente — o motor nunca
- * relaxa nenhum deles. `planejamento` e os tipos `personalizado*` ficam de fora
- * de propósito: são soft constraints, o motor pode usá-los como último recurso.
+ * A regra de "este slot está vedado a este professor" mora em
+ * `@/lib/restricoes-professor` desde que o refino passou a precisar dela no
+ * navegador — o certificado inteiro é grande demais para o bundle do cliente.
+ * Reexportada aqui para os chamadores antigos continuarem importando daqui.
  */
-export type MotivoImpedimento = 'indisponivel' | 'reuniao_fluxo' | 'livre_docencia';
-
-export const ROTULO_IMPEDIMENTO: Record<MotivoImpedimento, string> = {
-    indisponivel: 'Bloqueio (indisponível)',
-    reuniao_fluxo: 'Reunião de fluxo',
-    livre_docencia: 'Livre docência',
-};
-
-/**
- * Por que o slot está vedado ao professor, ou `null` se ele pode assumir aula ali.
- *
- * Fonte única da regra: o certificado, o Mapa de Disponibilidade e
- * `scripts/comparar-ambientes.sql` precisam dar exatamente o mesmo número, senão
- * o relatório promete professor que o motor não pode usar.
- */
-export function motivoImpedimento(
-    prof: ProfessorComDados | undefined,
-    turno: Turno,
-    dia: string,
-    idx: number,
-): MotivoImpedimento | null {
-    if (!prof) return null;
-    const st = (prof.restricoes as any)?.[turno.id]?.[dia]?.[idx];
-    if (st === 'indisponivel') return 'indisponivel';
-    if (st === 'reuniao_fluxo') return 'reuniao_fluxo';
-    // Só vale quando o professor TEM preferência declarada; `null`/`true` = dispensou.
-    if (prof.sem_preferencia_livre_docencia === false) {
-        if (st === 'livre_docencia') return 'livre_docencia';
-        const periodo = periodoDaAula(turno, idx);
-        if ((prof.livre_docencia || []).some(ld => ld.dia === dia && ld.periodo === periodo)) return 'livre_docencia';
-    }
-    return null;
-}
-
-/** Slot vedado ao professor por restrição que o motor nunca relaxa. */
-export function bloqueadoParaSempre(prof: ProfessorComDados | undefined, turno: Turno, dia: string, idx: number): boolean {
-    return motivoImpedimento(prof, turno, dia, idx) !== null;
-}
+export {
+    periodoDaAula,
+    motivoImpedimento,
+    bloqueadoParaSempre,
+    ROTULO_IMPEDIMENTO,
+    type MotivoImpedimento,
+} from '@/lib/restricoes-professor';
 
 /**
  * Turmas que preenchem exatamente os horários do turno — não podem ficar sem
@@ -373,7 +328,7 @@ export function certificar(dados: DadosCertificado): Certificado {
                 detalhe: `São ${carga} aulas atribuídas e apenas ${livres} horários disponíveis ` +
                     `(${capacidade} do turno` +
                     `${fechadosPelaSerie ? `, menos ${fechadosPelaSerie} fechados nas restrições da série das turmas dele` : ''}` +
-                    `${bloqueados ? `, menos ${bloqueados} bloqueados por indisponibilidade, livre docência ou reunião de fluxo` : ''}` +
+                    `${bloqueados ? `, menos ${bloqueados} bloqueados por indisponibilidade, livre docência ou planejamento coletivo` : ''}` +
                     `${ocupados ? `, menos ${ocupados} já ocupados por aula em outro turno no mesmo horário` : ''}).`,
                 correcao: `Tire ${carga - livres} aula(s) de ${prof.nome_horario}` +
                     `${fechadosPelaSerie ? `, passe-as para outro professor` : ''}, ou libere ` +

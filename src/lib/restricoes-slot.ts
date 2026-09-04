@@ -3,7 +3,7 @@
  *
  * A grade do professor precisa mostrar exatamente o que o motor respeitou. Até
  * aqui ela reimplementava só um pedaço da regra — reconhecia `planejamento` e a
- * livre docência por período, e ignorava indisponibilidade, reunião de fluxo, os
+ * livre docência por período, e ignorava indisponibilidade, planejamento coletivo, os
  * tipos personalizados e a livre docência marcada célula a célula. O resultado
  * era uma grade que parecia vazia em horários que o motor tinha vedado.
  *
@@ -38,7 +38,7 @@ const ROTULOS_FIXOS: Record<string, string> = {
     indisponivel: 'Indisponível',
     planejamento: 'Planejamento',
     livre_docencia: 'Livre Docência',
-    reuniao_fluxo: 'Reunião de Fluxo',
+    reuniao_fluxo: 'Planejamento Coletivo',
 };
 
 const TONS_FIXOS: Record<string, TomEtiqueta> = {

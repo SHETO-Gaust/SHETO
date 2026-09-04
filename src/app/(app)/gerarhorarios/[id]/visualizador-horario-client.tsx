@@ -11,21 +11,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { consolidarHorario, reverterParaRascunho } from '../actions';
 import { useToast } from '@/hooks/use-toast';
-import { exportarHorarioXLSX, exportarHorarioPDF } from '@/lib/export-horario';
-import { exportarGradeProfessorPDF, exportarGradeTodosProfessoresPDF, type MarcaSlotLivre } from '@/lib/export-grade-professor';
+import { exportarHorarioXLSX, exportarHorarioPDF, componentesDoHorario } from '@/lib/export-horario';
+import { exportarGradeProfessorPDF, exportarGradeTodosProfessoresPDF } from '@/lib/export-grade-professor';
+import { OpcoesPdfDialog, type OpcoesPDF } from './opcoes-pdf-dialog';
 import { Badge } from '@/components/ui/badge';
 import { etiquetaDoSlot, temRestricaoNoTurno, type EtiquetaSlot, type TomEtiqueta } from '@/lib/restricoes-slot';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 
 type Props = {
   horario: HorarioCompleto;
@@ -207,7 +197,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
      * Etiqueta de restrição do slot na grade do professor.
      *
      * Vale para todos os tipos que o professor cadastrou — indisponibilidade,
-     * reunião de fluxo, planejamento, livre docência (por período ou marcada
+     * planejamento coletivo, planejamento, livre docência (por período ou marcada
      * célula a célula) e os tipos personalizados. A regra de quais bloqueiam de
      * fato é a mesma que o motor aplica; ver `@/lib/restricoes-slot`.
      */
@@ -503,40 +493,55 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
     : 'Todas as turmas do turno, montado a partir dos dados salvos';
 
   /**
-   * PDF de professor pedido, à espera de como imprimir o horário livre.
+   * PDF pedido, à espera das opções de impressão.
    *
-   * O relatório só é montado depois da resposta — guardar aqui o escopo (um
-   * docente ou a unidade inteira) evita duas cópias do diálogo na árvore, já
-   * que os dois botões fazem a mesma pergunta.
+   * O relatório só é montado depois da resposta — guardar aqui o alvo (a grade
+   * das turmas, um docente ou a unidade inteira) mantém uma cópia só do diálogo
+   * na árvore, já que os três botões fazem as mesmas perguntas.
    */
-  const [pdfProfessorPendente, setPdfProfessorPendente] =
-    useState<{ escopo: 'individual'; professorId: string } | { escopo: 'todos' } | null>(null);
+  const [pdfPendente, setPdfPendente] = useState<
+    | { escopo: 'turmas' }
+    | { escopo: 'individual'; professorId: string }
+    | { escopo: 'todos' }
+    | null
+  >(null);
+
+  /**
+   * As disciplinas que o diálogo oferece para colorir.
+   *
+   * Sai das aulas carregadas, e não do cadastro da unidade: colorir uma
+   * disciplina que não aparece na grade não muda nada no papel e só alonga a
+   * lista de quem escolhe cor a cor.
+   */
+  const componentesColoriveis = useMemo(() => componentesDoHorario(horario), [horario]);
 
   const handlePdfCompleto = () => {
-    if (visaoPorProfessor) {
-      setPdfProfessorPendente({ escopo: 'todos' });
-      return;
-    }
-    exportarHorarioPDF(horario, escolaNome);
+    setPdfPendente(visaoPorProfessor ? { escopo: 'todos' } : { escopo: 'turmas' });
   };
 
-  const gerarPdfProfessor = (slotLivre: MarcaSlotLivre) => {
-    const pedido = pdfProfessorPendente;
-    setPdfProfessorPendente(null);
+  const gerarPdf = ({ cores, slotLivre }: OpcoesPDF) => {
+    const pedido = pdfPendente;
+    setPdfPendente(null);
     if (!pedido) return;
+
+    if (pedido.escopo === 'turmas') {
+      exportarHorarioPDF(horario, escolaNome, cores);
+      return;
+    }
 
     if (pedido.escopo === 'todos') {
       exportarGradeTodosProfessoresPDF({
         grades: professores.map(prof => ({ professor: prof, blocos: blocosDoProfessor(prof) })),
         escolaNome,
         slotLivre,
+        cores,
       });
       return;
     }
 
     const prof = professores.find(p => p.id === pedido.professorId);
     if (!prof) return;
-    exportarGradeProfessorPDF({ professor: prof, blocos: blocosDoProfessor(prof), escolaNome, slotLivre });
+    exportarGradeProfessorPDF({ professor: prof, blocos: blocosDoProfessor(prof), escolaNome, slotLivre, cores });
   };
 
   const TeacherIndividualView = ({ professorId }: { professorId: string }) => {
@@ -559,7 +564,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                     variant="outline"
                     size="sm"
                     className="ml-auto gap-2 print:hidden text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-950/30 dark:hover:text-rose-300"
-                    onClick={() => setPdfProfessorPendente({ escopo: 'individual', professorId })}
+                    onClick={() => setPdfPendente({ escopo: 'individual', professorId })}
                     title="A semana do professor em uma folha, com todos os turnos na mesma régua de horários"
                 >
                     <FileText className="h-4 w-4" /> PDF do professor
@@ -805,56 +810,21 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
       </Card>
 
       {/*
-          Os horários livres do professor são o único ponto em que os dois PDFs
-          docentes admitem duas leituras igualmente corretas, e a unidade é que
-          sabe qual vale — daí a pergunta em vez de um padrão fixo. Aula e
-          restrição saem iguais nas duas opções.
+          As duas perguntas que todo PDF de horário faz: se colorir por
+          disciplina e — só nos relatórios docentes — como imprimir os horários
+          livres, o único ponto em que eles admitem duas leituras igualmente
+          corretas, com a unidade sabendo qual vale.
       */}
-      <AlertDialog
-        open={pdfProfessorPendente !== null}
-        onOpenChange={aberto => { if (!aberto) setPdfProfessorPendente(null); }}
-      >
-        <AlertDialogContent className="print:hidden">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Como imprimir os horários livres?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pdfProfessorPendente?.escopo === 'todos'
-                ? 'Nos horários em que o professor não tem aula nem restrição cadastrada, o relatório de todos os docentes pode sair de duas formas:'
-                : 'Nos horários em que o professor não tem aula nem restrição cadastrada, o relatório pode sair de duas formas:'}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <div className="grid gap-3 sm:grid-cols-2 py-2">
-            <button
-              type="button"
-              onClick={() => gerarPdfProfessor('traco')}
-              className="rounded-lg border-2 p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
-            >
-              <span className="block font-bold text-sm">Deixar em branco</span>
-              <span className="mt-2 block text-2xl leading-none tracking-widest text-muted-foreground">———</span>
-              <span className="mt-2 block text-xs text-muted-foreground">
-                A célula sai tracejada, como um horário sem compromisso definido.
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => gerarPdfProfessor('planejamento')}
-              className="rounded-lg border-2 p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
-            >
-              <span className="block font-bold text-sm">Escrever o destino</span>
-              <span className="mt-2 block text-sm font-semibold uppercase tracking-wide text-muted-foreground">Plan. Individual</span>
-              <span className="mt-2 block text-xs text-muted-foreground">
-                A célula afirma que o tempo é de planejamento individual do docente.
-              </span>
-            </button>
-          </div>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <OpcoesPdfDialog
+        aberto={pdfPendente !== null}
+        onOpenChange={aberto => { if (!aberto) setPdfPendente(null); }}
+        componentes={componentesColoriveis}
+        perguntarSlotLivre={pdfPendente?.escopo === 'todos' || pdfPendente?.escopo === 'individual'}
+        descricaoSlotLivre={pdfPendente?.escopo === 'todos'
+          ? 'Nos horários em que o professor não tem aula nem restrição cadastrada, o relatório de todos os docentes pode sair de duas formas:'
+          : 'Nos horários em que o professor não tem aula nem restrição cadastrada, o relatório pode sair de duas formas:'}
+        onGerar={gerarPdf}
+      />
     </div>
   );
 }
