@@ -146,6 +146,32 @@ export function regraDoDiaViolada(
   return false;
 }
 
+/**
+ * Turnos cujo `horarios` não cobre todas as aulas do dia.
+ *
+ * Sem os minutos de um slot, `minutesConflitam` não tem como comparar aquele
+ * turno com outro e assume conflito — que é a postura certa, e também a que faz
+ * a tela recusar movimento atrás de movimento sem explicar por quê. Quem
+ * pergunta isto está atrás da explicação: o problema é o cadastro do turno, não
+ * a busca.
+ */
+export function turnosSemHorarioCompleto(
+  turnos: Iterable<Turno>,
+): { id: string; nome: string; faltam: number }[] {
+  const incompletos: { id: string; nome: string; faltam: number }[] = [];
+  for (const t of turnos) {
+    const previstas = t.aulas_por_dia ?? 0;
+    if (previstas <= 0) continue;
+    let cobertas = 0;
+    for (let i = 0; i < previstas; i++) {
+      const [ini, fim] = getSlotMinutes(t, i);
+      if (ini >= 0 && fim >= 0) cobertas++;
+    }
+    if (cobertas < previstas) incompletos.push({ id: t.id, nome: t.nome, faltam: previstas - cobertas });
+  }
+  return incompletos;
+}
+
 /** Dia longo o bastante para comportar duas duplas espaçadas da mesma matéria. */
 export const DIA_LONGO_MIN_AULAS = 7;
 /** Teto de aulas da mesma disciplina no dia: dia longo / dia curto. */

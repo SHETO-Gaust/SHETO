@@ -73,6 +73,32 @@ export const CSS_PDF_BASE = `
   }
   .pdf-rodape a { color: inherit; text-decoration: underline; }
   @media print { body { padding: 0; } }
+
+  /*
+   * A "folha": tabela de uma coluna que embrulha o documento inteiro.
+   *
+   * É o único jeito de repetir o cabeçalho no topo de TODA página saindo pelo
+   * diálogo do navegador — linha de <thead> o navegador repete a cada quebra,
+   * um <header> solto sai só na primeira folha. Daí as regras abaixo: a tabela
+   * não pode parecer tabela, e o CSS de cada relatório estiliza \`table\`/\`td\`
+   * sem escopo (bordas, fundo listrado, table-layout fixo). Os seletores são
+   * propositalmente específicos para vencer aquelas regras, que entram depois
+   * desta folha de estilo.
+   */
+  table.pdf-folha { width: 100%; border-collapse: collapse; border: 0; table-layout: auto; }
+  table.pdf-folha > thead { display: table-header-group; }
+  table.pdf-folha > thead > tr > td.pdf-folha-topo,
+  table.pdf-folha > tbody > tr > td.pdf-folha-corpo {
+    border: 0;
+    padding: 0;
+    background: none;
+    text-align: left;
+    vertical-align: top;
+    font-size: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+    width: auto;
+  }
 `;
 
 export type CabecalhoPDF = {
@@ -82,6 +108,10 @@ export type CabecalhoPDF = {
   subtitulo?: string;
 };
 
+/**
+ * Vai para o campo `cabecalho` de `abrirImpressaoPDF`, que o repete no topo de
+ * cada página. Colado dentro de `corpo` ele sai só na primeira folha.
+ */
 export function cabecalhoPDF({ escolaNome, titulo, subtitulo }: CabecalhoPDF): string {
   return `
   <header class="pdf-cabecalho">
@@ -112,6 +142,11 @@ export function rodapePDF(): string {
 export function abrirImpressaoPDF(opts: {
   titulo: string;
   corpo: string;
+  /**
+   * HTML de `cabecalhoPDF`. Passado aqui — e não colado no início de `corpo` —
+   * ele sai no topo de TODA página do PDF, não só da primeira.
+   */
+  cabecalho?: string;
   css?: string;
   /** Padrão A4 retrato; grades largas pedem paisagem. */
   orientacao?: 'retrato' | 'paisagem';
@@ -124,6 +159,13 @@ export function abrirImpressaoPDF(opts: {
 
   const size = opts.orientacao === 'paisagem' ? 'A4 landscape' : 'A4 portrait';
 
+  const corpo = opts.cabecalho
+    ? `<table class="pdf-folha">
+  <thead><tr><td class="pdf-folha-topo">${opts.cabecalho}</td></tr></thead>
+  <tbody><tr><td class="pdf-folha-corpo">${opts.corpo}</td></tr></tbody>
+</table>`
+    : opts.corpo;
+
   win.document.open();
   win.document.write(`<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(opts.titulo)}</title>
@@ -132,7 +174,7 @@ ${CSS_PDF_BASE}
 @page { size: ${size}; margin: 12mm; }
 ${opts.css ?? ''}
 </style></head>
-<body>${opts.corpo}</body></html>`);
+<body>${corpo}</body></html>`);
   win.document.close();
 
   /**

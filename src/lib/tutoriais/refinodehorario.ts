@@ -10,8 +10,14 @@ export const tutorialRefinoDeHorario: Tutorial = {
     },
     {
       alvo: 'refino-select-horario',
-      titulo: 'Escolha o horário',
-      texto: 'Só aparecem aqui os horários que já foram publicados.',
+      titulo: 'Escolha a grade a trabalhar',
+      texto: 'Aparecem todas as grades da escola — publicadas e rascunhos. Só a que você escolher aqui pode ser alterada.',
+      lado: 'bottom',
+    },
+    {
+      alvo: 'refino-select-horario',
+      titulo: 'E as grades de referência, na linha de cima',
+      texto: 'Uma por turno. É contra elas que o sistema confere se o professor já está em sala — inclusive num turno de outro nome que começa na mesma hora, como Integral e Matutino.',
       lado: 'bottom',
     },
     {
@@ -33,8 +39,14 @@ export const tutorialRefinoDeHorario: Tutorial = {
       lado: 'left',
     },
     {
+      alvo: 'refino-painel-impacto',
+      titulo: 'Trocar duas aulas direto',
+      texto: 'Com uma aula selecionada, clique sobre outra: o painel confere se as duas cabem no horário uma da outra e oferece a troca — sem precisar de slot vazio.',
+      lado: 'left',
+    },
+    {
       titulo: 'Lembre-se',
-      texto: 'O refino só permite mover a aula dentro do mesmo turno físico do professor.',
+      texto: 'Aula fixada na série não se move por aqui, e aula de grade de referência aparece com cadeado: ela é de outra grade.',
     },
   ],
 };

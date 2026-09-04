@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { redirect } from 'next/navigation';
 import { RefinoClient } from './refino-client';
 import { getHorariosParaRefino } from './actions';
@@ -8,14 +8,14 @@ export const metadata = {
 };
 
 export default async function RefinoPage() {
-  const supabase = await createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const db = await createClient();
+  const { data: userData, error: userError } = await db.auth.getUser();
 
   if (userError || !userData?.user) {
     redirect('/login');
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('*, escolas(id, escolar)')
     .eq('id', userData.user.id)
@@ -33,13 +33,13 @@ export default async function RefinoPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-foreground">Refino de Horário</h2>
           <p className="text-muted-foreground text-sm">
-            Mova aulas pendentes ou faça ajustes manuais rápidos visualizando o impacto.
+            Mova ou troque aulas de lugar vendo o impacto — inclusive contra as grades dos outros turnos.
           </p>
         </div>
       </div>
       
       <div className="flex-1 min-h-0 bg-background/50 backdrop-blur-sm border rounded-xl shadow-sm p-4 overflow-y-auto">
-        <RefinoClient escolaId={profile.ue} horariosParaRefino={(horarios as any) || []} />
+        <RefinoClient escolaId={profile.ue} horariosParaRefino={horarios || []} />
       </div>
     </div>
   );

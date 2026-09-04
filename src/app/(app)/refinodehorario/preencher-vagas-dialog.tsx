@@ -101,9 +101,17 @@ function PassoLinha({ passo }: { passo: PassoPreenchimento }) {
 
 export function PreencherVagasDialog({
     horarioId,
+    referenciasIds,
     aoAplicar,
 }: {
     horarioId: string;
+    /**
+     * As grades que a tela escolheu como referência de conflito — uma por
+     * turno. Sem elas, este botão usaria a política antiga ("toda grade
+     * publicada"), e os dois cálculos da mesma tela discordariam sobre o que
+     * está ocupado.
+     */
+    referenciasIds?: string[];
     /** Recarrega a grade da tela: o plano mexeu em aulas que ela está mostrando. */
     aoAplicar: () => void;
 }) {
@@ -117,7 +125,7 @@ export function PreencherVagasDialog({
         setAberto(true);
         setResultado(null);
         setCalculando(true);
-        const r = await calcularPreenchimentoDeVagas(horarioId);
+        const r = await calcularPreenchimentoDeVagas(horarioId, referenciasIds);
         setCalculando(false);
         if (r.error) {
             toast({ variant: 'destructive', title: 'Não foi possível calcular', description: r.error });

@@ -251,14 +251,12 @@ export function ExportarRestricoes({ professores, turnosDaEscola, escolaNome }: 
     abrirImpressaoPDF({
       titulo: 'Restrições de Horário — Professores',
       css: CSS_RESTRICOES,
-      corpo:
-        cabecalhoPDF({
-          escolaNome,
-          titulo: 'Relatório de Restrições de Horário (Consolidado)',
-          subtitulo: `${professores.length} professor(es) · gerado em ${dataPorExtenso()}`,
-        }) +
-        printRef.current.innerHTML +
-        rodapePDF(),
+      cabecalho: cabecalhoPDF({
+        escolaNome,
+        titulo: 'Relatório de Restrições de Horário (Consolidado)',
+        subtitulo: `${professores.length} professor(es) · gerado em ${dataPorExtenso()}`,
+      }),
+      corpo: printRef.current.innerHTML + rodapePDF(),
     });
   };
 
