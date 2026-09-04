@@ -7,7 +7,7 @@
  * poderiam sair de lá. Daí a mudança de casa.
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type { Turno, ConfiguracaoGerminacao } from '@/lib/types';
 // Leitura sem guard, de propósito: o orquestrador roda fora de uma requisição e
 // os guards das Server Actions resolvem a sessão pelos cookies. Ver
@@ -73,18 +73,27 @@ export async function carregarDadosDaGeracao(
      * Entra na impressão digital da memória: uma grade lembrada só vale se tiver
      * sido montada sob a MESMA geminação que se está pedindo agora.
      */
-    configGerminacao: ConfiguracaoGerminacao[] = []
+    configGerminacao: ConfiguracaoGerminacao[] = [],
+    /**
+     * Também entra na impressão: uma grade lembrada com o professor três vezes
+     * na mesma turma no mesmo dia não vale para uma geração que agora proíbe
+     * isso — o motor a podaria na semeadura, e o custo herdado junto com ela
+     * (`pendentes`) descreveria uma grade que deixou de existir.
+     */
+    permitirMaisDeDuasAulasProfNaTurma: boolean = true,
 ): Promise<DadosDaGeracao> {
     const assinaturaGeminacao = configGerminacao
         .filter(c => c.geminar && c.tamanho_bloco > 1)
         .map(c => `${c.componente_id}:${c.tamanho_bloco}`)
         .sort()
         .join(',');
-    const chave = `${escolaId}|${turnoId}|${statusOcupacao.join(',')}|${assinaturaGeminacao}`;
+    const chave =
+        `${escolaId}|${turnoId}|${statusOcupacao.join(',')}|${assinaturaGeminacao}` +
+        `|profTurma:${permitirMaisDeDuasAulasProfNaTurma ? 1 : 0}`;
     const emCache = cacheGeracao().get(chave);
     if (emCache && emCache.expiraEm > Date.now()) return emCache.dados;
 
-    const supabase = await createClient();
+    const db = await createClient();
 
     const [
         { data: allTurmas, error: turmasError },
@@ -95,7 +104,7 @@ export async function carregarDadosDaGeracao(
         lerTurmas(escolaId),
         lerProfessores(escolaId),
         lerTurnos(escolaId),
-        supabase.from('turnos').select('*').eq('id', turnoId).maybeSingle()
+        db.from('turnos').select('*').eq('id', turnoId).maybeSingle()
     ]);
 
     if (turmasError) throw new Error(`Falha ao ler as turmas: ${turmasError}`);
@@ -116,7 +125,7 @@ export async function carregarDadosDaGeracao(
     const cpfs = allProfessores?.map(p => p.cpf).filter(Boolean) || [];
     const allTeacherIds = allProfessores?.map(p => p.id) || [];
     const { data: globalProfessors, error: globalProfError } =
-        await supabase.from('professores').select('id').in('cpf', cpfs);
+        await db.from('professores').select('id').in('cpf', cpfs);
     if (globalProfError) throw new Error(`Falha ao ler os professores de outras unidades: ${globalProfError.message}`);
     const professorIdsGlobais = Array.from(new Set([...allTeacherIds, ...(globalProfessors?.map(p => p.id) || [])]));
 
@@ -136,7 +145,7 @@ export async function carregarDadosDaGeracao(
     // segundo turno de realocar professores nos slots NP que o primeiro reservou.
     const resultados = await Promise.all(
         statusOcupacao.map(status =>
-            supabase
+            db
                 .from('horario_aulas')
                 .select(aulaSelectFields)
                 .in('professor_id', professorIdsGlobais)
@@ -161,7 +170,7 @@ export async function carregarDadosDaGeracao(
     const turmaIds = turmasDoTurno.map((t: any) => t.id).filter(Boolean);
     let aulasFixas: any[] = [];
     if (turmaIds.length > 0) {
-        const { data: fixas, error: fixasError } = await supabase
+        const { data: fixas, error: fixasError } = await db
             .from('turmas_aulas_fixas')
             .select('*')
             .in('turma_id', turmaIds);
@@ -199,6 +208,7 @@ export async function carregarDadosDaGeracao(
         allProfessores: allProfessores || [],
         aulasFixas,
         configGerminacao,
+        permitirMaisDeDuasAulasProfNaTurma,
     });
     const [memoria, padroes] = await Promise.all([
         lerMemoria(escolaId, turnoId, impressao).catch(err => {
@@ -254,8 +264,8 @@ export async function inepDaEscola(escolaId: string): Promise<string> {
     if (guardado) return guardado;
 
     try {
-        const supabase = await createClient();
-        const { data } = await supabase.from('escolas').select('inep').eq('id', escolaId).maybeSingle();
+        const db = await createClient();
+        const { data } = await db.from('escolas').select('inep').eq('id', escolaId).maybeSingle();
         // Sem INEP cadastrado, o id ainda identifica a unidade — melhor que nada.
         const inep = data?.inep ? String(data.inep) : `escola-${escolaId}`;
         cache.set(String(escolaId), inep);
@@ -276,4 +286,57 @@ export async function inepDaEscola(escolaId: string): Promise<string> {
 export function mensagemDeErro(err: unknown): string {
     if (err instanceof Error) return err.message;
     return String(err);
+}
+
+/**
+ * As aulas de uma grade já salva, no formato que o motor herda.
+ *
+ * É o "regerar a partir de": o usuário escolhe um horário pronto e manda gerar
+ * de novo com o cadastro de hoje — professor novo, restrição nova, travamento
+ * novo. A grade escolhida entra como `gradeHerdada`, e o resultado sai o mais
+ * parecido com ela que as regras atuais permitirem.
+ *
+ * O que se herda é a POSIÇÃO, não a aula. `semearDaGrade` (em `timetabling.ts`)
+ * monta os blocos a partir do cadastro atual — com o professor de hoje — e usa
+ * esta grade só para decidir em que dia e em que slot tentar cada um, validando
+ * cada tentativa contra as restrições de agora. Por isso trocar o professor de
+ * uma turma e regerar devolve a mesma grade com o professor novo, e não a grade
+ * velha de volta.
+ *
+ * `aula_fixa_id` vem junto porque a semeadura pula essas aulas: os travamentos
+ * de hoje já foram postos pela Fase 0, e reaproveitar a posição de um
+ * travamento que não existe mais seria herdar uma decisão que o usuário desfez.
+ */
+export async function lerGradeBase(
+    horarioId: string,
+    turnoId: string,
+): Promise<{ aulas: any[]; erro?: string }> {
+    const db = await createClient();
+
+    const { data: horario, error: hErr } = await db
+        .from('horarios')
+        .select('id, turno_id')
+        .eq('id', horarioId)
+        .maybeSingle();
+
+    if (hErr) return { aulas: [], erro: 'Não foi possível ler o horário base.' };
+    if (!horario) return { aulas: [], erro: 'O horário escolhido como base não existe mais.' };
+
+    /*
+     * A base tem de ser do MESMO turno que está sendo gerado. Uma grade de outro
+     * turno traria `aula_index` de uma régua diferente — o slot 5 do matutino não
+     * é o slot 5 do integral — e a semeadura colocaria aula em horário que não
+     * corresponde a nada.
+     */
+    if ((horario as any).turno_id !== turnoId) {
+        return { aulas: [], erro: 'O horário base pertence a outro turno.' };
+    }
+
+    const { data: aulas, error: aErr } = await db
+        .from('horario_aulas')
+        .select('turma_id, componente_id, professor_id, dia_semana, aula_index, tipo, turno_id, aula_fixa_id')
+        .eq('horario_id', horarioId);
+
+    if (aErr) return { aulas: [], erro: 'Não foi possível ler as aulas do horário base.' };
+    return { aulas: (aulas || []) as any[] };
 }

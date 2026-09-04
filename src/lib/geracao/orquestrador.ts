@@ -20,7 +20,7 @@ import { NUM_WORKERS, gerarHorarioEmWorker } from '@/lib/timetabling-pool';
 import { registrarLog, registrarLogs } from '@/lib/log-geracao';
 import type { Turno } from '@/lib/types';
 import type { GeminacaoQuebrada } from '@/lib/timetabling';
-import { carregarDadosDaGeracao, inepDaEscola, mensagemDeErro } from './dados';
+import { carregarDadosDaGeracao, inepDaEscola, lerGradeBase, mensagemDeErro } from './dados';
 import { gravarMemoria, registrarPadroes } from './memoria';
 import { certificar } from './certificado';
 import { converterPreProducao, salvarGrade } from './salvar-grade';
@@ -172,6 +172,14 @@ function descreverGeminacoes(quebradas: GeminacaoQuebrada[]): string {
 async function executarJob(job: GeracaoJob): Promise<void> {
     const inep = await inepDaEscola(job.escola_id);
     const { nome, configGerminacao, permitirMesmoProfDisciplinasMesmoDia } = job.config;
+    /**
+     * Jobs criados antes desta opção existir não trazem o campo no `config`
+     * (jsonb), e `undefined` ali viraria "bloqueado" — mudando o motor debaixo
+     * de uma geração que foi pedida sob a regra antiga. O padrão é permitir,
+     * que é o que o motor sempre fez.
+     */
+    const permitirMaisDeDuasAulasProfNaTurma = job.config.permitirMaisDeDuasAulasProfNaTurma !== false;
+    const basePorTurno = job.config.basePorTurno ?? {};
     const isMulti = job.turno_ids.length > 1;
 
     registrarLog(
@@ -197,7 +205,10 @@ async function executarJob(job: GeracaoJob): Promise<void> {
     const avisosGeminacao: string[] = [];
 
     for (const [indice, turnoId] of job.turno_ids.entries()) {
-        const dados = await carregarDadosDaGeracao(job.escola_id, turnoId, ['publicado', 'pre_producao'], configGerminacao);
+        const dados = await carregarDadosDaGeracao(
+            job.escola_id, turnoId, ['publicado', 'pre_producao'],
+            configGerminacao, permitirMaisDeDuasAulasProfNaTurma,
+        );
         const turno = dados.turnoData as Turno;
 
         registrarLog(
@@ -206,8 +217,27 @@ async function executarJob(job: GeracaoJob): Promise<void> {
                 `turmas=${dados.turmasDoTurno.length} | professores=${dados.allProfessores.length} | ` +
                 `ocupacoes_externas=${dados.ocupacoes.length} | aulas_fixas=${dados.aulasFixas.length} | ` +
                 `geminacao=${configGerminacao.filter(c => c.geminar).length} disciplina(s) | ` +
-                `mesmo_prof_disciplinas_mesmo_dia=${permitirMesmoProfDisciplinasMesmoDia ? 'permitido' : 'bloqueado'}`
+                `mesmo_prof_disciplinas_mesmo_dia=${permitirMesmoProfDisciplinasMesmoDia ? 'permitido' : 'bloqueado'} | ` +
+                `mais_de_duas_aulas_prof_na_turma=${permitirMaisDeDuasAulasProfNaTurma ? 'permitido' : 'bloqueado'}`
         );
+
+        /*
+         * A base é lida aqui, e não na criação do job, porque entre pedir a
+         * geração e o turno chegar a sua vez pode passar bastante tempo — numa
+         * geração multi-turno, os turnos anteriores inteiros. Ler agora é ler a
+         * grade como ela está, e permite avisar sem derrubar o job se ela tiver
+         * sido apagada nesse meio-tempo.
+         */
+        let gradeBase: any[] = [];
+        const baseId = basePorTurno[turnoId];
+        if (baseId) {
+            const { aulas, erro } = await lerGradeBase(baseId, turnoId);
+            if (erro) {
+                registrarLog(inep, `BASE IGNORADA | job=${job.id} | "${turno.nome}" | ${erro}`);
+            } else {
+                gradeBase = aulas;
+            }
+        }
 
         const resultado = await gerarTurno({
             job,
@@ -216,6 +246,8 @@ async function executarJob(job: GeracaoJob): Promise<void> {
             dados,
             configGerminacao,
             permitirMesmoProfDisciplinasMesmoDia,
+            permitirMaisDeDuasAulasProfNaTurma,
+            gradeBase,
             turnosConcluidos: indice,
         });
 
@@ -390,7 +422,10 @@ async function gerarTurno(ctx: {
     dados: Awaited<ReturnType<typeof carregarDadosDaGeracao>>;
     configGerminacao: GeracaoJob['config']['configGerminacao'];
     permitirMesmoProfDisciplinasMesmoDia: boolean;
+    permitirMaisDeDuasAulasProfNaTurma: boolean;
     turnosConcluidos: number;
+    /** Grade escolhida pelo usuário como ponto de partida. Vazia = não escolheu. */
+    gradeBase: any[];
 }): Promise<ResultadoTurno> {
     const { job, inep, turno, dados } = ctx;
     const orcamento = job.orcamento;
@@ -429,7 +464,27 @@ async function gerarTurno(ctx: {
      * senão o custo real é desconhecido e deixá-lo em aberto evita que uma grade
      * velha seja tratada como boa e bloqueie uma melhor.
      */
-    if (dados.memoria && dados.memoria.grade.length > 0) {
+    /**
+     * A base escolhida na tela vence a memória.
+     *
+     * As duas fazem a mesma coisa — dar um ponto de partida à busca —, mas a
+     * memória é um palpite do sistema e a base é uma decisão do usuário: ele
+     * apontou QUAL grade quer preservar. Deixar a memória ganhar produziria uma
+     * grade parecida com a última geração, não com a que ele escolheu.
+     *
+     * `melhorGlobal` fica em infinito de propósito: o custo daquela grade sob as
+     * regras de HOJE é desconhecido (o cadastro mudou — é por isso que se está
+     * regerando). O motor recalcula. Herdar um custo velho faria uma grade que
+     * já não vale bloquear a melhor.
+     */
+    if (ctx.gradeBase.length > 0) {
+        melhorAulas = ctx.gradeBase;
+        registrarLog(
+            inep,
+            `BASE | job=${job.id} | "${turno.nome}" | regerando a partir de ` +
+                `${ctx.gradeBase.length} aula(s) de uma grade escolhida na tela`
+        );
+    } else if (dados.memoria && dados.memoria.grade.length > 0) {
         melhorAulas = dados.memoria.grade;
         pesosGlobais = { ...dados.memoria.pesos };
         if (dados.memoria.atual) melhorGlobal = dados.memoria.pendentes;
@@ -518,6 +573,15 @@ async function gerarTurno(ctx: {
                             pesosGlobais,
                             melhorGlobal,
                             dados.padroes,
+                            // `sementeBase` explícito: só existe para a bancada
+                            // repetir a mesma escola com outro sorteio, e aqui
+                            // ele precisa ficar em 0 para a rampa de relaxamento
+                            // percorrer o orçamento uma vez só.
+                            0,
+                            ctx.permitirMaisDeDuasAulasProfNaTurma,
+                            // Fixa em todas as rodadas: e' a grade que o usuario
+                            // mandou preservar, nao a melhor do momento.
+                            ctx.gradeBase.length > 0 ? ctx.gradeBase : null,
                         ],
                         // Um pedaço só por rodada escreve no log.txt: várias threads
                         // despejando a saída do motor em paralelo tornariam o arquivo
@@ -702,6 +766,8 @@ async function gerarTurno(ctx: {
                     1, offset, dados.aulasFixas, ctx.permitirMesmoProfDisciplinasMesmoDia,
                     orcamento, true,
                     melhorAulas, pesosGlobais, melhorGlobal, dados.padroes,
+                    0, ctx.permitirMaisDeDuasAulasProfNaTurma,
+                    ctx.gradeBase.length > 0 ? ctx.gradeBase : null,
                 ],
                 (linhas) => registrarLogs(inep, linhas)
             );

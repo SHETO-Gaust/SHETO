@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef, useTransition } from 'react';
+import { useState, useEffect, useMemo, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Turno, Horario, ConfiguracaoGerminacao, DiagnosticoFalha } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, ArrowRightLeft, Settings2, AlertTriangle, Info, FolderDown, ChevronDown } from 'lucide-react';
+import { Clock, Zap, Loader2, List, FileText, Trash2, AlertCircle, ArrowRight, ArrowRightLeft, Settings2, AlertTriangle, Info, FolderDown, ChevronDown, Copy, RefreshCw } from 'lucide-react';
+import { DuplicarHorarioDialog } from './duplicar-horario-dialog';
+import { sugerirNomeDeRegeracao } from '@/lib/nome-de-grade';
 import { useToast } from '@/hooks/use-toast';
 import { getHorariosSalvos, getHorariosSalvosTodasTurnos, deleteHorario, iniciarGeracao, getEstadoGeracao, cancelarGeracao, salvarGradeParcial, getHorarioDetalhado, getDisciplinasParaConfigGerminacao, type EstadoGeracao } from './actions';
 import { AlocarComTrocasDialog } from './alocar-com-trocas-dialog';
@@ -112,6 +114,8 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     const [isPending, startTransition] = useTransition();
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
+    /** Grade cujo diálogo de duplicação está aberto. */
+    const [horarioParaDuplicar, setHorarioParaDuplicar] = useState<HorarioComTurno | null>(null);
     /**
      * Horários marcados para exportar ou excluir em lote.
      *
@@ -133,6 +137,23 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     const [disciplinasParaConfig, setDisciplinasParaConfig] = useState<{ id: string, nome: string, sigla: string, maxAulas: number }[]>([]);
     const [configGerminacao, setConfigGerminacao] = useState<ConfiguracaoGerminacao[]>([]);
     const [permitirMesmoProfDisciplinasMesmoDia, setPermitirMesmoProfDisciplinasMesmoDia] = useState(false);
+    /**
+     * O motor ainda aceita restringir isto (`permitirMaisDeDuasAulasProfNaTurma`),
+     * mas a tela deixou de oferecer a opção: a geração vai sempre no
+     * comportamento que o motor sempre teve, que é o permissivo. Mantido como
+     * constante, e não removido da chamada, para o argumento continuar explícito
+     * em quem lê `iniciarGeracao`.
+     */
+    const permitirMaisDeDuasAulasProfNaTurma = true;
+    /**
+     * A grade escolhida como ponto de partida — o "Regerar" do card.
+     *
+     * Uma só, e não um mapa por turno: regerar nasce de UMA grade, e uma grade
+     * pertence a um turno. Houve um seletor por turno dentro do diálogo de
+     * geração; a ação pertence ao card da grade, que é onde o usuário está
+     * olhando quando decide refazê-la.
+     */
+    const [regerarBase, setRegerarBase] = useState<HorarioComTurno | null>(null);
 
     /**
      * Estado da geração, lido do servidor.
@@ -222,27 +243,37 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     const { toast } = useToast();
 
-    const loadHorarios = async (turnoId: string) => {
+    /**
+     * @returns a lista recém-carregada.
+     *
+     * Devolve além de guardar no estado porque quem chama, no mesmo tique, ainda
+     * enxerga o `horarios` antigo pelo closure — e o "Regerar" precisa dos nomes
+     * do turno de destino para sugerir um que não colida com nenhum.
+     */
+    const loadHorarios = async (turnoId: string): Promise<HorarioComTurno[]> => {
         setIsLoadingHorarios(true);
         // A lista vai ser substituída: manter marcações da lista anterior faria a
         // barra de seleção contar horários que não estão mais na tela.
         setSelecionados(new Set());
+        let carregados: HorarioComTurno[] = [];
         if (turnoId === 'todos') {
             const { data, error } = await getHorariosSalvosTodasTurnos(escolaId);
             if (error) {
                 toast({ title: 'Erro ao buscar horários', description: error, variant: 'destructive' });
             } else {
-                setHorarios(data || []);
+                carregados = data || [];
             }
         } else {
             const { data, error } = await getHorariosSalvos(turnoId);
             if (error) {
                 toast({ title: 'Erro ao buscar horários', description: error, variant: 'destructive' });
             } else {
-                setHorarios(data || []);
+                carregados = data || [];
             }
         }
+        setHorarios(carregados);
         setIsLoadingHorarios(false);
+        return carregados;
     };
 
     useEffect(() => {
@@ -314,17 +345,26 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     const handleTurnoChange = async (turnoId: string) => {
         setSelectedTurnoId(turnoId);
-        await loadHorarios(turnoId);
+        return await loadHorarios(turnoId);
     };
 
-    const handleGerarHorarioClick = async () => {
+    /**
+     * @param turnoForcado turno a considerar em vez do que está selecionado.
+     *
+     * Existe por causa do "Regerar": ele acerta o turno para o da grade e abre
+     * este diálogo no mesmo gesto, e `setSelectedTurnoId` só vale no render
+     * seguinte — lido daqui, `selectedTurnoId` ainda seria o turno anterior, e a
+     * lista de disciplinas viria do turno errado.
+     */
+    const handleGerarHorarioClick = async (turnoForcado?: string, nomeSugerido?: string) => {
         setResultadoVisivel(false);
         const nextVersion = horarios.length + 1;
-        setNomeHorarioInput(`Horário V${nextVersion}`);
+        setNomeHorarioInput(nomeSugerido ?? `Horário V${nextVersion}`);
 
-        const turnoIdsToFetch = selectedTurnoId === 'todos'
+        const turnoEfetivo = turnoForcado ?? selectedTurnoId;
+        const turnoIdsToFetch = turnoEfetivo === 'todos'
             ? turnosAtivos.map(t => t.id)
-            : [selectedTurnoId];
+            : [turnoEfetivo];
 
         const { data: list } = await getDisciplinasParaConfigGerminacao(turnoIdsToFetch);
 
@@ -353,10 +393,6 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             return;
         }
 
-        const turnosParaGerar = selectedTurnoId === 'todos'
-            ? turnosAtivos
-            : turnosAtivos.filter(t => t.id === selectedTurnoId);
-
         if (turnosParaGerar.length === 0) {
             toast({ title: 'Nenhum turno ativo para gerar', variant: 'destructive' });
             return;
@@ -372,7 +408,9 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             turnosParaGerar.map(t => t.id),
             nomeHorarioInput.trim(),
             configGerminacao,
-            permitirMesmoProfDisciplinasMesmoDia
+            permitirMesmoProfDisciplinasMesmoDia,
+            permitirMaisDeDuasAulasProfNaTurma,
+            regerarBase ? { [regerarBase.turno_id]: regerarBase.id } : {}
         );
 
         setIsIniciando(false);
@@ -562,6 +600,28 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
 
     const selectedTurno = turnosAtivos.find(t => t.id === selectedTurnoId);
     const isTodos = selectedTurnoId === 'todos';
+
+    /**
+     * Os turnos que esta geração vai rodar. Era calculado dentro de
+     * `handleIniciar`; subiu porque o seletor de grade base precisa dele para
+     * montar uma linha por turno.
+     */
+    const turnosParaGerar = useMemo(
+        () => (isTodos ? turnosAtivos : turnosAtivos.filter(t => t.id === selectedTurnoId)),
+        [isTodos, turnosAtivos, selectedTurnoId],
+    );
+
+    /*
+     * A base morre ao se trocar para um turno que não é o dela.
+     *
+     * Sobrevive quando o turno selecionado É o da base — que é o caso logo
+     * depois do "Regerar", quando o próprio clique acerta o turno para o da
+     * grade. Limpar sem essa comparação apagaria a escolha no mesmo gesto que a
+     * fez, e a geração começaria do zero sem dizer por quê.
+     */
+    useEffect(() => {
+        setRegerarBase(prev => (prev && prev.turno_id === selectedTurnoId ? prev : null));
+    }, [selectedTurnoId]);
 
     return (
         <div className="space-y-6">
@@ -879,7 +939,7 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                         <Button
                             data-tutorial="gerar-btn-gerar"
                             size="lg"
-                            onClick={handleGerarHorarioClick}
+                            onClick={() => handleGerarHorarioClick()}
                             disabled={isProcessing || isIniciando}
                             className="flex-1 h-14 text-lg font-bold shadow-xl hover:scale-[1.02] transition-transform active:scale-95"
                         >
@@ -1135,6 +1195,16 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                                 </Button>
                                             </Link>
 
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                                title="Duplicar ou regerar"
+                                                onClick={() => setHorarioParaDuplicar(h)}
+                                            >
+                                                <Copy className="h-3 w-3" />
+                                            </Button>
+
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>
                                                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive/60 hover:text-destructive hover:bg-destructive/10" disabled={isDeleting === h.id}>
@@ -1172,6 +1242,49 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     )}
                 </CardContent>
             </Card>
+
+            {horarioParaDuplicar && (
+                <DuplicarHorarioDialog
+                    aberto={!!horarioParaDuplicar}
+                    setAberto={aberto => { if (!aberto) setHorarioParaDuplicar(null); }}
+                    horario={horarioParaDuplicar}
+                    // Unicidade de nome é por (escola, turno): só os irmãos de turno importam.
+                    nomesDoTurno={horarios
+                        .filter(h => h.turno_id === horarioParaDuplicar.turno_id)
+                        .map(h => h.nome)}
+                    aoDuplicar={() => { void loadHorarios(selectedTurnoId); }}
+                    aoRegerar={() => {
+                        /*
+                         * A ordem importa: o turno primeiro, a base depois. O efeito
+                         * que limpa a base compara com `selectedTurnoId`, e definir a
+                         * base antes de acertar o turno a apagaria no render seguinte.
+                         */
+                        const alvo = horarioParaDuplicar;
+                        setHorarioParaDuplicar(null);
+                        void (async () => {
+                            const doTurno = selectedTurnoId !== alvo.turno_id
+                                ? await handleTurnoChange(alvo.turno_id)
+                                : horarios;
+                            setRegerarBase(alvo);
+                            /*
+                             * Nome derivado da base, e garantidamente livre.
+                             *
+                             * Regerar cria uma grade NOVA — a de origem continua
+                             * intacta —, e o banco tem UNIQUE (escola, turno, nome):
+                             * um nome repetido faria a gravação falhar no fim de uma
+                             * geração inteira, parecendo que nada foi criado.
+                             */
+                            const nomes = doTurno
+                                .filter(h => h.turno_id === alvo.turno_id)
+                                .map(h => h.nome);
+                            await handleGerarHorarioClick(
+                                alvo.turno_id,
+                                sugerirNomeDeRegeracao(alvo.nome, nomes),
+                            );
+                        })();
+                    }}
+                />
+            )}
 
             {/* DIALOG DE CONFIGURAÇÃO */}
             {horarioAlocavelId && (
@@ -1213,6 +1326,48 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                     )}
                                 </div>
 
+                                {/*
+                                  * A base não se escolhe aqui — ela vem do card da grade, pelo
+                                  * "Regerar". Houve um seletor por turno neste ponto: pedia que o
+                                  * usuário reencontrasse, numa lista, a grade que ele já estava
+                                  * olhando. Aqui só se confirma o que foi escolhido.
+                                  */}
+                                {regerarBase && (
+                                    <div className="flex items-start gap-3 p-4 border rounded-xl border-primary/40 bg-primary/5">
+                                        <RefreshCw className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+                                        <div className="space-y-1 min-w-0">
+                                            <p className="text-sm font-semibold">
+                                                Regerando a partir de &quot;{regerarBase.nome}&quot;
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Uma grade <strong>nova</strong> será criada com o nome acima; a original
+                                                continua na lista, intacta. Ela sai o mais parecida possível com essa, já
+                                                aplicando o que mudou no cadastro — professor novo, restrição nova,
+                                                travamento novo.
+                                                Só o turno{' '}
+                                                <strong>
+                                                    {/* `turno_nome` só vem preenchido na listagem de "todos os
+                                                        turnos"; com um turno selecionado a lista é crua. */}
+                                                    {regerarBase.turno_nome
+                                                        || turnosAtivos.find(t => t.id === regerarBase.turno_id)?.nome
+                                                        || 'dela'}
+                                                </strong>{' '}
+                                                será gerado,
+                                                e a grade original não muda.
+                                            </p>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                                onClick={() => setRegerarBase(null)}
+                                            >
+                                                Gerar do zero em vez disso
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="flex items-start gap-4 p-4 border rounded-xl bg-muted/30">
                                     <Switch
                                         id="mesmo-prof-mesmo-dia"
@@ -1241,6 +1396,8 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                         Geminar cria <strong>um único bloco</strong> de aulas seguidas por turma, no mesmo dia. As demais aulas da disciplina ficam separadas ao longo da semana — geminar &quot;2x&quot; numa disciplina de 4 aulas dá 1 bloco de 2 + 2 aulas avulsas, e não dois blocos.
                                         <br />
                                         Por padrão vem ligado para disciplinas com 3 ou mais aulas semanais, para o professor não mudar de sala tantas vezes no mesmo dia.
+                                        <br />
+                                        O professor que tiver <strong>geminação personalizada</strong> no cadastro não segue esta tela nas matérias que ele combinou: nas turmas dele vale o que estiver lá, mesmo que a disciplina esteja desligada aqui.
                                     </AlertDescription>
                                 </Alert>
 
