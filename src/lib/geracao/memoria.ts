@@ -13,6 +13,7 @@
 
 import { createHash } from 'crypto';
 import { getPool } from '@/lib/db/pool';
+import { normalizarGeminacaoPersonalizada } from '@/lib/geminacao-professor';
 
 export type MemoriaTurno = {
     /** Hash dos dados de entrada quando esta grade foi produzida. */
@@ -47,6 +48,7 @@ export function calcularImpressao(dados: {
     allProfessores: any[];
     aulasFixas: any[];
     configGerminacao?: { componente_id: string; geminar?: boolean; tamanho_bloco?: number }[];
+    permitirMaisDeDuasAulasProfNaTurma?: boolean;
 }): string {
     const partes: string[] = [];
 
@@ -72,9 +74,26 @@ export function calcularImpressao(dados: {
             .map((x: any) => `${x.dia}/${x.periodo}`)
             .sort()
             .join(',');
+        /**
+         * A geminação personalizada entra aqui e não no bloco `geminacao:` de
+         * baixo porque ela é um dado DO PROFESSOR: muda o motor só nas turmas
+         * dele. Fora da impressão, editá-la devolveria a grade guardada de
+         * antes da edição — a mesma falha que a configuração da tela já teve.
+         *
+         * `undefined` para quem não personalizou, e não `null` ou `{}`, para não
+         * invalidar a memória já gravada de todas as escolas.
+         */
+        const gemPessoal = normalizarGeminacaoPersonalizada(p.geminacao_personalizada);
+        const gemTexto = gemPessoal
+            ? Object.entries(gemPessoal)
+                .map(([compId, r]) => `${compId}=${r.max_consecutivas}/${r.max_no_dia}`)
+                .sort()
+                .join(',')
+            : '';
         partes.push(
             `prof:${p.id}:${p.sem_preferencia_livre_docencia}:[${ld}]:` +
-            `${estavel(p.restricoes)}:[${[...(p.dias_preferidos || [])].sort().join(',')}]`
+            `${estavel(p.restricoes)}:[${[...(p.dias_preferidos || [])].sort().join(',')}]` +
+            (gemTexto ? `:gem[${gemTexto}]` : '')
         );
     }
 
@@ -89,6 +108,10 @@ export function calcularImpressao(dados: {
         .map(c => `${c.componente_id}:${c.tamanho_bloco}`)
         .sort();
     partes.push(`geminacao:[${gem.join(',')}]`);
+
+    // Só quando desligado, para não invalidar a memória já gravada de todas as
+    // escolas: o padrão é `true`, e `true` é como o motor sempre se comportou.
+    if (dados.permitirMaisDeDuasAulasProfNaTurma === false) partes.push('profTurmaDia:teto');
 
     return createHash('sha256').update(partes.join('\n')).digest('hex').slice(0, 32);
 }

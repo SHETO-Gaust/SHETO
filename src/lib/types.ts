@@ -65,6 +65,34 @@ export type LivreDocenciaItem = {
     periodo: LivreDocenciaPeriodo;
 };
 
+/**
+ * Geminação decidida no cadastro do PROFESSOR, e não na tela de geração.
+ *
+ * `ConfiguracaoGerminacao` é por componente: "Matemática 2x" vale para todos os
+ * professores de Matemática. Isto aqui é o acordo com um docente específico e
+ * vence aquela configuração nas turmas/disciplinas em que ele dá aula — dois
+ * professores da mesma matéria podem sair com regras diferentes na mesma grade.
+ */
+export type GeminacaoPersonalizada = {
+    /** Maior emenda de aulas seguidas da disciplina, e tamanho do bloco pedido. */
+    max_consecutivas: 2 | 3;
+    /** Quantas aulas da disciplina cabem no dia, no total. Nunca menor que `max_consecutivas`. */
+    max_no_dia: 2 | 3 | 4 | 5;
+};
+
+/**
+ * O acordo por MATÉRIA: `componente_id` → regra.
+ *
+ * O mesmo professor aceita dobradinha em Matemática e recusa em Projeto de
+ * Vida, então a regra não pode ser uma só para a pessoa inteira. Matéria sem
+ * entrada aqui segue a configuração da tela de geração, como todo mundo.
+ *
+ * `undefined`/`null` = nenhuma personalização. Ler sempre por
+ * `regraDaMateria` (`src/lib/geminacao-professor.ts`), que trata também o
+ * formato antigo, de quando a regra era única por professor.
+ */
+export type GeminacaoPorComponente = Record<string, GeminacaoPersonalizada>;
+
 export type Professor = {
     id: string;
     escola_id: string;
@@ -80,6 +108,7 @@ export type Professor = {
     sem_preferencia_livre_docencia?: boolean;
     justificativa?: string | null;
     dias_preferidos?: string[]; // Dias preferidos para concentração de aulas
+    geminacao_personalizada?: GeminacaoPorComponente | null;
     created_at: string;
 };
 
