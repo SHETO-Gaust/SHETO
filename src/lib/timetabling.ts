@@ -1,5 +1,6 @@
 
 import { capacidadeSemanalDaSerie } from './capacidade-serie';
+import { mapaGeminacaoPorProfessor, regraDaMateria } from './geminacao-professor';
 import {
   DIA_LONGO_MIN_AULAS,
   TETO_DIA_CURTO,
@@ -252,8 +253,11 @@ function isFolgaHardBlocked(
 }
 
 /**
- * HARD CONSTRAINT — REUNIÃO DE FLUXO (reuniao_fluxo)
- * Retorna true se o slot está marcado como reunião de fluxo.
+ * HARD CONSTRAINT — PLANEJAMENTO COLETIVO (`reuniao_fluxo`)
+ * Retorna true se o slot está marcado como planejamento coletivo.
+ *
+ * A chave no jsonb continua `reuniao_fluxo`: era esse o nome do rótulo, e
+ * ela está gravada nas restrições de toda a rede. Só o que o usuário lê mudou.
  * Tratado como indisponível: jamais pode receber aula.
  * Não afetado por nenhum relaxamento progressivo.
  */
@@ -307,6 +311,22 @@ function isPersonalizadoSoftBlocked(
  * mas sempre com ruído aleatório para evitar repetição determinística
  * de tentativas ruins.
  */
+/**
+ * Quanto vale, na escolha do DIA e do SLOT, ter sido a posição da grade de
+ * referência (`gradeReferencia` — o "regerar a partir de").
+ *
+ * São preferências, não travas: um slot da base que hoje é ilegal simplesmente
+ * não passa nas checagens e o bloco vai para outro lugar.
+ *
+ * Os números têm de conviver com os que já estavam ali. No dia, a preferência
+ * do professor vale até 10 e o ruído até 4 — 12 põe a base acima das duas sem
+ * anular o desempate. No slot, o ruído é 1 e a fuga do vizinho da mesma
+ * disciplina é -10: com 5, a base manda no caso comum e continua perdendo para
+ * a regra que impede a emenda acidental, que é como tem de ser.
+ */
+const PESO_DIA_DA_BASE = 12;
+const PESO_SLOT_DA_BASE = 5;
+
 function ordenarDiasComPreferenciaProgressiva(
   diasDisponiveis: string[],
   prof: ProfessorComDados | undefined,
@@ -319,11 +339,26 @@ function ordenarDiasComPreferenciaProgressiva(
   // isso permite que o mesmo prof ministre disciplinas diferentes na mesma turma/dia.
   ignorarCargaProfessorNoDia: boolean = false,
   rng: () => number = Math.random,
+  /**
+   * Dias em que a grade de referência colocava este bloco — o "regerar a partir
+   * de". Preferência forte, bloqueio nenhum: se o dia da base não servir mais,
+   * o bloco vai para outro sem reclamar.
+   *
+   * Vale inclusive no caminho de cima (sem professor, ou com os dias preferidos
+   * já relaxados): ali a ordem era sorteio puro, e um sorteio puro é exatamente
+   * o que desfaz a semelhança que se está tentando preservar.
+   */
+  diasDaBase?: Set<string>,
 ): string[] {
   const dias = [...diasDisponiveis];
+  const bonusBase = (dia: string) => (diasDaBase?.has(dia) ? PESO_DIA_DA_BASE : 0);
 
   if (ignorarDiasPreferidos || !prof) {
-    return dias.sort(() => rng() - 0.5);
+    if (!diasDaBase || diasDaBase.size === 0) return dias.sort(() => rng() - 0.5);
+    return dias
+      .map(dia => ({ dia, score: bonusBase(dia) + rng() * 4 }))
+      .sort((a, b) => b.score - a.score)
+      .map(x => x.dia);
   }
 
   const preferidos = new Set(prof.dias_preferidos || []);
@@ -342,6 +377,7 @@ function ordenarDiasComPreferenciaProgressiva(
       const ehPreferido = preferidos.has(dia) ? 1 : 0;
       const carga = getDiaLoad(dia);
       const score =
+        bonusBase(dia) +
         (ehPreferido * 10 * intensidadePreferencia) +
         (carga * 0.8) +
         (rng() * 4);
@@ -364,6 +400,21 @@ function ordenarDiasComPreferenciaProgressiva(
  * pergunta ao motor, e é do motor que a resposta tem de vir.
  */
 export { regraDoDiaViolada } from './horario-slots';
+
+/**
+ * Teto de aulas do mesmo professor, na mesma turma, num mesmo dia — quando
+ * `permitirMaisDeDuasAulasProfNaTurma` está desligado.
+ *
+ * Duas, e não três, porque é o número que a escola reconhece: o professor
+ * aparece na turma no máximo duas vezes no dia. A geminação pedida levanta este
+ * teto para o tamanho do bloco (ver `tetoProfNaTurma`), porque um bloco de 3 é
+ * um pedido explícito de 3 aulas seguidas e não faria sentido o motor recusá-lo.
+ *
+ * Não confundir com o teto da REGRA DO DIA (`TETO_DIA_LONGO`/`TETO_DIA_CURTO`),
+ * que é por DISCIPLINA e vale sempre. Este é por PROFESSOR e só existe quando o
+ * usuário desliga a opção na tela de geração.
+ */
+export const TETO_PROF_TURMA_DIA = 2;
 
 export function gerarHorarioAlgoritmico(
   turno: Turno,
@@ -437,6 +488,47 @@ export function gerarHorarioAlgoritmico(
    * repetições independentes da mesma escola, cada uma com a rampa inteira.
    */
   sementeBase: number = 0,
+  /**
+   * Deixa o professor dar mais de duas aulas para a MESMA turma no mesmo dia —
+   * seguidas ou espalhadas, somando todas as disciplinas que ele leciona ali.
+   *
+   * Ligado (o padrão, e o que o motor sempre fez) não entra em nada: a busca
+   * segue livre para juntar as aulas do professor naquela turma no mesmo dia.
+   *
+   * Desligado vira HARD CONSTRAINT: nenhum dia da turma pode ter mais de
+   * `TETO_PROF_TURMA_DIA` aulas do mesmo professor — exceto onde a geminação
+   * pedida já obriga mais que isso, e aí o teto sobe para o tamanho do bloco.
+   * Sem essa exceção o motor rejeitaria a própria geminação que o usuário pediu
+   * na tela seguinte, e a disciplina sairia espalhada sem uma linha dizendo por quê.
+   *
+   * ATENÇÃO ao mexer: isto RESTRINGE a busca. Cada aula a mais que o teto proíbe
+   * é um encaixe a menos, e em escola apertada a diferença aparece como
+   * pendência. É por isso que a tela avisa antes de desligar.
+   */
+  permitirMaisDeDuasAulasProfNaTurma: boolean = true,
+  /**
+   * A grade que o resultado deve PARECER — o "regerar a partir de".
+   *
+   * O usuário aponta uma grade pronta e muda uma coisa no cadastro: um
+   * professor, uma restrição, um travamento. O que ele espera de volta é a
+   * mesma grade com aquela mudança aplicada, não uma grade nova que por acaso
+   * também fecha.
+   *
+   * É SEPARADA de `gradeHerdada` de propósito, e a distinção é o ponto todo:
+   * `gradeHerdada` é a melhor grade conhecida e muda a cada rodada — medir
+   * distância contra ela seria mirar um alvo que se move junto, e a semelhança
+   * com a grade do usuário continuaria à deriva. Esta aqui fica parada do
+   * começo ao fim da geração.
+   *
+   * Sem ela, herdar é só um empurrão inicial: a primeira tentativa semeia a
+   * base, ruína um pedaço, e o que sai vira a incumbente — daí em diante a
+   * busca deriva. Medido em 1344: 11% de semelhança com a base, contra 10% de
+   * uma geração do zero. Ou seja, nenhuma.
+   *
+   * A divergência entra no custo como DESEMPATE puro (ver `custoDe`), abaixo de
+   * pendência e de geminação. Grade pior nunca ganha por ser parecida.
+   */
+  gradeReferencia: HorarioAulaGeradaAlgoritmo[] | null = null,
 ): {
   success: boolean;
   aulas: HorarioAulaGeradaAlgoritmo[];
@@ -507,7 +599,7 @@ export function gerarHorarioAlgoritmico(
 
   /**
    * Domínio de um bloco: quantas posições (dia, slot inicial) são viáveis olhando
-   * apenas o que NÃO muda durante uma tentativa — BAN, folga e reunião de fluxo do
+   * apenas o que NÃO muda durante uma tentativa — BAN, folga e planejamento coletivo do
    * professor, restrições da série, slots já travados na turma e as grades
    * publicadas de outros turnos.
    *
@@ -593,10 +685,15 @@ export function gerarHorarioAlgoritmico(
     evitarVizinhoMesmaDisciplina: (i: number) => boolean = () => false,
   ): number[] => {
     const slots = Array.from({ length: maxStart + 1 }, (_, k) => k);
+    const daBase = slotsBasePorGrupo.get(`${b.turma_id}|${b.componente_id}|${b.tipo}`);
 
     return slots
       .map(i => {
         let score = rng() - (evitarVizinhoMesmaDisciplina(i) ? 10 : 0);
+
+        // Onde a grade de referência punha este bloco. Só o slot inicial: o
+        // bloco é contíguo, então acertar o começo já recoloca o resto.
+        if (daBase?.has(`${dia}|${i}`)) score += PESO_SLOT_DA_BASE;
 
         if (temPadroes && b.componente_sigla) {
           // Média do histórico sobre os slots que o bloco vai ocupar.
@@ -635,10 +732,51 @@ export function gerarHorarioAlgoritmico(
   const limitesGeminacao = new Map<string, number>();
   const requisitosGeminacao: RequisitoGeminacao[] = [];
 
+  /**
+   * `tetoPersonalizado`: para cada `turma|componente|tipo` de um professor com
+   * geminação personalizada, quantas aulas daquela disciplina cabem no dia.
+   *
+   * Só existe para quem personalizou. Onde não há entrada, `tetoDeAulasNoDia`
+   * volta ao teto da rede (`TETO_DIA_LONGO`/`TETO_DIA_CURTO`), que é o que
+   * mantém intocado o professor que não pediu nada.
+   */
+  const tetoPersonalizado = new Map<string, number>();
+
+  /**
+   * A personalização do professor é VEREDITO sobre `configGerminacao`.
+   *
+   * A configuração da tela é por componente e alcança todo mundo que dá aquela
+   * matéria; a do cadastro é de uma pessoa numa matéria. Quando as duas falam
+   * da mesma turma/disciplina, vale a do cadastro — inclusive para LIGAR
+   * geminação que a tela deixou desligada, que é o caso que motivou o campo:
+   * dos dois professores de Matemática, um combinou dobradinha e o outro não.
+   *
+   * O alcance é o par professor+disciplina, e não o professor inteiro nem a
+   * disciplina inteira. São os dois lados que importam: é o que permite os dois
+   * professores de Matemática saírem diferentes na mesma grade, e o que deixa o
+   * mesmo professor aceitar dobradinha em Matemática e recusar em Projeto de
+   * Vida.
+   */
+  const personalizacaoPorProfessor = mapaGeminacaoPorProfessor(professores);
+
   for (const t of turmas) {
     for (const c of t.serie.componentes) {
       const cfg = configGerminacao.find(g => g.componente_id === c.componente_id);
-      if (!cfg?.geminar || cfg.tamanho_bloco <= 1) continue;
+      const profDaDisciplina = t.professores?.find(p => p.componente_id === c.componente_id)?.professor_id;
+      const pessoal = profDaDisciplina
+        ? regraDaMateria(personalizacaoPorProfessor.get(profDaDisciplina), c.componente_id)
+        : null;
+
+      if (pessoal) {
+        for (const tipo of ['presencial', 'nao_presencial'] as const) {
+          tetoPersonalizado.set(`${t.id}|${c.componente_id}|${tipo}`, pessoal.max_no_dia);
+        }
+      }
+
+      const blocoPedido = pessoal
+        ? pessoal.max_consecutivas
+        : (cfg?.geminar ? cfg.tamanho_bloco : 0);
+      if (blocoPedido <= 1) continue;
 
       for (const tipo of ['presencial', 'nao_presencial'] as const) {
         const nFixa = aulasFixas.filter(af =>
@@ -648,7 +786,7 @@ export function gerarHorarioAlgoritmico(
         const total = Math.max(0, bruto - nFixa);
 
         const alvo = tipo === 'presencial' ? turno : turnoNP;
-        const tamanho = Math.min(cfg.tamanho_bloco, total, alvo.aulas_por_dia || 0);
+        const tamanho = Math.min(blocoPedido, total, alvo.aulas_por_dia || 0);
         // Sobrou menos de duas aulas livres, ou o dia é curto demais: não há
         // geminação a cumprir, e fingir que há só produziria pendência eterna.
         if (tamanho <= 1) continue;
@@ -662,6 +800,37 @@ export function gerarHorarioAlgoritmico(
           tipo,
           tamanho,
         });
+      }
+    }
+  }
+
+  /**
+   * `tetoProfNaTurma`: quantas aulas o professor pode dar àquela turma num dia.
+   *
+   * Só existe quando `permitirMaisDeDuasAulasProfNaTurma` está desligado — com a
+   * opção ligada o mapa fica vazio e nenhuma checagem roda, para o caminho
+   * quente não pagar nada pelo que não é usado.
+   *
+   * O valor é `TETO_PROF_TURMA_DIA` levantado pela MAIOR geminação que aquele
+   * professor tem naquela turma. Lê-se de `limitesGeminacao` e não dos blocos
+   * construídos de propósito: sob `forcarIndividuais` os blocos todos viram
+   * tamanho 1, e o teto cairia para 2 justamente na tentativa de último recurso
+   * — passando a proibir o bloco de 3 que a mesma busca vai tentar montar.
+   */
+  const tetoProfNaTurma = new Map<string, number>();
+  if (!permitirMaisDeDuasAulasProfNaTurma) {
+    for (const t of turmas) {
+      for (const vinculo of t.professores || []) {
+        const profKey = vinculo.professor_id ? teacherKeyMap.get(vinculo.professor_id) : null;
+        if (!profKey) continue;
+
+        const chave = `${profKey}|${t.id}`;
+        let teto = tetoProfNaTurma.get(chave) ?? TETO_PROF_TURMA_DIA;
+        for (const tipo of ['presencial', 'nao_presencial'] as const) {
+          const bloco = limitesGeminacao.get(`${t.id}|${vinculo.componente_id}|${tipo}`) ?? 0;
+          if (bloco > teto) teto = bloco;
+        }
+        tetoProfNaTurma.set(chave, teto);
       }
     }
   }
@@ -739,8 +908,19 @@ export function gerarHorarioAlgoritmico(
     if (guardado !== undefined) return guardado;
 
     const alvo = turnosById.get(turnoId);
-    const base = (alvo?.aulas_por_dia ?? 0) >= DIA_LONGO_MIN_AULAS ? TETO_DIA_LONGO : TETO_DIA_CURTO;
     const grupo = `${turmaId}|${compId}|${tipo}`;
+    /**
+     * O professor que personalizou substitui o teto da rede pelo dele — para
+     * baixo também: "no máximo 2 de Matemática por dia" só significa alguma
+     * coisa se puder ficar abaixo dos 3 que o dia curto permitiria.
+     *
+     * Os outros três termos do `Math.max` continuam podendo levantá-lo, e é
+     * proposital: piso aritmético, bloco pedido e aulas travadas são
+     * impossibilidades, não preferências, e um teto que os contrarie não
+     * produziria uma grade mais limpa — produziria uma grade que não fecha.
+     */
+    const base = tetoPersonalizado.get(grupo)
+      ?? ((alvo?.aulas_por_dia ?? 0) >= DIA_LONGO_MIN_AULAS ? TETO_DIA_LONGO : TETO_DIA_CURTO);
     const teto = Math.max(
       base,
       pisoDiario.get(grupo) ?? 1,
@@ -1009,6 +1189,47 @@ export function gerarHorarioAlgoritmico(
       turmaId: string, compId: string, tipo: string, turnoId: string, dia: string,
     ) => `${turmaId}|${compId}|${tipo}|${turnoId}|${dia}`;
 
+    /**
+     * Quantas aulas cada professor já tem com cada turma em cada dia.
+     *
+     * Contagem, e não conjunto de índices: a pergunta aqui é "quantas vezes este
+     * professor aparece nesta turma hoje", sem olhar onde. Soma presencial e não
+     * presencial — para a turma é a mesma pessoa no mesmo dia — e ignora
+     * `ocupacoesExistentes`, que são aulas de OUTRAS turmas (as publicadas dos
+     * outros turnos) e não entram nesta conta.
+     *
+     * Vive junto de `ocupacaoTurmas`: toda entrada e toda saída da grade passa
+     * por `somarProfTurmaDia`, senão o teto vigiaria um número velho. São seis
+     * lugares — Fase 0, garantia das fixas, add/removeAulaState e o laço
+     * principal — e é a mesma lista de lugares que mantém `ocupacaoTurmas`.
+     */
+    const aulasProfTurmaDia = new Map<string, number>();
+
+    const somarProfTurmaDia = (
+      profKey: string | null | undefined, turmaId: string, dia: string, delta: number,
+    ) => {
+      if (!profKey || permitirMaisDeDuasAulasProfNaTurma) return;
+      const k = `${profKey}|${turmaId}|${dia}`;
+      const novo = (aulasProfTurmaDia.get(k) ?? 0) + delta;
+      if (novo > 0) aulasProfTurmaDia.set(k, novo);
+      else aulasProfTurmaDia.delete(k);
+    };
+
+    /**
+     * HARD CONSTRAINT — TETO DO PROFESSOR NA TURMA
+     *
+     * Colocar mais `quantidade` aulas deste professor nesta turma neste dia
+     * passaria do que a escola aceita? Sempre `false` com a opção ligada, que é
+     * o padrão: aí o motor se comporta exatamente como antes desta regra existir.
+     */
+    const excederiaTetoProfNaTurma = (
+      profKey: string | null | undefined, turmaId: string, dia: string, quantidade: number,
+    ): boolean => {
+      if (permitirMaisDeDuasAulasProfNaTurma || !profKey) return false;
+      const teto = tetoProfNaTurma.get(`${profKey}|${turmaId}`) ?? TETO_PROF_TURMA_DIA;
+      return (aulasProfTurmaDia.get(`${profKey}|${turmaId}|${dia}`) ?? 0) + quantidade > teto;
+    };
+
     const marcarComponente = (a: HorarioAulaGeradaAlgoritmo) => {
       const k = chaveComponenteDia(a.turma_id, a.componente_id, a.tipo, a.turno_id, a.dia_semana);
       let ocupados = ocupacaoComponente.get(k);
@@ -1169,6 +1390,10 @@ export function gerarHorarioAlgoritmico(
           inicio_min: ini,
           fim_min: fim,
         });
+        // O travamento entra de qualquer jeito — é decisão do usuário, não do
+        // motor. Mas conta para o teto: se a fixa já usou as duas, o laço
+        // principal não coloca uma terceira do mesmo professor naquele dia.
+        somarProfTurmaDia(profKey, turma.id, dia, 1);
       }
     }
 
@@ -1220,6 +1445,7 @@ export function gerarHorarioAlgoritmico(
               const filtered = arr.filter(o => !(o.aula_index === intruso.aula_index && o.turno_id === intruso.turno_id));
               if (filtered.length > 0) ocupacaoProfessoresPorDia.set(mapKey, filtered);
               else ocupacaoProfessoresPorDia.delete(mapKey);
+              somarProfTurmaDia(pKey, intruso.turma_id, intruso.dia_semana, -1);
             }
           }
         }
@@ -1254,6 +1480,7 @@ export function gerarHorarioAlgoritmico(
           inicio_min: iniG,
           fim_min: fimG,
         });
+        somarProfTurmaDia(profKeyG, turma.id, aulaFixa.dia_semana, 1);
       }
     }
     // ── FIM DA GARANTIA ──────────────────────────────────────────────────────────
@@ -1328,6 +1555,7 @@ export function gerarHorarioAlgoritmico(
         const novo = arr.filter(occ => !(occ.turno_id === a.turno_id && occ.aula_index === a.aula_index));
         if (novo.length > 0) ocupacaoProfessoresPorDia.set(mapKey, novo);
         else ocupacaoProfessoresPorDia.delete(mapKey);
+        somarProfTurmaDia(profKey, a.turma_id, a.dia_semana, -1);
       }
     };
 
@@ -1352,6 +1580,7 @@ export function gerarHorarioAlgoritmico(
           inicio_min: ini,
           fim_min: fim,
         });
+        somarProfTurmaDia(meta.professor_key, meta.turma_id, dia, 1);
       }
       return nova;
     };
@@ -1375,6 +1604,13 @@ export function gerarHorarioAlgoritmico(
 
       if (runGeminacao > 0 && colocacaoExcederiaLimite(
         meta.turma_id, meta.componente_id, meta.tipo, targetTurno.id, dia, idx, runGeminacao,
+      )) return false;
+
+      // Segue `runGeminacao` pelo mesmo motivo da linha acima: com 0 quem chama
+      // valida o bloco inteiro de uma vez, e perguntar aqui slot a slot deixaria
+      // passar um bloco de 3 contra um teto de 2 (cada aula, sozinha, cabe).
+      if (runGeminacao > 0 && excederiaTetoProfNaTurma(
+        meta.professor_key, meta.turma_id, dia, runGeminacao,
       )) return false;
 
       if (meta.tipo === 'presencial' && meta.serie_restricoes?.[dia]?.[idx] === 'proibido') {
@@ -1545,7 +1781,7 @@ export function gerarHorarioAlgoritmico(
              * Teto de sequência, que faltava nesta estratégia inteira.
              *
              * Ela procura um slot VAZIO da turma e conferia tudo — slot livre,
-             * restrição de série, BAN, reunião de fluxo, folga, planejamento —
+             * restrição de série, BAN, planejamento coletivo, folga, planejamento —
              * menos se a aula ficaria emendada em outras da mesma disciplina.
              * Das três saídas que colocam a pendência aqui, só a que desloca um
              * conflito de professor revalidava; as outras duas gravavam direto.
@@ -1556,6 +1792,10 @@ export function gerarHorarioAlgoritmico(
              * linha antes de todas as saídas resolve as três de uma vez.
              */
             if (colocacaoExcederiaLimite(b.turma_id, b.componente_id, b.tipo, targetTurno.id, d, idx, b.size)) continue;
+            // Mesma história do teto de sequência: das três saídas desta
+            // estratégia só uma passa por `podeAlocarMetaEmSlot`. Uma linha aqui
+            // cobre as três.
+            if (excederiaTetoProfNaTurma(b.professor_key, b.turma_id, d, b.size)) continue;
 
             const prof = b.professor_id ? professoresById.get(b.professor_id) : undefined;
             if (isBanHardBlocked(prof, targetTurno.id, d, idx)) continue;
@@ -1748,6 +1988,12 @@ export function gerarHorarioAlgoritmico(
               !colocacaoExcederiaLimite(
                 bloco.turma_id, bloco.componente_id, bloco.tipo,
                 alvo.id, trecho[0].dia_semana, trecho[0].aula_index, bloco.size,
+              ) &&
+              // Idem para o teto do professor na turma: a grade herdada pode vir
+              // da memória de uma geração feita com a opção LIGADA, e sem esta
+              // linha o defeito voltaria inteiro pela semeadura.
+              !excederiaTetoProfNaTurma(
+                bloco.professor_key, bloco.turma_id, trecho[0].dia_semana, bloco.size,
               );
             if (!cabe) break; // restrição mudou desde que a grade foi gerada
 
@@ -1779,6 +2025,26 @@ export function gerarHorarioAlgoritmico(
       const aRemover: HorarioAulaGeradaAlgoritmo[] = [];
       for (const a of aulasGeradas) {
         if (a.aula_fixa_id) continue; // travamento é do usuário, não se mexe
+        /*
+         * Regerando a partir de uma grade: quem já está no lugar de lá quase
+         * sempre escapa da ruína.
+         *
+         * A ruína derruba a turma ou o professor INTEIROS em volta de uma
+         * pendência — é o que a tira de um ótimo local, e é caro demais aqui:
+         * medido em 1344, a semeadura recolocava 76% da base e a primeira ruína
+         * já devolvia o resultado para 38%. Poupando quem está na posição
+         * original, o reparo passa a acontecer em volta do que mudou, em vez de
+         * refazer o quadro todo.
+         *
+         * Sobra 1 em 6 para ser removido mesmo estando certo: sem essa fresta a
+         * busca não teria como desfazer um encaixe da base que hoje atrapalha, e
+         * a pendência ficaria presa para sempre.
+         */
+        if (
+          slotsDaBase.size > 0 &&
+          rng() < 0.85 &&
+          slotsDaBase.has(`${a.turma_id}|${a.componente_id}|${a.tipo}|${a.dia_semana}|${a.aula_index}`)
+        ) continue;
         if (modo < 0.4) {
           if (turmasAlvo.has(a.turma_id)) aRemover.push(a);
         } else if (modo < 0.8) {
@@ -1829,10 +2095,18 @@ export function gerarHorarioAlgoritmico(
           curProgLocal,
           permitirMesmoProfDisciplinasMesmoDia,
           rng,
+          diasBasePorGrupo.get(`${b.turma_id}|${b.componente_id}|${b.tipo}`),
         );
 
         for (const d of dias) {
           if (alocado) break;
+
+          // ── HARD CONSTRAINT 0b: teto do professor nesta turma no dia ──────
+          // A pergunta é do DIA, não do slot: colocar este bloco aqui deixaria o
+          // professor com aulas demais nesta turma hoje? Vindo antes de
+          // `ordenarSlots` ela descarta o dia inteiro de uma vez, em vez de
+          // repetir a mesma resposta em cada slot candidato.
+          if (excederiaTetoProfNaTurma(b.professor_key, b.turma_id, d, b.size)) continue;
 
           const maxStart = targetTurno.aulas_por_dia - b.size;
 
@@ -1979,6 +2253,7 @@ export function gerarHorarioAlgoritmico(
                     inicio_min: ini,
                     fim_min: fim,
                   });
+                  somarProfTurmaDia(b.professor_key, b.turma_id, d, 1);
                 }
               }
               alocado = true;
@@ -2277,11 +2552,69 @@ export function gerarHorarioAlgoritmico(
    * geminação nunca compensa: só vale a pena se colocar pelo menos uma aula a
    * mais na grade.
    */
-  const custoDe = (aulasFaltando: number, geminacoesQuebradas: number) =>
-    aulasFaltando * 1000 + geminacoesQuebradas;
+  /**
+   * Slots ocupados pela grade base, para medir divergência.
+   *
+   * `turma|componente|tipo|dia|índice`: a identidade de uma aula do ponto de
+   * vista de quem olha o quadro. Trocar o professor de uma turma NÃO conta como
+   * divergência — a aula continua no mesmo lugar, que é o que o usuário quer
+   * preservar, e contá-la puniria justamente a mudança que ele pediu.
+   */
+  const slotsDaBase = new Set<string>();
+  /**
+   * `turma|componente|tipo` → os `dia|slot` que a grade de referência usava.
+   *
+   * Alimenta as duas preferências da remontagem (dia e slot). Sem isto, o custo
+   * sozinho não bastava: medido em 1344, a semeadura recolocava 76% da base,
+   * mas os blocos que não coubessem faziam a ruína derrubar turmas inteiras, e
+   * a remontagem espalhava tudo de novo — o resultado final voltava para os 10%
+   * de uma geração do zero. Preferir a posição antiga na hora de recolocar é o
+   * que faz o reparo ser local em vez de global.
+   */
+  const slotsBasePorGrupo = new Map<string, Set<string>>();
+  const diasBasePorGrupo = new Map<string, Set<string>>();
+  if (gradeReferencia) {
+    for (const a of gradeReferencia) {
+      slotsDaBase.add(`${a.turma_id}|${a.componente_id}|${a.tipo}|${a.dia_semana}|${a.aula_index}`);
+      const grupo = `${a.turma_id}|${a.componente_id}|${a.tipo}`;
+      let slots = slotsBasePorGrupo.get(grupo);
+      if (!slots) { slots = new Set(); slotsBasePorGrupo.set(grupo, slots); }
+      slots.add(`${a.dia_semana}|${a.aula_index}`);
+      let dias = diasBasePorGrupo.get(grupo);
+      if (!dias) { dias = new Set(); diasBasePorGrupo.set(grupo, dias); }
+      dias.add(a.dia_semana);
+    }
+  }
+
+  /** Quantas aulas da grade caíram FORA dos slots da base. */
+  const divergenciaDaBase = (aulas: HorarioAulaGeradaAlgoritmo[]): number => {
+    if (slotsDaBase.size === 0) return 0;
+    let fora = 0;
+    for (const a of aulas) {
+      if (!slotsDaBase.has(`${a.turma_id}|${a.componente_id}|${a.tipo}|${a.dia_semana}|${a.aula_index}`)) fora++;
+    }
+    return fora;
+  };
+
+  /**
+   * Custo de uma tentativa: aulas faltando em primeiro lugar, geminações
+   * desfeitas como desempate, e — quando se está regerando a partir de uma
+   * grade — a distância até ela como desempate do desempate.
+   *
+   * A divergência é dividida pelo tamanho da base + 1, então vale sempre menos
+   * de 1: ela NUNCA compensa uma geminação desfeita, que por sua vez nunca
+   * compensa uma aula a menos. É desempate no sentido estrito — só decide entre
+   * grades idênticas em pendência e em geminação. Dar-lhe peso inteiro faria o
+   * motor preferir a grade velha a cumprir o que a tela pediu.
+   */
+  const custoDe = (
+    aulasFaltando: number,
+    geminacoesQuebradas: number,
+    divergencia: number = 0,
+  ) => aulasFaltando * 1000 + geminacoesQuebradas + divergencia / (slotsDaBase.size + 1);
 
   let melhorCusto = Number.isFinite(faltandoHerdado)
-    ? custoDe(faltandoHerdado, verificarGeminacoes(herdada.grade).length)
+    ? custoDe(faltandoHerdado, verificarGeminacoes(herdada.grade).length, divergenciaDaBase(herdada.grade))
     : Number.POSITIVE_INFINITY;
   let melhorGeminacoesQuebradas: GeminacaoQuebrada[] =
     Number.isFinite(faltandoHerdado) ? verificarGeminacoes(herdada.grade) : [];
@@ -2295,6 +2628,8 @@ export function gerarHorarioAlgoritmico(
    */
   let sucessoDegradadoAulas: HorarioAulaGeradaAlgoritmo[] | null = null;
   let sucessoDegradado: GeminacaoQuebrada[] = [];
+  /** Custo da grade guardada acima, na mesma moeda de `custoDe`. */
+  let melhorCustoDegradado = Number.POSITIVE_INFINITY;
   /**
    * Estado completo da melhor tentativa, guardado para o diagnóstico.
    *
@@ -2363,7 +2698,27 @@ export function gerarHorarioAlgoritmico(
      * "grade fechada" e a geminação pedida sumia sem uma linha de aviso. Era o
      * caminho mais curto para a disciplina aparecer com as 4 aulas soltas.
      */
-    if (res.success && res.geminacoesQuebradas.length === 0) {
+    /*
+     * Regerando a partir de uma grade, a PRIMEIRA grade perfeita não é a
+     * resposta — a mais parecida com a base é.
+     *
+     * Esta saída antecipada é o que, sozinho, mantinha a semelhança baixa: a
+     * busca parava no primeiro fechamento limpo que aparecesse, que não tem
+     * relação nenhuma com a base. Medido em 1344, com a geminação já satisfeita
+     * pela base e portanto sem nada a consertar: 73% de semelhança numa única
+     * tentativa, contra 58% ao fim de seis mil — a busca encontrava dezenas de
+     * grades perfeitas e devolvia uma qualquer.
+     *
+     * Sem referência, nada muda: a primeira perfeita continua encerrando o
+     * pedaço, que é o que torna a geração comum rápida.
+     *
+     * Com referência, a grade cai no mesmo funil das demais (`sucessoDegradado`,
+     * que já escolhe por `custoDe` — pendência, depois geminação, depois
+     * distância até a base) e a busca segue procurando uma mais próxima. Custa o
+     * pedaço inteiro; é o preço de "o mais parecido possível", e a parada por
+     * estagnação do orquestrador continua valendo por cima.
+     */
+    if (res.success && res.geminacoesQuebradas.length === 0 && !gradeReferencia) {
       return {
         success: true, aulas: res.aulas, attemptsMade: attempt + 1,
         melhorPendentes: 0, melhorIndice: indiceGlobal,
@@ -2372,19 +2727,42 @@ export function gerarHorarioAlgoritmico(
       };
     }
 
-    if (res.success && (
-      sucessoDegradadoAulas === null || res.geminacoesQuebradas.length < sucessoDegradado.length
-    )) {
-      sucessoDegradadoAulas = res.aulas;
-      sucessoDegradado = res.geminacoesQuebradas;
+    /*
+     * A escolha entre duas grades completas com geminação incompleta usa o MESMO
+     * custo do resto da busca, e não só a contagem de geminações.
+     *
+     * Contava só as geminações, e entre duas com a mesma contagem ficava a
+     * primeira que aparecesse. Isso é indiferente quando não há grade de
+     * referência — mas com uma, era o vazamento que devolvia a semelhança para o
+     * chão: esta é a grade que a função entrega quando nenhuma tentativa cumpre
+     * a geminação inteira (o caso comum numa escola real), e ela saía escolhida
+     * por um critério que ignora a base.
+     */
+    if (res.success) {
+      const custoDegradado = custoDe(0, res.geminacoesQuebradas.length, divergenciaDaBase(res.aulas));
+      if (sucessoDegradadoAulas === null || custoDegradado < melhorCustoDegradado) {
+        melhorCustoDegradado = custoDegradado;
+        sucessoDegradadoAulas = res.aulas;
+        sucessoDegradado = res.geminacoesQuebradas;
+      }
     }
 
-    const custo = custoDe(res.aulasFaltando, res.geminacoesQuebradas.length);
+    const custo = custoDe(
+      res.aulasFaltando,
+      res.geminacoesQuebradas.length,
+      divergenciaDaBase(res.aulas),
+    );
 
     /**
      * `<=` e não `<`: aceitar soluções de custo IGUAL é o que permite atravessar
      * platô. Com `<` a busca congela na primeira boa solução e passa o resto do
      * orçamento desmontando e remontando exatamente a mesma grade.
+     *
+     * Com `preservarHerdada` esse platô encolhe de propósito: duas grades antes
+     * empatadas passam a diferir pela distância até a base, e a que se afastou
+     * deixa de ser aceita. É esse o mecanismo — sem ele, o `<=` entregava a
+     * ÚLTIMA grade equivalente que aparecesse, que não tem relação nenhuma com
+     * a que o usuário mandou preservar.
      */
     if (custo <= melhorCusto) {
       melhorCusto = custo;
