@@ -1,7 +1,7 @@
 
 import { StepCard } from '@/components/dashboard/step-card';
 import { Sun, GraduationCap, BookOpen, Users, Layers, Users2, Clock, BarChart3, Calendar, ArrowRight, CheckCircle2, Search } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,13 +23,13 @@ const steps = [
 ];
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await db.auth.getUser();
   
   if (!user) return null;
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('ue')
     .eq('id', user.id)
@@ -40,7 +40,7 @@ export default async function DashboardPage() {
   let horariosPublicados: (Horario & { turno: Turno })[] = [];
 
   if (escolaId) {
-    const { data } = await supabase
+    const { data } = await db
       .from('horarios')
       .select('*, turno:turnos(*)')
       .eq('escola_id', escolaId)

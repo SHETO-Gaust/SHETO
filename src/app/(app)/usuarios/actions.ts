@@ -1,7 +1,7 @@
 
 'use server';
 
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/db/server';
 import { revalidatePath } from 'next/cache';
 import type { Profile, Escola } from '@/lib/types';
 import { z } from 'zod';
@@ -10,10 +10,10 @@ import { requireAdmin } from '@/lib/auth/guards';
 
 export async function getUsers(): Promise<Profile[]> {
     await requireAdmin();
-    const supabaseAdmin = await createAdminClient();
+    const dbAdmin = await createAdminClient();
 
     // Usamos o Admin Client para ver todos os perfis ignorando RLS de usuário comum
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await dbAdmin
         .from('profiles')
         .select('*, escolas(id, escolar)')
         .order('created_at', { ascending: false });
@@ -28,9 +28,9 @@ export async function getUsers(): Promise<Profile[]> {
 
 export async function updateUserPermissions(userId: string, modules: string[], role: 'admin' | 'user', ue: string | null | undefined, escolas_favoritas?: string[]) {
     await requireAdmin();
-    const supabaseAdmin = await createAdminClient();
+    const dbAdmin = await createAdminClient();
 
-    const { error } = await supabaseAdmin
+    const { error } = await dbAdmin
         .from('profiles')
         .update({
             modules,
@@ -51,8 +51,8 @@ export async function updateUserPermissions(userId: string, modules: string[], r
 
 export async function toggleUserStatus(userId: string, currentStatus: boolean) {
     await requireAdmin();
-    const supabaseAdmin = await createAdminClient();
-    const { error } = await supabaseAdmin
+    const dbAdmin = await createAdminClient();
+    const { error } = await dbAdmin
         .from('profiles')
         .update({ active: !currentStatus })
         .eq('id', userId);
@@ -78,7 +78,7 @@ const createUserSchema = z.object({
 
 export async function createUser(formData: z.infer<typeof createUserSchema>) {
     await requireAdmin();
-    const supabaseAdmin = await createAdminClient();
+    const dbAdmin = await createAdminClient();
 
     const validatedFields = createUserSchema.safeParse(formData);
 
@@ -92,7 +92,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
     const { email, password, name, role, modules, ue, escolas_favoritas } = validatedFields.data;
 
     // 1. Criar no Authentication
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: authError } = await dbAdmin.auth.admin.createUser({
         email: email,
         password: password,
         email_confirm: true,
@@ -112,7 +112,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
     }
 
     // 2. Criar explicitamente na tabela Profiles para garantir que ele apareça na lista
-    const { error: profileError } = await supabaseAdmin
+    const { error: profileError } = await dbAdmin
         .from('profiles')
         .upsert({
             id: authData.user.id,
@@ -135,7 +135,7 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         let schoolData = { escolar: 'Administração Central', regional: 'Seduc Sede', cidade: 'Palmas', inep: 'Global' };
         
         if (ue && ue !== 'null') {
-            const { data: escola } = await supabaseAdmin
+            const { data: escola } = await dbAdmin
                 .from('escolas')
                 .select('*')
                 .eq('id', ue)

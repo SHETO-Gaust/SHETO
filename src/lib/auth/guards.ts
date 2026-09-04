@@ -1,10 +1,10 @@
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type { Profile } from '@/lib/types';
 
 /**
  * Guardas de autorizacao para Server Actions.
  *
- * Contexto: no Supabase, o RLS garantia (no minimo) que so usuario logado
+ * Contexto: com RLS no banco, ficava garantido (no minimo) que so usuario logado
  * tocasse nas tabelas. No Postgres local nao ha RLS equivalente, e Server
  * Actions sao endpoints HTTP - podem ser chamadas diretamente, sem passar
  * pela navegacao. Estas guardas recolocam essa barreira na aplicacao.
@@ -25,14 +25,14 @@ function grupoDoModulo(modulo: string): string {
 
 /** Exige sessao valida e perfil ativo. Retorna o perfil do usuario. */
 export async function requireAuth(): Promise<Profile> {
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await db.auth.getUser();
   if (!user) {
     throw new Error('Nao autenticado.');
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('*')
     .eq('id', user.id)
@@ -124,8 +124,8 @@ export async function requireEscolaDoRecurso(
   const profile = await requireModulo(modulo);
   if (profile.role === 'admin') return profile;
 
-  const supabase = await createClient();
-  const { data: registro } = await supabase
+  const db = await createClient();
+  const { data: registro } = await db
     .from(tabela)
     .select('escola_id')
     .eq('id', id)
@@ -153,8 +153,8 @@ export async function requireEscolaDosRecursos(
   if (profile.role === 'admin') return profile;
   if (!ids || ids.length === 0) return profile;
 
-  const supabase = await createClient();
-  const { data: registros } = await supabase
+  const db = await createClient();
+  const { data: registros } = await db
     .from(tabela)
     .select('id, escola_id')
     .in('id', ids);
@@ -180,8 +180,8 @@ export async function requireEscolaDaSolicitacao(solicitacaoId: string, modulo: 
   const profile = await requireModulo(modulo);
   if (profile.role === 'admin') return profile;
 
-  const supabase = await createClient();
-  const { data: solicitacao } = await supabase
+  const db = await createClient();
+  const { data: solicitacao } = await db
     .from('solicitacoes_restricoes')
     .select('professor:professores(escola_id)')
     .eq('id', solicitacaoId)

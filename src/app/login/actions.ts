@@ -1,15 +1,15 @@
 
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { redirect } from 'next/navigation';
 
 export async function signIn(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await db.auth.signInWithPassword({
     email,
     password,
   });
@@ -19,14 +19,14 @@ export async function signIn(formData: FormData) {
   }
 
   // Verificar se o usuário está ativo no perfil
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('active')
     .eq('id', data.user.id)
     .single();
 
   if (profile && profile.active === false) {
-    await supabase.auth.signOut();
+    await db.auth.signOut();
     return redirect('/login?error=Este usuário está desativado. Entre em contato com o administrador.');
   }
 
@@ -36,22 +36,22 @@ export async function signIn(formData: FormData) {
 export async function signInGetResult(formData: FormData): Promise<{ url: string }> {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
 
   if (error) {
     return { url: `/login?error=${encodeURIComponent(error.message)}` };
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('active')
     .eq('id', data.user.id)
     .single();
 
   if (profile && profile.active === false) {
-    await supabase.auth.signOut();
+    await db.auth.signOut();
     return { url: `/login?error=${encodeURIComponent('Este usuário está desativado. Entre em contato com o administrador.')}` };
   }
 
@@ -59,7 +59,7 @@ export async function signInGetResult(formData: FormData): Promise<{ url: string
 }
 
 export async function signOut() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  const db = await createClient();
+  await db.auth.signOut();
   return redirect('/login');
 };

@@ -1,19 +1,19 @@
 'use server';
 
-import { createClient } from './supabase/server';
+import { createClient } from './db/server';
 
 /**
  * Busca todas as regionais únicas da tabela escolas
  */
 export async function getRegionais(): Promise<string[]> {
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('escolas')
     .select('regional');
 
   if (error) {
-    console.error('[getRegionais] Supabase error:', error);
+    console.error('[getRegionais] erro ao ler regionais:', error);
     return [];
   }
 
@@ -41,9 +41,9 @@ export async function getEscolasPorRegional(regional: string): Promise<string[]>
     return [];
   }
 
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('escolas')
     .select('escolar')
     .eq('regional', regional)

@@ -13,7 +13,7 @@
  * de criar o job, usa a leitura direta.
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type {
     ComponenteCurricular,
     ProfessorComDados,
@@ -23,7 +23,7 @@ import type {
 } from '@/lib/types';
 
 export async function lerTurmas(escolaId: string): Promise<{ data?: TurmaComDados[]; error?: string }> {
-    const supabase = await createClient();
+    const db = await createClient();
     try {
         /*
          * `restricoes` da série é obrigatório no select abaixo.
@@ -36,7 +36,7 @@ export async function lerTurmas(escolaId: string): Promise<{ data?: TurmaComDado
          * restrições em silêncio. O tipo `TurmaComDados` sempre declarou o campo,
          * então o TypeScript também não acusava.
          */
-        const { data: turmas, error: turmasError } = await supabase
+        const { data: turmas, error: turmasError } = await db
             .from('turmas')
             .select(`
         *,
@@ -59,10 +59,10 @@ export async function lerTurmas(escolaId: string): Promise<{ data?: TurmaComDado
 }
 
 export async function lerProfessores(escolaId: string): Promise<{ data?: ProfessorComDados[]; error?: string }> {
-    const supabase = await createClient();
+    const db = await createClient();
 
     try {
-        const { data: professores, error: profError } = await supabase
+        const { data: professores, error: profError } = await db
             .from('professores')
             .select('*')
             .eq('escola_id', escolaId)
@@ -79,10 +79,10 @@ export async function lerProfessores(escolaId: string): Promise<{ data?: Profess
             { data: turnos },
             { data: solicitacoes }
         ] = await Promise.all([
-            supabase.from('professores_componentes').select('professor_id, componente_id').in('professor_id', professorIds),
-            supabase.from('componentes_curriculares').select('id, nome, sigla').eq('escola_id', escolaId),
-            supabase.from('turnos').select('*').eq('escola_id', escolaId),
-            supabase.from('solicitacoes_restricoes').select('*').in('professor_id', professorIds).neq('status', 'concluido').order('created_at', { ascending: false })
+            db.from('professores_componentes').select('professor_id, componente_id').in('professor_id', professorIds),
+            db.from('componentes_curriculares').select('id, nome, sigla').eq('escola_id', escolaId),
+            db.from('turnos').select('*').eq('escola_id', escolaId),
+            db.from('solicitacoes_restricoes').select('*').in('professor_id', professorIds).neq('status', 'concluido').order('created_at', { ascending: false })
         ]);
 
         const componentesMap = new Map(componentes?.map(c => [c.id, c]) || []);
@@ -114,9 +114,9 @@ export async function lerProfessores(escolaId: string): Promise<{ data?: Profess
  * `getTurnos` — é uma escrita, e não tem lugar no caminho da geração.
  */
 export async function lerTurnos(escolaId: string): Promise<{ data?: Turno[]; error?: string }> {
-    const supabase = await createClient();
+    const db = await createClient();
 
-    const { data, error } = await supabase
+    const { data, error } = await db
         .from('turnos')
         .select('*')
         .eq('escola_id', escolaId)

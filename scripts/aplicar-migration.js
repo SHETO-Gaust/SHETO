@@ -1,7 +1,7 @@
 /**
- * Aplica um arquivo .sql de supabase/migrations/ no Postgres configurado.
+ * Aplica um arquivo .sql de migrations/ no Postgres configurado.
  *
- * Contexto: o projeto nao roda o Supabase hospedado — `src/lib/db/pool.ts` fala
+ * Contexto: o app fala com um Postgres direto — `src/lib/db/pool.ts` fala
  * com um Postgres direto, lendo PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE do
  * .env.local. E `psql` nao esta no PATH desta maquina. Este script fecha essa
  * lacuna usando o `pg` que o projeto ja tem como dependencia, para aplicar uma
@@ -42,7 +42,7 @@ if (!nomeArquivo) {
 
 const caminho = path.isAbsolute(nomeArquivo)
   ? nomeArquivo
-  : path.join(__dirname, '..', 'supabase', 'migrations', nomeArquivo);
+  : path.join(__dirname, '..', 'migrations', nomeArquivo);
 
 if (!fs.existsSync(caminho)) {
   console.error(`Arquivo nao encontrado: ${caminho}`);

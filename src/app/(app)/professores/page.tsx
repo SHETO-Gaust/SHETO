@@ -1,5 +1,5 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/db/server";
 import { cookies } from "next/headers";
 import type { Profile, ComponenteCurricular, Turno } from "@/lib/types";
 import { getProfessores } from "./actions";
@@ -8,9 +8,9 @@ import { ProfessoresClient } from "./professores-client";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function ProfessoresPage() {
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) {
     return (
@@ -20,7 +20,7 @@ export default async function ProfessoresPage() {
     );
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('ue, escolas(escolar)')
     .eq('id', user.id)
@@ -47,8 +47,8 @@ export default async function ProfessoresPage() {
   
   // Buscas de dados (Aguardando as promises)
   const { data: professores, error: profError } = await getProfessores(escolaId);
-  const { data: turnos } = await supabase.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true);
-  const { data: componentes } = await supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId);
+  const { data: turnos } = await db.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true);
+  const { data: componentes } = await db.from('componentes_curriculares').select('*').eq('escola_id', escolaId);
 
   return (
     <div className="space-y-6">

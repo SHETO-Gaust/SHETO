@@ -7,7 +7,7 @@
  * duas coisas ficam no invólucro que a tela usa.
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { registrarLog } from '@/lib/log-geracao';
 import type { PendenciaDetalhada } from '@/lib/types';
 import { invalidarCacheGeracao } from './dados';
@@ -27,9 +27,9 @@ export async function salvarGrade(
      */
     pendencias?: PendenciaDetalhada[] | null
 ): Promise<ResultadoSalvamento> {
-    const supabase = await createClient();
+    const db = await createClient();
 
-    const { data: novoHorario, error: hError } = await supabase
+    const { data: novoHorario, error: hError } = await db
         .from('horarios')
         .insert({
             escola_id: escolaId,
@@ -71,7 +71,7 @@ export async function salvarGrade(
             }
         }
 
-        const { error: insertError } = await supabase.from('horario_aulas').insert(aulasToInsert);
+        const { error: insertError } = await db.from('horario_aulas').insert(aulasToInsert);
 
         if (insertError) {
             console.error('Erro ao salvar aulas:', insertError);
@@ -80,10 +80,10 @@ export async function salvarGrade(
                 `SALVAR FALHOU | "${nome}" | ${aulasToInsert.length} aulas | ` +
                     `codigo=${insertError.code ?? '-'} | ${insertError.message}`
             );
-            await supabase.from('horarios').delete().eq('id', novoHorario.id);
+            await db.from('horarios').delete().eq('id', novoHorario.id);
 
             if (insertError.code === '23505') {
-                return { error: 'Conflito de horários detectado. Por favor, execute o script SQL de atualização de índices no Supabase.' };
+                return { error: 'Conflito de horários detectado. Por favor, execute o script SQL de atualização de índices no banco.' };
             }
             return { error: 'Erro ao salvar os detalhes da grade: ' + insertError.message };
         }
@@ -114,8 +114,8 @@ export async function salvarGrade(
  */
 export async function converterPreProducao(horarioIds: string[]): Promise<{ error?: string }> {
     if (horarioIds.length === 0) return {};
-    const supabase = await createClient();
-    const { error } = await supabase
+    const db = await createClient();
+    const { error } = await db
         .from('horarios')
         .update({ status: 'em_rascunho' })
         .in('id', horarioIds);

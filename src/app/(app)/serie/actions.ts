@@ -1,7 +1,7 @@
 
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { SerieComDados, NivelEnsino, Turno, ComponenteCurricular } from '@/lib/types';
@@ -14,9 +14,9 @@ import { capacidadeSemanalDaSerie } from '@/lib/capacidade-serie';
 /* -------------------------------------------------------------------------- */
 export async function getSeries(escolaId: string): Promise<{ data?: SerieComDados[], error?: string }> {
     await requireEscolaEModulo(escolaId, 'serie');
-  const supabase = await createClient();
+  const db = await createClient();
   try {
-    const { data: series, error: seriesError } = await supabase
+    const { data: series, error: seriesError } = await db
       .from('series')
       .select('*, nivel_ensino:niveis_ensino(*), turno:turnos(*), turmas(count)')
       .eq('escola_id', escolaId)
@@ -27,7 +27,7 @@ export async function getSeries(escolaId: string): Promise<{ data?: SerieComDado
 
     const seriesIds = series.map(s => s.id);
 
-    const { data: seriesComponentes, error: componentesError } = await supabase
+    const { data: seriesComponentes, error: componentesError } = await db
         .from('series_componentes')
         .select('*, componente:componentes_curriculares(*)')
         .in('serie_id', seriesIds);
@@ -70,11 +70,11 @@ export async function getSerieDependencies(escolaId: string): Promise<{
     componentes: ComponenteCurricular[],
 }> {
     await requireEscolaEModulo(escolaId, 'serie');
-    const supabase = await createClient();
+    const db = await createClient();
     const [niveisResult, turnosResult, componentesResult] = await Promise.all([
-        supabase.from('niveis_ensino').select('*').eq('escola_id', escolaId),
-        supabase.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true),
-        supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId),
+        db.from('niveis_ensino').select('*').eq('escola_id', escolaId),
+        db.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true),
+        db.from('componentes_curriculares').select('*').eq('escola_id', escolaId),
     ]);
 
     return {
@@ -99,14 +99,14 @@ const upsertSerieSchema = z.object({
 
 export async function upsertSerie(formData: z.infer<typeof upsertSerieSchema>) {
     await requireEscolaEModulo(formData.escola_id, 'serie');
-    const supabase = await createClient();
+    const db = await createClient();
     const validated = upsertSerieSchema.safeParse(formData);
     if (!validated.success) {
         return { error: 'Dados inválidos.', errors: validated.error.flatten().fieldErrors };
     }
     const { id, ...dataToUpsert } = validated.data;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
         .from('series')
         .upsert(id ? { id, ...dataToUpsert } : dataToUpsert, { onConflict: 'id' })
         .select().single();
@@ -140,14 +140,14 @@ const cargaHorariaSchema = z.object({
 
 export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSchema>) {
     await requireEscolaDoRecurso('series', formData.serie_id, 'serie');
-    const supabase = await createClient();
+    const db = await createClient();
     const validated = cargaHorariaSchema.safeParse(formData);
     if (!validated.success) return { error: 'Dados inválidos.' };
 
     const { serie_id, componentes, aulas_nao_presenciais_semanais } = validated.data;
 
     // ── 1. Atualizar total de aulas não presenciais na série ────────────────
-    const { error: serieUpdateError } = await supabase
+    const { error: serieUpdateError } = await db
         .from('series')
         .update({ aulas_nao_presenciais_semanais })
         .eq('id', serie_id);
@@ -158,7 +158,7 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
     }
 
     // ── 2. Atualizar series_componentes (delete + insert existente) ──────────
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
         .from('series_componentes')
         .delete()
         .eq('serie_id', serie_id);
@@ -178,7 +178,7 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
         }));
 
     if (toInsert.length > 0) {
-        const { error: insertError } = await supabase
+        const { error: insertError } = await db
             .from('series_componentes')
             .insert(toInsert);
 
@@ -199,9 +199,9 @@ export async function updateCargaHoraria(formData: z.infer<typeof cargaHorariaSc
 /* -------------------------------------------------------------------------- */
 export async function duplicateSerie(serieId: string, newName: string, newTurnoId: string) {
     await requireEscolaDoRecurso('series', serieId, 'serie');
-    const supabase = await createClient();
+    const db = await createClient();
     
-    const { data: originalSerie, error: fetchError } = await supabase
+    const { data: originalSerie, error: fetchError } = await db
         .from('series')
         .select('*')
         .eq('id', serieId)
@@ -210,7 +210,7 @@ export async function duplicateSerie(serieId: string, newName: string, newTurnoI
     if (fetchError || !originalSerie) return { error: 'Série original não encontrada.' };
 
     const { id: _, created_at: __, ...serieToCopy } = originalSerie;
-    const { data: newSerie, error: createError } = await supabase
+    const { data: newSerie, error: createError } = await db
         .from('series')
         .insert({ 
             ...serieToCopy, 
@@ -225,7 +225,7 @@ export async function duplicateSerie(serieId: string, newName: string, newTurnoI
         return { error: 'Erro ao criar a nova série.' };
     }
 
-    const { data: originalComponentes, error: compError } = await supabase
+    const { data: originalComponentes, error: compError } = await db
         .from('series_componentes')
         .select('componente_id, aulas_presenciais, aulas_nao_presenciais')
         .eq('serie_id', serieId);
@@ -240,7 +240,7 @@ export async function duplicateSerie(serieId: string, newName: string, newTurnoI
             ...c,
             serie_id: newSerie.id,
         }));
-        const { error: insertCompError } = await supabase
+        const { error: insertCompError } = await db
             .from('series_componentes')
             .insert(newComponentes);
         
@@ -260,8 +260,8 @@ export async function duplicateSerie(serieId: string, newName: string, newTurnoI
 /* -------------------------------------------------------------------------- */
 export async function deleteSerie(id: string) {
     await requireEscolaDoRecurso('series', id, 'serie');
-    const supabase = await createClient();
-    const { error } = await supabase.from('series').delete().eq('id', id);
+    const db = await createClient();
+    const { error } = await db.from('series').delete().eq('id', id);
     if (error) {
         console.error("Error deleting serie:", error);
         return { error: 'Não foi possível deletar a série.' };

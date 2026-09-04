@@ -37,7 +37,7 @@ export default function PoliticaDePrivacidadePage() {
             <h3 className="mb-2 font-semibold">2.1 Dados de cadastro e autenticação</h3>
             <p className="mb-4">
               Para acessar o sistema, os usuários utilizam credenciais de acesso (e-mail institucional e senha)
-              gerenciadas por meio do serviço de autenticação Supabase Auth. Esses dados são usados
+              gerenciadas pelo serviço de autenticação do próprio sistema. Esses dados são usados
               exclusivamente para identificar o usuário, controlar permissões de acesso e manter a segurança
               da sessão. Senhas são armazenadas de forma criptografada e nunca são acessíveis em texto plano.
             </p>
@@ -61,8 +61,8 @@ export default function PoliticaDePrivacidadePage() {
           <section>
             <h2 className="mb-3 text-lg font-semibold">3. Armazenamento e retenção de dados</h2>
             <p>
-              Todos os dados são armazenados em banco de dados hospedado na plataforma Supabase, com acesso
-              restrito por políticas de segurança em nível de linha (Row Level Security — RLS). Os dados são
+              Todos os dados são armazenados em banco de dados PostgreSQL, com acesso restrito por
+              controle de permissões por unidade escolar aplicado pelo sistema. Os dados são
               mantidos enquanto o vínculo institucional do usuário estiver ativo. Usuários desativados perdem
               acesso ao sistema, mas seus registros históricos podem ser retidos para fins de auditoria
               conforme as políticas internas da SEDUC-TO.
@@ -92,8 +92,8 @@ export default function PoliticaDePrivacidadePage() {
             <h2 className="mb-3 text-lg font-semibold">6. Segurança</h2>
             <p>
               Adotamos medidas técnicas para proteger as informações transmitidas e armazenadas, incluindo
-              conexão criptografada via HTTPS, autenticação segura gerenciada pelo Supabase Auth e controle
-              de acesso granular por políticas RLS no banco de dados. O acesso ao sistema é restrito a
+              conexão criptografada via HTTPS, autenticação segura com senha criptografada e controle
+              de acesso granular por perfil e por unidade escolar. O acesso ao sistema é restrito a
               servidores e colaboradores autorizados pela SEDUC-TO.
             </p>
           </section>

@@ -17,17 +17,17 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getPool } from '../src/lib/db/pool';
-import { createClient } from '../src/lib/supabase/server';
+import { createClient } from '../src/lib/db/server';
 
 /** Mesma consulta de getHorarioDetalhado, sem a checagem de permissao. */
 async function carregar(id: string) {
-    const supabase = await createClient();
+    const db = await createClient();
 
-    const { data: horario, error: hError } = await supabase
+    const { data: horario, error: hError } = await db
         .from('horarios').select('*, turno:turnos(*)').eq('id', id).single();
     if (hError || !horario) throw new Error('Horario nao encontrado: ' + (hError as any)?.message);
 
-    const { data: allTurnos } = await supabase.from('turnos').select('*').eq('escola_id', (horario as any).escola_id);
+    const { data: allTurnos } = await db.from('turnos').select('*').eq('escola_id', (horario as any).escola_id);
     const nomeTurno = (horario as any).turno.nome.toLowerCase();
     const turnoOposto = allTurnos?.find((t: any) => {
         if (nomeTurno.includes('matutino') || nomeTurno.includes('manhã')) return t.nome.toLowerCase().includes('vespertino') || t.nome.toLowerCase().includes('tarde');
@@ -35,7 +35,7 @@ async function carregar(id: string) {
         return false;
     }) || allTurnos?.find((t: any) => t.id !== (horario as any).turno.id);
 
-    const { data: aulas, error: aError } = await supabase
+    const { data: aulas, error: aError } = await db
         .from('horario_aulas')
         .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario, cpf, restricoes), turma:turmas(id, nome)')
         .eq('horario_id', id)

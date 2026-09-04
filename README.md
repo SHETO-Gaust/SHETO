@@ -26,7 +26,8 @@ O sistema oferece ainda refino manual por drag-and-drop com sugestão automátic
 |---|---|
 | Framework | Next.js 15 (App Router) + TypeScript |
 | UI | Tailwind CSS + shadcn/ui (Radix UI) |
-| Backend / BaaS | Supabase (PostgreSQL + Auth + RLS) |
+| Banco de dados | PostgreSQL (acesso direto, via node-postgres) |
+| Autenticação | NextAuth |
 | IA (opcional) | Google Genkit + GenAI |
 | E-mail | Nodemailer / Gmail |
 | Exportação | xlsx (Excel) |
@@ -61,7 +62,7 @@ Turnos → Ensino → Componentes → Professores → Séries → Turmas → Ger
 ### Pré-requisitos
 
 - Node.js 18+
-- Conta no [Supabase](https://supabase.com)
+- PostgreSQL 14+ acessível (local ou remoto)
 
 ### Configuração
 
@@ -78,15 +79,21 @@ npm install
 
 3. Crie o arquivo `.env.local` na raiz com as variáveis:
 ```env
-NEXT_PUBLIC_SUPABASE_URL=sua_url_supabase
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key
-SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key
+PGHOST=localhost
+PGPORT=5432
+PGUSER=postgres
+PGPASSWORD=sua_senha
+PGDATABASE=sheto
 GMAIL_EMAIL=seu_email@gmail.com
 GMAIL_APP_PASSWORD=sua_senha_de_app
 NEXT_PUBLIC_SITE_URL=https://seu-dominio.com
 ```
 
-4. Execute as migrations no Supabase (`supabase/migrations/`)
+4. Aplique as migrations (`migrations/`), uma a uma:
+```bash
+node scripts/aplicar-migration.js <arquivo>.sql --simular   # ensaia e desfaz
+node scripts/aplicar-migration.js <arquivo>.sql             # grava
+```
 
 5. Inicie o servidor de desenvolvimento:
 ```bash
@@ -140,7 +147,7 @@ src/
 │   ├── types.ts             # Tipos globais
 │   ├── mail.ts              # Envio de e-mail
 │   ├── export-horario.ts    # Exportação Excel
-│   └── supabase/            # Clientes Supabase (browser, server, middleware)
+│   └── db/                  # Acesso ao Postgres: pool, query-builder e cliente
 ├── ai/
 │   └── flows/               # Fluxos Genkit (IA opcional)
 └── components/
@@ -155,7 +162,8 @@ src/
 - **Usuário** — acesso apenas aos módulos liberados pelo admin; vinculado a uma unidade escolar
 - **Professor** — sem conta no sistema; preenche restrições via link tokenizado (válido por 48h)
 
-RLS (Row Level Security) no Supabase isola os dados por `escola_id`, garantindo que cada escola só acesse seus próprios dados.
+O isolamento por `escola_id` é aplicado na camada de aplicação: toda Server Action passa pelos guards de
+`src/lib/auth/guards.ts` (`requireEscolaEModulo`, `requireEscolaDoRecurso`) antes de ler ou gravar.
 
 ---
 

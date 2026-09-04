@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type { ComponenteCurricular } from '@/lib/types';
 import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
@@ -27,9 +27,9 @@ export async function getComponentes(
   escolaId: string
 ): Promise<{ data?: ComponenteCurricular[]; error?: string }> {
     await requireEscolaEModulo(escolaId, 'componentes');
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('componentes_curriculares')
     .select('*')
     .eq('escola_id', escolaId)
@@ -43,7 +43,7 @@ export async function getComponentes(
   if (!data || data.length === 0) {
     const dataToInsert = defaultComponentes.map(c => ({ ...c, escola_id: escolaId }));
 
-    const { data: newComponentes, error: insertError } = await supabase
+    const { data: newComponentes, error: insertError } = await db
       .from('componentes_curriculares')
       .insert(dataToInsert)
       .select();
@@ -70,7 +70,7 @@ export async function upsertComponente(
   formData: z.infer<typeof upsertComponenteSchema>
 ) {
     await requireEscolaEModulo(formData.escola_id, 'componentes');
-  const supabase = await createClient();
+  const db = await createClient();
 
   const validated = upsertComponenteSchema.safeParse(formData);
   if (!validated.success) {
@@ -82,7 +82,7 @@ export async function upsertComponente(
 
   const { id, ...dataToUpsert } = validated.data;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('componentes_curriculares')
     .upsert(
       id ? { id, ...dataToUpsert } : dataToUpsert,
@@ -111,9 +111,9 @@ export async function upsertComponente(
 
 export async function deleteComponente(id: string) {
     await requireEscolaDoRecurso('componentes_curriculares', id, 'componentes');
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { error } = await supabase.from('componentes_curriculares').delete().eq('id', id);
+  const { error } = await db.from('componentes_curriculares').delete().eq('id', id);
 
   if (error) {
     console.error('Error deleting componente_curricular:', error);

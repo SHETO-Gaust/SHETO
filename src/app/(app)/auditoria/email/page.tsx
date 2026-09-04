@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/db/server";
 import { redirect } from "next/navigation";
 import { getUsersForCommunication } from "../actions";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,12 +10,12 @@ export const metadata = {
 };
 
 export default async function EmailMassaPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('role')
     .eq('id', user.id)

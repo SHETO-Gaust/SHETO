@@ -4,8 +4,11 @@ import { createAuthShim } from '@/lib/db/auth-shim';
 
 /**
  * Cliente para uso em Server Components / Server Actions.
- * Mantem a mesma interface do supabase-js (from/rpc/auth) mas roda contra
- * o Postgres local via node-postgres, sem depender do Supabase.
+ *
+ * Fala com o Postgres direto, via node-postgres. A interface (from/rpc/auth) e'
+ * a do PostgREST porque o app inteiro foi escrito contra ela: manter a forma foi
+ * o que permitiu trocar o backend sem reescrever 45 modulos de acesso a dados.
+ * Quem estranhar `.from('x').select('y')` aqui, o tradutor mora em src/lib/db/.
  */
 export async function createClient() {
   const pool = getPool();

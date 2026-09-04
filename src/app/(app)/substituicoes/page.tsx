@@ -1,5 +1,5 @@
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/db/server";
 import { getTurnosAtivos } from "./actions";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AlertTriangle, UserX } from "lucide-react";
@@ -8,12 +8,12 @@ import { getProfessores } from "../professores/actions";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function SubstituicoesPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
   
   if (!user) return null;
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('ue')
     .eq('id', user.id)

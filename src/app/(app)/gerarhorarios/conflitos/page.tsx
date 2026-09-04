@@ -1,5 +1,5 @@
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { getTurnosAtivos } from '../actions';
 import { ConflitosClient } from './conflitos-client';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -12,8 +12,8 @@ export default async function ConflitosPage({
 }) {
     const params = await searchParams;
 
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const db = await createClient();
+    const { data: { user } } = await db.auth.getUser();
 
     if (!user) {
         return (
@@ -25,7 +25,7 @@ export default async function ConflitosPage({
         );
     }
 
-    const { data: profile } = await supabase
+    const { data: profile } = await db
         .from('profiles')
         .select('ue')
         .eq('id', user.id)

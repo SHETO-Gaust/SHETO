@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { requireAuth } from '@/lib/auth/guards';
 import { z } from 'zod';
 
@@ -17,7 +17,7 @@ export async function updatePassword(formData: z.infer<typeof updatePasswordSche
     // Alem da sessao, requireAuth garante que o perfil esta ativo - um usuario
     // desativado nao deve conseguir trocar a propria senha.
     await requireAuth();
-    const supabase = await createClient();
+    const db = await createClient();
 
     const validatedFields = updatePasswordSchema.safeParse(formData);
 
@@ -30,14 +30,14 @@ export async function updatePassword(formData: z.infer<typeof updatePasswordSche
     
     const { currentPassword, newPassword } = validatedFields.data;
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await db.auth.getUser();
 
     if (!user || !user.email) {
         return { error: 'Usuário não encontrado ou não autenticado.' };
     }
 
     // Step 1: Verify current password by trying to sign in with it.
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await db.auth.signInWithPassword({
         email: user.email,
         password: currentPassword,
     });
@@ -48,7 +48,7 @@ export async function updatePassword(formData: z.infer<typeof updatePasswordSche
     }
 
     // Step 2: If verification is successful, update the password.
-    const { error: updateError } = await supabase.auth.updateUser({
+    const { error: updateError } = await db.auth.updateUser({
         password: newPassword,
     });
 
@@ -65,7 +65,7 @@ export async function updateSelectedSchool(_userId: string, schoolId: string | n
     // verdade impede que alguem troque a escola de outro usuario passando o id
     // dele. O parametro so permanece para nao quebrar a assinatura no cliente.
     const perfil = await requireAuth();
-    const supabase = await createClient();
+    const db = await createClient();
 
     // Usuario comum so pode selecionar a escola a qual esta vinculado;
     // admin pode alternar entre qualquer escola.
@@ -73,7 +73,7 @@ export async function updateSelectedSchool(_userId: string, schoolId: string | n
         return { error: 'Você não tem acesso a esta unidade escolar.' };
     }
 
-    const { error } = await supabase
+    const { error } = await db
         .from('profiles')
         .update({ ue: schoolId })
         .eq('id', perfil.id);
@@ -98,12 +98,12 @@ export async function marcarTutorialVisto(tutorialId: string) {
     // Igual a updateSelectedSchool: a sessao e a fonte de verdade, nunca um id
     // vindo do cliente, para ninguem marcar tutorial no perfil de outra pessoa.
     const perfil = await requireAuth();
-    const supabase = await createClient();
+    const db = await createClient();
 
     const vistos = perfil.tutoriais_vistos ?? [];
     if (vistos.includes(tutorialId)) return { success: true };
 
-    const { error } = await supabase
+    const { error } = await db
         .from('profiles')
         .update({ tutoriais_vistos: [...vistos, tutorialId] })
         .eq('id', perfil.id);

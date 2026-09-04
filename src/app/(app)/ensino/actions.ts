@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type { NivelEnsino } from '@/lib/types';
 import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
@@ -19,9 +19,9 @@ export async function getNiveisEnsino(
   escolaId: string
 ): Promise<{ data?: NivelEnsino[]; error?: string }> {
     await requireEscolaEModulo(escolaId, 'ensino');
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('niveis_ensino')
     .select('*')
     .eq('escola_id', escolaId)
@@ -46,7 +46,7 @@ export async function getNiveisEnsino(
       },
     ];
 
-    const { data: newNiveis, error: insertError } = await supabase
+    const { data: newNiveis, error: insertError } = await db
       .from('niveis_ensino')
       .insert(defaultNiveis)
       .select();
@@ -77,7 +77,7 @@ export async function upsertNivelEnsino(
   formData: z.infer<typeof upsertNivelEnsinoSchema>
 ) {
     await requireEscolaEModulo(formData.escola_id, 'ensino');
-  const supabase = await createClient();
+  const db = await createClient();
 
   const validated = upsertNivelEnsinoSchema.safeParse(formData);
   if (!validated.success) {
@@ -89,7 +89,7 @@ export async function upsertNivelEnsino(
 
   const { id, ...dataToUpsert } = validated.data;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('niveis_ensino')
     .upsert(
       id ? { id, ...dataToUpsert } : dataToUpsert,
@@ -118,9 +118,9 @@ export async function upsertNivelEnsino(
 
 export async function deleteNivelEnsino(id: string) {
     await requireEscolaDoRecurso('niveis_ensino', id, 'ensino');
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { error } = await supabase.from('niveis_ensino').delete().eq('id', id);
+  const { error } = await db.from('niveis_ensino').delete().eq('id', id);
 
   if (error) {
     console.error('Error deleting nivel_ensino:', error);

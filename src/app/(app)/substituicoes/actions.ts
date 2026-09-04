@@ -1,24 +1,24 @@
 
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type { Turno, ProfessorComDados } from '@/lib/types';
 import { getProfessores } from '../professores/actions';
 import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
 
 export async function getTurnosAtivos(escolaId: string) {
     await requireEscolaEModulo(escolaId, 'horarios');
-    const supabase = await createClient();
-    const { data } = await supabase.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true).order('nome');
+    const db = await createClient();
+    const { data } = await db.from('turnos').select('*').eq('escola_id', escolaId).eq('ativo', true).order('nome');
     return { data: data as Turno[] };
 }
 
 export async function getProfessorAulasNoDia(turnoId: string, professorId: string, dia: string) {
     await requireEscolaDoRecurso('turnos', turnoId, 'horarios');
-    const supabase = await createClient();
+    const db = await createClient();
     
     // 1. Buscar horário publicado para o turno
-    const { data: horario } = await supabase
+    const { data: horario } = await db
         .from('horarios')
         .select('id')
         .eq('turno_id', turnoId)
@@ -28,7 +28,7 @@ export async function getProfessorAulasNoDia(turnoId: string, professorId: strin
     if (!horario) return { error: 'Nenhum horário publicado para este turno.' };
 
     // 2. Buscar aulas do professor naquele dia
-    const { data: aulas } = await supabase
+    const { data: aulas } = await db
         .from('horario_aulas')
         .select('*, turma:turmas(nome), componente:componentes_curriculares(nome, sigla)')
         .eq('horario_id', horario.id)
@@ -42,14 +42,14 @@ export async function getProfessorAulasNoDia(turnoId: string, professorId: strin
 
 export async function buscarSubstitutosDisponiveis(escolaId: string, turnoId: string, dia: string, aulaIndex: number, turmaId: string) {
     await requireEscolaEModulo(escolaId, 'horarios');
-    const supabase = await createClient();
+    const db = await createClient();
     const { data: professores } = await getProfessores(escolaId);
-    const { data: turno } = await supabase.from('turnos').select('*').eq('id', turnoId).single();
+    const { data: turno } = await db.from('turnos').select('*').eq('id', turnoId).single();
 
     if (!professores || !turno) return { error: 'Dados não encontrados.' };
 
     // 1. Buscar ocupações de TODOS os horários publicados naquele turno e aula
-    const { data: ocupados } = await supabase
+    const { data: ocupados } = await db
         .from('horario_aulas')
         .select('professor_id')
         .eq('dia_semana', dia)
@@ -60,7 +60,7 @@ export async function buscarSubstitutosDisponiveis(escolaId: string, turnoId: st
     const ocupadosIds = new Set(ocupados?.map(o => o.professor_id) || []);
 
     // 1.5. Buscar professores que já ensinam nesta turma
-    const { data: turmaProfessores } = await supabase
+    const { data: turmaProfessores } = await db
         .from('turmas_professores')
         .select('professor_id')
         .eq('turma_id', turmaId);
