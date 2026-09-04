@@ -16,6 +16,24 @@ export type ConfigJob = {
     nome: string;
     configGerminacao: ConfiguracaoGerminacao[];
     permitirMesmoProfDisciplinasMesmoDia: boolean;
+    /**
+     * Opcional porque o `config` é jsonb e os jobs gravados antes desta opção
+     * existir não têm o campo. Quem lê trata a ausência como `true` — o motor
+     * sempre permitiu, e uma geração retomada não pode mudar de regra no meio.
+     */
+    permitirMaisDeDuasAulasProfNaTurma?: boolean;
+    /**
+     * `turno_id` → `horario_id` que serve de ponto de partida daquele turno.
+     *
+     * É o "regerar a partir de": a grade escolhida entra como ponto de partida
+     * da busca, e o resultado sai o mais parecido com ela que o cadastro de hoje
+     * permitir. Turno sem entrada aqui gera do zero (ou da memória, como sempre).
+     *
+     * Por turno, e não um id só, porque um `horario` pertence a um turno e a
+     * geração pode abranger vários. Opcional: os jobs gravados antes disso não
+     * têm o campo, e ausência significa o comportamento de sempre.
+     */
+    basePorTurno?: Record<string, string>;
 };
 
 export type GeracaoJob = {
