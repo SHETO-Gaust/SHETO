@@ -1,7 +1,7 @@
 
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type { ChecklistReportData, TurmaComDados, ProfessorComDados, Turno } from '@/lib/types';
 import { getTurmas } from '@/app/(app)/turmas/actions';
 import { getProfessores } from '@/app/(app)/professores/actions';
@@ -22,7 +22,7 @@ import {
  */
 export async function getChecklistReportData(escolaId: string, turnoId: string): Promise<{ data?: ChecklistReportData; error?: string }> {
     await requireEscolaEModulo(escolaId, 'horarios');
-  const supabase = await createClient();
+  const db = await createClient();
 
   try {
     const [
@@ -34,11 +34,11 @@ export async function getChecklistReportData(escolaId: string, turnoId: string):
       seriesResult,
     ] = await Promise.all([
       getTurnos(escolaId),
-      supabase.from('niveis_ensino').select('id', { count: 'exact', head: true }).eq('escola_id', escolaId),
-      supabase.from('componentes_curriculares').select('id', { count: 'exact', head: true }).eq('escola_id', escolaId),
+      db.from('niveis_ensino').select('id', { count: 'exact', head: true }).eq('escola_id', escolaId),
+      db.from('componentes_curriculares').select('id', { count: 'exact', head: true }).eq('escola_id', escolaId),
       getProfessores(escolaId),
       getTurmas(escolaId),
-      supabase.from('series').select('id, nome, turno_id, restricoes, series_componentes(aulas_presenciais, aulas_nao_presenciais, componente_id)').eq('escola_id', escolaId),
+      db.from('series').select('id, nome, turno_id, restricoes, series_componentes(aulas_presenciais, aulas_nao_presenciais, componente_id)').eq('escola_id', escolaId),
     ]);
 
     // Cada leitura precisa ser conferida. Sem isto, uma falha de banco virava
@@ -171,7 +171,7 @@ export async function getWorkloadReportData(escolaId: string, turnoId: string) {
  * A contagem antiga somava todo professor do turno que não estivesse marcado
  * como `indisponivel`/`planejamento`, e por isso mentia em duas frentes:
  *
- *  1. ignorava REUNIÃO DE FLUXO e LIVRE DOCÊNCIA, que o motor trata como hard
+ *  1. ignorava PLANEJAMENTO COLETIVO e LIVRE DOCÊNCIA, que o motor trata como hard
  *     constraint igual ao bloqueio — professor em folga aparecia como livre;
  *  2. contava `planejamento` como impedimento, quando na verdade é soft (o motor
  *     pode invadir o planejamento como último recurso);
@@ -195,9 +195,9 @@ export async function getBottleneckReportData(escolaId: string, turnoId: string)
     await requireEscolaEModulo(escolaId, 'horarios');
 
     try {
-        const supabase = await createClient();
+        const db = await createClient();
         const [turnoRes, turmasRes, professoresRes] = await Promise.all([
-            supabase.from('turnos').select('*').eq('id', turnoId).eq('escola_id', escolaId).single(),
+            db.from('turnos').select('*').eq('id', turnoId).eq('escola_id', escolaId).single(),
             getTurmas(escolaId),
             getProfessores(escolaId),
         ]);
@@ -365,7 +365,7 @@ export async function getBottleneckReportData(escolaId: string, turnoId: string)
             verificacoes.push({
                 tipo: 'ok',
                 titulo: 'Todos os horários conseguem atender todas as turmas',
-                detalhe: `Considerando bloqueio, reunião de fluxo e livre docência, em todos os ${capacidade} ` +
+                detalhe: `Considerando bloqueio, planejamento coletivo e livre docência, em todos os ${capacidade} ` +
                     `horários do turno é possível dar um professor diferente a cada uma das ${numTurmas} turmas.`,
             });
         }

@@ -248,7 +248,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
 
   const getActiveToolLabel = () => {
     if (!selectedTool || selectedTool === 'limpar') return null;
-    const fixed: Record<string, string> = { indisponivel: 'Indisponível', planejamento: 'Planejamento', livre_docencia: 'Livre Docência', reuniao_fluxo: 'Reunião de Fluxo' };
+    const fixed: Record<string, string> = { indisponivel: 'Indisponível', planejamento: 'Planejamento', livre_docencia: 'Livre Docência', reuniao_fluxo: 'Planejamento Coletivo' };
     return fixed[selectedTool] ?? customTypes.find(ct => ct.id === selectedTool)?.label ?? selectedTool;
   };
 
@@ -256,7 +256,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
     { id: 'indisponivel',  label: 'Indisponível',      icon: <Ban className="h-4 w-4" />,      activeBg: 'bg-red-100 dark:bg-red-900/40',       activeText: 'text-red-700 dark:text-red-300',       activeBorder: 'border-red-500',    idleBorder: 'hover:border-red-300' },
     { id: 'planejamento',  label: 'Planejamento',       icon: <PenSquare className="h-4 w-4" />, activeBg: 'bg-blue-100 dark:bg-blue-900/40',     activeText: 'text-blue-700 dark:text-blue-300',     activeBorder: 'border-blue-500',   idleBorder: 'hover:border-blue-300' },
     { id: 'livre_docencia',label: 'Livre Docência',     icon: <Star className="h-4 w-4" />,      activeBg: 'bg-amber-100 dark:bg-amber-900/40',   activeText: 'text-amber-700 dark:text-amber-300',   activeBorder: 'border-amber-500',  idleBorder: 'hover:border-amber-300' },
-    { id: 'reuniao_fluxo', label: 'Reunião de Fluxo',   icon: <Users2 className="h-4 w-4" />,    activeBg: 'bg-purple-100 dark:bg-purple-900/40', activeText: 'text-purple-700 dark:text-purple-300', activeBorder: 'border-purple-500', idleBorder: 'hover:border-purple-300' },
+    { id: 'reuniao_fluxo', label: 'Planejamento Coletivo',   icon: <Users2 className="h-4 w-4" />,    activeBg: 'bg-purple-100 dark:bg-purple-900/40', activeText: 'text-purple-700 dark:text-purple-300', activeBorder: 'border-purple-500', idleBorder: 'hover:border-purple-300' },
   ];
 
   return (
@@ -510,7 +510,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                                       {isAmber ? (
                                         <>
                                           <Star className="h-6 w-6 fill-amber-500 animate-in zoom-in-50 duration-300" />
-                                          <span className="text-[8px] font-black uppercase mt-0.5">Folga</span>
+                                          <span className="text-[8px] font-black mt-0.5">L.d.</span>
                                         </>
                                       ) : status === 'indisponivel' ? (
                                         <>
@@ -525,7 +525,7 @@ export function RestricoesProfessorSheet({ isOpen, setIsOpen, professor, onRestr
                                       ) : status === 'reuniao_fluxo' ? (
                                         <>
                                           <Users2 className="h-6 w-6 animate-in zoom-in-50 duration-300" />
-                                          <span className="text-[8px] font-black uppercase mt-0.5">Fluxo</span>
+                                          <span className="text-[8px] font-black uppercase mt-0.5">Coletivo</span>
                                         </>
                                       ) : isCustom ? (
                                         <>
