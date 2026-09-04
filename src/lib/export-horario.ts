@@ -7,6 +7,13 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import type { HorarioCompleto, Turno } from '@/lib/types';
 import { abrirImpressaoPDF, cabecalhoPDF, dataPorExtenso, esc, rodapePDF } from '@/lib/pdf-layout';
+import {
+  CSS_CORES_PDF,
+  estiloDaCelula,
+  legendaCoresPDF,
+  type ComponenteColorivel,
+  type CoresPorComponente,
+} from '@/lib/cores-componentes';
 
 /** Remove caracteres proibidos em nomes de aba do Excel: : \ / ? * [ ] */
 function sanitizeSheetName(name: string): string {
@@ -275,6 +282,8 @@ function tabelaHTML(
   turnoInfo: Turno,
   tipo: 'presencial' | 'nao_presencial',
   rotulo: string,
+  /** Cor de fundo por disciplina. `null` = o preto e branco de sempre. */
+  cores?: CoresPorComponente | null,
 ): string {
   const diasAtivos = DIAS_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
   const aulas = horario.aulas.filter(a => a.turma_id === turmaId && a.tipo === tipo);
@@ -296,7 +305,14 @@ function tabelaHTML(
         .map(a => `<span class="disc">${esc(a.componente?.sigla || a.componente?.nome || '')}</span>` +
           `<span class="prof">${esc(a.professor?.nome_horario || 'SEM PROF.')}</span>`)
         .join('<hr class="sep">');
-      return `<td class="${noSlot.length > 1 ? 'choque' : ''}">${conteudo}</td>`;
+      /*
+       * Célula com choque não recebe cor: ali o fundo vermelho e a borda são o
+       * aviso, e pintá-la com o tom da disciplina apagaria justamente o que
+       * precisa saltar aos olhos. Com duas aulas no slot não há uma disciplina
+       * a representar, de todo modo.
+       */
+      const estilo = noSlot.length > 1 ? '' : estiloDaCelula(cores, noSlot[0].componente?.id);
+      return `<td class="${noSlot.length > 1 ? 'choque' : ''}"${estilo}>${conteudo}</td>`;
     }).join('');
 
     linhas.push(
@@ -346,6 +362,7 @@ const CSS_GRADE = `
   hr.sep { border: 0; border-top: 1px dashed #dc2626; margin: 3px 0; }
   tr.intervalo td { background: #f9fafb; font-size: 9px; letter-spacing: .18em; color: #6b7280; padding: 2px; }
   p.fora { font-size: 9px; color: #b45309; margin: 4px 0 0; }
+${CSS_CORES_PDF}
 `;
 
 /**
@@ -357,7 +374,12 @@ const CSS_GRADE = `
  * navegador já gera PDF em qualquer máquina. Cabeçalho e rodapé vêm de
  * `@/lib/pdf-layout`, comuns a todos os relatórios.
  */
-export function exportarHorarioPDF(horario: HorarioCompleto, escolaNome?: string | null): void {
+export function exportarHorarioPDF(
+  horario: HorarioCompleto,
+  escolaNome?: string | null,
+  /** Cor de fundo por disciplina, escolhida no diálogo de opções. */
+  cores?: CoresPorComponente | null,
+): void {
   const turno = horario.turno;
   const isIntegral = turno.nome.toLowerCase().includes('integral');
 
@@ -376,13 +398,15 @@ export function exportarHorarioPDF(horario: HorarioCompleto, escolaNome?: string
   const turnoCT = horario.turno_oposto ?? turno;
 
   const secoes = turmas.map(([turmaId, turmaLabel]) => {
-    const regular = tabelaHTML(turmaId, turmaLabel, horario, turno, 'presencial', `Turno ${turno.nome}`);
+    const regular = tabelaHTML(turmaId, turmaLabel, horario, turno, 'presencial', `Turno ${turno.nome}`, cores);
     const contraturno = (temNaoPresencial && !isIntegral)
       ? tabelaHTML(turmaId, turmaLabel, horario, turnoCT, 'nao_presencial',
-          `Contraturno${horario.turno_oposto ? ` — ${turnoCT.nome}` : ' (turno oposto não configurado)'}`)
+          `Contraturno${horario.turno_oposto ? ` — ${turnoCT.nome}` : ' (turno oposto não configurado)'}`, cores)
       : '';
     return regular + contraturno;
   }).join('');
+
+  const legenda = legendaCoresPDF(componentesDoHorario(horario), cores);
 
   const cabecalho = cabecalhoPDF({
     escolaNome,
@@ -394,6 +418,26 @@ export function exportarHorarioPDF(horario: HorarioCompleto, escolaNome?: string
     titulo: horario.nome,
     css: CSS_GRADE,
     orientacao: 'paisagem',
-    corpo: `${cabecalho}${secoes}${rodapePDF()}`,
+    cabecalho,
+    corpo: `${legenda}${secoes}${rodapePDF()}`,
   });
+}
+
+/**
+ * As disciplinas que aparecem num horário, sem repetição e em ordem alfabética.
+ *
+ * É a lista que o diálogo de opções oferece para colorir e a que a legenda
+ * imprime — as duas precisam sair da mesma leitura das aulas, senão o PDF pinta
+ * uma disciplina que o usuário nunca viu na tela de escolha.
+ */
+export function componentesDoHorario(horario: HorarioCompleto): ComponenteColorivel[] {
+  const porId = new Map<string, ComponenteColorivel>();
+
+  for (const aula of horario.aulas) {
+    const c = aula.componente;
+    if (!c?.id || porId.has(c.id)) continue;
+    porId.set(c.id, { id: c.id, nome: c.nome || c.sigla || 'Disciplina', sigla: c.sigla || c.nome || '' });
+  }
+
+  return Array.from(porId.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }

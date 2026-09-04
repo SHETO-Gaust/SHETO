@@ -23,26 +23,16 @@
  * dele desde o começo.
  */
 import { motivoImpedimento } from './geracao/certificado';
-import type { ProfessorComDados, Turno } from './types';
+import { getSlotMinutes, minutesConflitam } from './horario-slots';
+import { chaveProfessor, paraCertificado } from './refino/professor';
+import type { Turno } from './types';
 
 /**
- * Empresta o professor à assinatura que `motivoImpedimento` espera.
- *
- * A função é do certificado e fala a língua do motor (`ProfessorComDados`); ela
- * lê três campos, e são exatamente os três que este módulo carrega. O molde
- * evita duplicar a regra de bloqueio só por causa da forma do objeto.
+ * Identidade do professor e o molde para o certificado moram em
+ * `./refino/professor`, compartilhados com `refino-horario.ts`. Reexportados
+ * daqui porque `preencher-vagas.ts` e a bancada já importavam deste módulo.
  */
-export function paraCertificado(p: {
-  restricoes?: unknown;
-  livre_docencia?: { dia: string; periodo: string }[] | null;
-  sem_preferencia_livre_docencia?: boolean | null;
-}): ProfessorComDados {
-  return {
-    restricoes: p.restricoes,
-    livre_docencia: p.livre_docencia ?? [],
-    sem_preferencia_livre_docencia: p.sem_preferencia_livre_docencia,
-  } as unknown as ProfessorComDados;
-}
+export { chaveProfessor, paraCertificado };
 
 export type AulaAlocacao = {
   id: string;
@@ -150,37 +140,22 @@ const MAX_SOLUCOES = 5;
 
 // ─── Tempo e conflito ───────────────────────────────────────────────────────
 
-function timeToMinutes(hhmm: string | undefined | null): number {
-  if (!hhmm) return -1;
-  const [h, m] = hhmm.split(':');
-  const hh = parseInt(h, 10);
-  const mm = parseInt(m, 10);
-  if (isNaN(hh) || isNaN(mm)) return -1;
-  return hh * 60 + mm;
-}
-
-function minutosDoSlot(turno: Turno | undefined, idx: number): [number, number] {
-  const h = turno?.horarios?.[idx];
-  if (!h) return [-1, -1];
-  return [timeToMinutes(h.inicio), timeToMinutes(h.fim)];
-}
-
-function sobrepoe(a1: number, a2: number, b1: number, b2: number): boolean {
-  if (a1 < 0 || a2 < 0 || b1 < 0 || b2 < 0) return false;
-  return a1 < b2 && b1 < a2;
-}
-
 /**
- * Identidade do professor é o CPF, não o cadastro.
+ * Sobreposição de dois slots, pela conta canônica de `horario-slots.ts`.
  *
- * Desde que nome e CPF podem repetir na mesma escola, dois cadastros de mesmo
- * CPF são a mesma pessoa física — e uma pessoa não dá duas aulas ao mesmo
- * tempo, tenha um cadastro ou três. Mesma regra de `refino-horario.ts`.
+ * A cópia privada que morava aqui devolvia "sem conflito" quando o turno não
+ * tinha horários cadastrados — o oposto do que o motor de geração faz. A
+ * canônica é conservadora nesse caso e ainda conhece o atalho de mesmo turno
+ * (mesmo turno só bate no mesmo índice), que é o que permite comparar turnos
+ * que ocorrem no mesmo intervalo de relógio sem inventar choque interno.
  */
-export function chaveProfessor(id: string | null, cpf?: string | null): string | null {
-  if (!id) return null;
-  const so = (cpf || '').replace(/\D/g, '');
-  return so.length >= 11 ? `cpf:${so}` : `id:${id}`;
+function sobrepoe(
+  turnoA: Turno | undefined, idxA: number,
+  turnoB: Turno | undefined, idxB: number,
+): boolean {
+  const [iA, fA] = getSlotMinutes(turnoA, idxA);
+  const [iB, fB] = getSlotMinutes(turnoB, idxB);
+  return minutesConflitam(iA, fA, iB, fB, !!turnoA && turnoA.id === turnoB?.id, idxA, idxB);
 }
 
 // ─── Motor ──────────────────────────────────────────────────────────────────
@@ -239,11 +214,11 @@ export function calcularAlocacaoComTrocas(
   ): boolean => {
     const chave = chaveProfessor(p.id, p.cpf);
     if (!chave) return false;
-    const [ini, fim] = minutosDoSlot(turnosById.get(turnoId), idx);
+    const turnoAlvo = turnosById.get(turnoId);
 
     if (estado.professorDaVaga === p.id && !(vaga.dia_semana === dia && vaga.aula_index === idx && vaga.turno_id === turnoId)) {
-      const [iv, fv] = minutosDoSlot(turnosById.get(vaga.turno_id), vaga.aula_index);
-      if (vaga.dia_semana === dia && sobrepoe(ini, fim, iv, fv)) return false;
+      if (vaga.dia_semana === dia &&
+          sobrepoe(turnoAlvo, idx, turnosById.get(vaga.turno_id), vaga.aula_index)) return false;
     }
 
     for (const outra of aulas) {
@@ -253,19 +228,17 @@ export function calcularAlocacaoComTrocas(
       if (!donoId) continue;
       const donoCpf = donoId === outra.professor_id ? outra.professor_cpf : profPorId.get(donoId)?.cpf;
       if (chaveProfessor(donoId, donoCpf) !== chave) continue;
-      const [i2, f2] = minutosDoSlot(turnosById.get(outra.turno_id), outra.aula_index);
-      if (sobrepoe(ini, fim, i2, f2)) return false;
+      if (sobrepoe(turnoAlvo, idx, turnosById.get(outra.turno_id), outra.aula_index)) return false;
     }
     return true;
   };
 
   /** A turma já tem alguma aula naquele horário? A vaga precisa estar mesmo vaga. */
   const turmaOcupada = (turmaId: string, dia: string, turnoId: string, idx: number): boolean => {
-    const [ini, fim] = minutosDoSlot(turnosById.get(turnoId), idx);
+    const turnoAlvo = turnosById.get(turnoId);
     return aulas.some(a => {
       if (a.turma_id !== turmaId || a.dia_semana !== dia) return false;
-      const [i2, f2] = minutosDoSlot(turnosById.get(a.turno_id), a.aula_index);
-      return sobrepoe(ini, fim, i2, f2);
+      return sobrepoe(turnoAlvo, idx, turnosById.get(a.turno_id), a.aula_index);
     });
   };
 

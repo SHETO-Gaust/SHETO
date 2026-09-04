@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { getDadosRefinoHorario, aplicarMudancasRefino } from './actions';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, CheckCircle2, ArrowRightLeft, Check, ArrowRight, Star, MoveRight, Maximize2 } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle2, ArrowRightLeft, Check, ArrowRight, Star, MoveRight, Maximize2, Lock, Info } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -12,7 +12,24 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { analisarMovimento, type ImpactoAnalise, type AulaRefino, type PassoDetalhado } from '@/lib/refino-horario';
+import {
+    analisarMovimento,
+    analisarTroca,
+    type ContextoRefino,
+    type ImpactoAnalise,
+    type AulaRefino,
+    type Move,
+    type PassoDetalhado,
+    type ProfessorRefino,
+    type ResultadoTroca,
+} from '@/lib/refino-horario';
+import { chaveProfessor } from '@/lib/refino/professor';
+import {
+    rotuloDoStatus,
+    SEM_REFERENCIA,
+    type GradeCandidata,
+    type ReferenciaResolvida,
+} from '@/lib/refino/grades-de-referencia';
 import { PreencherVagasDialog } from './preencher-vagas-dialog';
 import { useToast } from '@/hooks/use-toast';
 import type { Turno } from '@/lib/types';
@@ -21,7 +38,7 @@ import { cn } from '@/lib/utils';
 
 type RefinoClientProps = {
   escolaId: string;
-  horariosParaRefino: { id: string; nome: string; status: string; turno: { nome: string } }[];
+  horariosParaRefino: GradeCandidata[];
 };
 
 const DIAS: string[] = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
@@ -29,6 +46,126 @@ const DIA_LABELS: Record<string, string> = { segunda: 'Segunda', terca: 'Terça'
 const DIA_SHORT: Record<string, string> = { segunda: 'Seg', terca: 'Ter', quarta: 'Qua', quinta: 'Qui', sexta: 'Sex', sabado: 'Sáb' };
 
 function ordinal(n: number) { return `${n}ª`; }
+
+/**
+ * A aula é deste professor?
+ *
+ * Compara pela identidade da PESSOA (o CPF), não pelo id do cadastro: nas
+ * grades de referência ele pode aparecer por outro cadastro com o mesmo CPF, e
+ * é justamente essa aula que precisa aparecer na agenda dele — é ela que
+ * denuncia o choque entre turnos.
+ */
+function professorEmFoco(aula: AulaRefino, professorId: string, professores: ProfessorRefino[]): boolean {
+    if (!professorId) return false;
+    if (aula.professor_id === professorId) return true;
+    const escolhido = professores.find(p => p.id === professorId);
+    const chave = chaveProfessor(professorId, escolhido?.cpf);
+    return !!chave && chaveProfessor(aula.professor_id, aula.professor_cpf) === chave;
+}
+
+/**
+ * A aula escolhida levanta da grade e é puxada na direção do cursor.
+ *
+ * Serve para não perder de vista o que está selecionado numa grade de cinco
+ * colunas por dez linhas — e porque mover aula devia ser uma coisa gostosa de
+ * fazer.
+ *
+ * O transform é escrito direto no nó, fora do React: o mouse dispara dezenas de
+ * eventos por segundo e re-renderizar a grade inteira a cada um deles engasgaria
+ * a tela. `requestAnimationFrame` limita a uma escrita por quadro, e a transição
+ * curta no CSS dá o atraso que faz o cartão parecer preso por um elástico em vez
+ * de grudado no ponteiro.
+ *
+ * Quem pediu para reduzir animação no sistema não recebe nada disso.
+ */
+function useImaDoCursor(ativo: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const semAnimacao = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    if (!ativo || semAnimacao) {
+      el.style.transform = '';
+      return;
+    }
+
+    /** Distância em que o ímã deixa de puxar. */
+    const ALCANCE = 240;
+    /** O quanto o cartão anda, no máximo. */
+    const PUXAO = 7;
+
+    let quadro = 0;
+    const seguir = (e: MouseEvent) => {
+      if (quadro) return;
+      quadro = requestAnimationFrame(() => {
+        quadro = 0;
+        const r = el.getBoundingClientRect();
+        const dx = e.clientX - (r.left + r.width / 2);
+        const dy = e.clientY - (r.top + r.height / 2);
+        const dist = Math.hypot(dx, dy) || 1;
+        // Perto puxa forte, longe não puxa: é o que dá a sensação de campo.
+        const forca = Math.max(0, 1 - dist / ALCANCE);
+        const x = (dx / dist) * PUXAO * forca;
+        const y = (dy / dist) * PUXAO * forca - 3 * forca;
+        const giro = (dx / ALCANCE) * 2.5 * forca;
+        el.style.transform =
+          `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) scale(${(1 + 0.05 * forca).toFixed(3)}) rotate(${giro.toFixed(2)}deg)`;
+      });
+    };
+
+    window.addEventListener('mousemove', seguir);
+    return () => {
+      window.removeEventListener('mousemove', seguir);
+      if (quadro) cancelAnimationFrame(quadro);
+      el.style.transform = '';
+    };
+  }, [ativo]);
+
+  return ref;
+}
+
+/** Uma aula desenhada na grade. */
+function CartaoAula({
+  aula,
+  modo,
+  elevada,
+}: {
+  aula: AulaRefino;
+  modo: 'professor' | 'turma' | 'slot';
+  /** Escolhida como origem ou como a outra ponta da troca. */
+  elevada: boolean;
+}) {
+  const ref = useImaDoCursor(elevada);
+  const referencia = aula.movel === false;
+
+  return (
+    <div
+      ref={ref}
+      style={{ willChange: elevada ? 'transform' : undefined }}
+      className={cn(
+        'border rounded flex flex-col items-center justify-center p-1 w-full h-full relative',
+        'transition-[transform,box-shadow] duration-150 ease-out',
+        referencia
+          ? 'bg-muted border-dashed border-muted-foreground/30 text-muted-foreground'
+          : aula.tipo === 'presencial'
+            ? 'bg-primary/10 hover:bg-primary/20 border-primary/20 text-primary'
+            : 'bg-orange-500/10 hover:bg-orange-500/20 border-orange-500/20 text-orange-600 dark:text-orange-400',
+        elevada && 'z-20 shadow-lg shadow-indigo-500/25 ring-1 ring-current/30',
+      )}
+      title={referencia ? `${aula.componente_nome} — ${aula.turma_nome} (${aula.horario_nome || 'outra grade'})` : undefined}
+    >
+      {referencia && <Lock className="w-2.5 h-2.5 absolute top-1 right-1 opacity-60" />}
+      <span className="text-[11px] font-bold leading-tight">{aula.componente_sigla || aula.componente_nome}</span>
+      <span className="text-[9px] opacity-70 line-clamp-1">
+        {modo === 'turma' ? aula.professor_nome : aula.turma_nome} • {aula.tipo === 'nao_presencial' ? 'NP' : 'P'}
+      </span>
+    </div>
+  );
+}
 
 // ─── Rich move card displayed inside each option ────────────────────────────
 function PassoCard({ passo, turnosById }: { passo: PassoDetalhado; turnosById: Map<string, Turno> }) {
@@ -194,10 +331,24 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
     const [professorId, setProfessorId] = useState<string>('');
 
     const [loadingData, setLoadingData] = useState(false);
-    const [todasAulas, setTodasAulas] = useState<AulaRefino[]>([]);
-    const [professores, setProfessores] = useState<{id: string, nome: string}[]>([]);
+    /** Aulas da grade aberta: as únicas que podem ser movidas ou trocadas. */
+    const [aulasMoveis, setAulasMoveis] = useState<AulaRefino[]>([]);
+    /**
+     * Aulas das outras grades escolhidas como referência — uma por turno.
+     *
+     * Elas não se movem: existem para o cálculo saber que o professor já está em
+     * sala naquele instante, mesmo que seja num turno de nome diferente que
+     * começa na mesma hora. Era o que faltava para o Integral e o Matutino se
+     * enxergarem.
+     */
+    const [aulasReferencia, setAulasReferencia] = useState<AulaRefino[]>([]);
+    const [professores, setProfessores] = useState<ProfessorRefino[]>([]);
     const [turmas, setTurmas] = useState<{id: string, nome: string}[]>([]);
     const [turnos, setTurnos] = useState<Turno[]>([]);
+    const [referenciasResolvidas, setReferenciasResolvidas] = useState<ReferenciaResolvida[]>([]);
+    const [avisos, setAvisos] = useState<string[]>([]);
+    /** Escolha explícita do usuário por turno: turnoId → horarioId | 'nenhuma'. */
+    const [referencias, setReferencias] = useState<Record<string, string>>({});
 
     /**
      * Por onde se entra na grade.
@@ -215,6 +366,9 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
 
     const [aulaSelecionadaId, setAulaSelecionadaId] = useState<string | null>(null);
     const [slotDestino, setSlotDestino] = useState<{ dia: string, slot: number, turnoId: string } | null>(null);
+    /** A outra ponta da troca: uma aula ocupada clicada com outra já selecionada. */
+    const [aulaTrocaId, setAulaTrocaId] = useState<string | null>(null);
+    const [troca, setTroca] = useState<ResultadoTroca | null>(null);
     const [impacto, setImpacto] = useState<ImpactoAnalise | null>(null);
     const [applying, setApplying] = useState(false);
     const [calculating, setCalculating] = useState(false);
@@ -228,32 +382,64 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
      */
     const [recarga, setRecarga] = useState(0);
 
+    /** Limpa origem, destino e tudo que foi calculado em cima deles. */
+    const limparSelecao = () => {
+        setAulaSelecionadaId(null);
+        setSlotDestino(null);
+        setAulaTrocaId(null);
+        setTroca(null);
+        setImpacto(null);
+    };
+
     useEffect(() => {
         if (!horarioId) {
-            setProfessores([]); setTurmas([]); setTodasAulas([]); setProfessorId(''); setTurmaId(''); setTurnos([]); return;
+            setProfessores([]); setTurmas([]); setAulasMoveis([]); setAulasReferencia([]);
+            setProfessorId(''); setTurmaId(''); setTurnos([]);
+            setReferenciasResolvidas([]); setAvisos([]);
+            return;
         }
         let active = true;
         setLoadingData(true);
         setProfessorId(''); setTurmaId(''); setSlotFoco(null);
-        setAulaSelecionadaId(null); setSlotDestino(null); setImpacto(null);
+        limparSelecao();
 
-        getDadosRefinoHorario(escolaId, horarioId).then((res) => {
+        getDadosRefinoHorario(escolaId, { horarioId, referencias }).then((res) => {
             if (!active) return;
             setLoadingData(false);
             if (res.error || !res.data) {
                 toast({ variant: 'destructive', title: 'Erro', description: res.error || 'Erro ao carregar dados' });
                 return;
             }
-            setTodasAulas(res.data.todasAulas);
+            setAulasMoveis(res.data.aulasMoveis);
+            setAulasReferencia(res.data.aulasReferencia);
             setProfessores(res.data.professores);
-            setTurmas((res.data as any).turmas ?? []);
+            setTurmas(res.data.turmas ?? []);
             setTurnos(res.data.turnos);
+            setReferenciasResolvidas(res.data.referencias);
+            setAvisos(res.data.avisos ?? []);
             const map = new Map<string, Turno>();
             res.data.turnos.forEach(t => map.set(t.id, t));
             setTurnosById(map);
         });
         return () => { active = false; };
-    }, [horarioId, escolaId, recarga]);
+    }, [horarioId, escolaId, recarga, referencias]);
+
+    /** Tudo que a tela desenha; só `aulasMoveis` pode mudar de lugar. */
+    const todasAulas = useMemo(
+        () => [...aulasMoveis, ...aulasReferencia],
+        [aulasMoveis, aulasReferencia],
+    );
+
+    /**
+     * O que o motor recebe. Um objeto só, memoizado: o cálculo guarda cache
+     * ligado à identidade dele, e recriá-lo a cada render jogaria o cache fora.
+     */
+    const ctx: ContextoRefino = useMemo(() => ({
+        aulasMoveis,
+        aulasReferencia,
+        turnosById,
+        professoresById: new Map(professores.map(p => [p.id, p])),
+    }), [aulasMoveis, aulasReferencia, turnosById, professores]);
 
     useEffect(() => {
         if (!aulaSelecionadaId || !slotDestino) {
@@ -262,56 +448,87 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
             return;
         }
 
-        const res = analisarMovimento(todasAulas, turnosById, aulaSelecionadaId, slotDestino.dia, slotDestino.slot, slotDestino.turnoId, false);
+        const res = analisarMovimento(
+            ctx,
+            { aulaId: aulaSelecionadaId, dia: slotDestino.dia, slot: slotDestino.slot, turnoId: slotDestino.turnoId },
+            false,
+        );
         setImpacto(res);
-    }, [aulaSelecionadaId, slotDestino, todasAulas, turnosById]);
+    }, [aulaSelecionadaId, slotDestino, ctx]);
+
+    /** Troca: resposta imediata, sem busca — são duas aulas e quatro perguntas. */
+    useEffect(() => {
+        if (!aulaSelecionadaId || !aulaTrocaId) {
+            setTroca(null);
+            return;
+        }
+        setTroca(analisarTroca(ctx, aulaSelecionadaId, aulaTrocaId));
+    }, [aulaSelecionadaId, aulaTrocaId, ctx]);
 
     const handleCalculate = () => {
         if (!aulaSelecionadaId || !slotDestino) return;
         setCalculating(true);
         setTimeout(() => {
-            const res = analisarMovimento(todasAulas, turnosById, aulaSelecionadaId, slotDestino.dia, slotDestino.slot, slotDestino.turnoId, true);
+            const res = analisarMovimento(
+                ctx,
+                { aulaId: aulaSelecionadaId, dia: slotDestino.dia, slot: slotDestino.slot, turnoId: slotDestino.turnoId },
+                true,
+            );
             setImpacto(res);
             setPossibilidadeSelecionadaIndex(0);
             setCalculating(false);
         }, 50);
     };
 
+    /** Grava uma lista de movimentos — a rota do motor ou os dois pés da troca. */
+    const gravar = async (moves: Move[], titulo: string) => {
+        if (moves.length === 0 || applying) return;
+
+        setApplying(true);
+        const res = await aplicarMudancasRefino(moves, horarioId);
+        setApplying(false);
+
+        if (res.error) {
+            toast({ variant: 'destructive', title: 'Nada foi gravado', description: res.error });
+            return;
+        }
+
+        toast({ title: titulo, description: 'O horário foi atualizado com sucesso.' });
+        const mapMudancas = new Map(moves.map(m => [m.aulaId, m]));
+        setAulasMoveis(prev => prev.map(a => {
+            const m = mapMudancas.get(a.id);
+            if (m) return { ...a, dia_semana: m.novoDia, aula_index: m.novoSlot, turno_id: m.novoTurnoId };
+            return a;
+        }));
+        limparSelecao();
+    };
+
     const handleApply = async () => {
-        if (!impacto || !aulaSelecionadaId || impacto.status === 'bloqueado' || applying) return;
+        if (!impacto || !aulaSelecionadaId || impacto.status === 'bloqueado') return;
 
         let moves = impacto.mudancasNecessarias;
         if (impacto.status === 'possibilidades' && impacto.possibilidades && impacto.possibilidades.length > 0) {
             moves = impacto.possibilidades[possibilidadeSelecionadaIndex].moves;
         }
 
-        if (moves.length === 0) return;
-
-        setApplying(true);
-        const res = await aplicarMudancasRefino(moves);
-        setApplying(false);
-
-        if (res.error) {
-            toast({ variant: 'destructive', title: 'Erro ao aplicar rota', description: res.error });
-        } else {
-            toast({ title: 'Rota aplicada!', description: 'O horário foi atualizado com sucesso.' });
-            const mapMudancas = new Map(moves.map(m => [m.aulaId, m]));
-            setTodasAulas(prev => prev.map(a => {
-                const m = mapMudancas.get(a.id);
-                if (m) return { ...a, dia_semana: m.novoDia, aula_index: m.novoSlot, turno_id: m.novoTurnoId };
-                return a;
-            }));
-
-            setAulaSelecionadaId(null);
-            setSlotDestino(null);
-            setImpacto(null);
-        }
+        await gravar(moves, 'Rota aplicada!');
     };
 
-    /** As aulas que a grade da tela mostra, conforme o eixo escolhido. */
+    const handleTrocar = async () => {
+        if (!troca || troca.status !== 'ok') return;
+        await gravar(troca.moves, 'Aulas trocadas!');
+    };
+
+    /**
+     * As aulas que a grade da tela mostra, conforme o eixo escolhido.
+     *
+     * No modo Professor entram também as aulas dele nas grades de referência —
+     * é ali que o choque entre turnos aparece para o olho humano, e escondê-las
+     * seria mostrar uma agenda que não é a da pessoa.
+     */
     const aulasEmFoco = modo === 'turma'
         ? todasAulas.filter(a => a.turma_id === turmaId)
-        : todasAulas.filter(a => a.professor_id === professorId);
+        : todasAulas.filter(a => professorEmFoco(a, professorId, professores));
     const turnosEmFoco = Array.from(new Set(aulasEmFoco.map(a => a.turno_id)));
 
     /** Ha um recorte escolhido? E o que destrava a grade. */
@@ -342,6 +559,39 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
 
     const [modalAberto, setModalAberto] = useState(false);
 
+    const gradeEmEdicao = horariosParaRefino.find(h => h.id === horarioId) || null;
+
+    /**
+     * As grades que disputam o papel de referência, agrupadas por turno.
+     *
+     * O turno da grade aberta fica de fora: ali a autoridade é ela mesma, e
+     * oferecer outra versão do mesmo turno seria comparar o horário consigo
+     * próprio — cada slot bateria com ele mesmo e a tela acusaria choque em tudo.
+     */
+    const turnosDeReferencia = (() => {
+        if (!gradeEmEdicao) return [];
+        const porTurno = new Map<string, { turno_id: string; turno_nome: string; grades: GradeCandidata[] }>();
+        for (const g of horariosParaRefino) {
+            if (g.turno_id === gradeEmEdicao.turno_id) continue;
+            const atual = porTurno.get(g.turno_id);
+            if (atual) atual.grades.push(g);
+            else porTurno.set(g.turno_id, { turno_id: g.turno_id, turno_nome: g.turno_nome, grades: [g] });
+        }
+        return Array.from(porTurno.values()).sort((a, b) => a.turno_nome.localeCompare(b.turno_nome));
+    })();
+
+    /** O que o seletor de um turno mostra: a escolha do usuário ou o padrão resolvido. */
+    const referenciaDoTurno = (turnoId: string): string => {
+        const escolhido = referencias[turnoId];
+        if (escolhido) return escolhido;
+        return referenciasResolvidas.find(r => r.turno_id === turnoId)?.horario_id ?? '';
+    };
+
+    const escolherReferencia = (turnoId: string, valor: string) => {
+        limparSelecao();
+        setReferencias(prev => ({ ...prev, [turnoId]: valor }));
+    };
+
     const canApply =
         !!impacto &&
         impacto.status !== 'bloqueado' &&
@@ -351,13 +601,75 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
 
     return (
         <div className="flex flex-col h-full space-y-4">
-            <div className="flex flex-wrap gap-4 p-4 border rounded-lg bg-muted/50/50 items-center">
+            <div className="flex flex-col gap-4 p-4 border rounded-lg bg-muted/50">
+
+                {/* ── Grades de referência: o que conta como ocupado ───────── */}
+                {horarioId && turnosDeReferencia.length > 0 && (
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                Grades de referência
+                            </p>
+                            <span className="text-[11px] text-muted-foreground">
+                                — uma por turno; é contra elas que o conflito é calculado
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                            {turnosDeReferencia.map(({ turno_id, turno_nome, grades }) => {
+                                const valor = referenciaDoTurno(turno_id);
+                                const resolvida = referenciasResolvidas.find(r => r.turno_id === turno_id);
+                                return (
+                                    <div key={turno_id} className="flex items-center gap-2">
+                                        <span className="text-xs font-semibold text-muted-foreground w-[90px] truncate" title={turno_nome}>
+                                            {turno_nome}
+                                        </span>
+                                        <Select
+                                            value={valor || SEM_REFERENCIA}
+                                            onValueChange={v => escolherReferencia(turno_id, v)}
+                                            disabled={loadingData}
+                                        >
+                                            <SelectTrigger className="w-[260px] h-9 text-xs">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value={SEM_REFERENCIA}>— não considerar —</SelectItem>
+                                                {grades.map(g => (
+                                                    <SelectItem key={g.id} value={g.id}>
+                                                        {g.nome} ({rotuloDoStatus(g.status)})
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {resolvida && !resolvida.escolhidaPeloUsuario && (
+                                            <Badge variant="outline" className="text-[9px] py-0">padrão</Badge>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {avisos.length > 0 && (
+                    <div className="flex flex-col gap-1 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                        {avisos.map((a, i) => (
+                            <p key={i} className="text-[11px] text-amber-800 dark:text-amber-300 flex gap-2">
+                                <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
+                                <span>{a}</span>
+                            </p>
+                        ))}
+                    </div>
+                )}
+
+                <div className="flex flex-wrap gap-4 items-center">
                 <div data-tutorial="refino-select-horario" className="w-[300px]">
-                    <Select value={horarioId} onValueChange={setHorarioId}>
-                        <SelectTrigger><SelectValue placeholder="Selecione um horário publicado..." /></SelectTrigger>
+                    <Select value={horarioId} onValueChange={v => { setReferencias({}); setHorarioId(v); }}>
+                        <SelectTrigger><SelectValue placeholder="Selecione a grade a trabalhar..." /></SelectTrigger>
                         <SelectContent>
                             {horariosParaRefino.map(h => (
-                                <SelectItem key={h.id} value={h.id}>{h.nome} ({h.turno?.nome})</SelectItem>
+                                <SelectItem key={h.id} value={h.id}>
+                                    {h.nome} — {h.turno_nome} ({rotuloDoStatus(h.status)})
+                                </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
@@ -371,9 +683,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                             disabled={!horarioId || loadingData}
                             onClick={() => {
                                 setModo(valor);
-                                setAulaSelecionadaId(null);
-                                setSlotDestino(null);
-                                setImpacto(null);
+                                limparSelecao();
                             }}
                             className={cn(
                                 'px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50',
@@ -388,10 +698,11 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                 {horarioId && (
                     <PreencherVagasDialog
                         horarioId={horarioId}
+                        /* As mesmas grades da barra de cima: os dois botões da
+                           tela precisam concordar sobre o que está ocupado. */
+                        referenciasIds={referenciasResolvidas.map(r => r.horario_id)}
                         aoAplicar={() => {
-                            setAulaSelecionadaId(null);
-                            setSlotDestino(null);
-                            setImpacto(null);
+                            limparSelecao();
                             setRecarga(n => n + 1);
                         }}
                     />
@@ -459,6 +770,7 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                         </Select>
                     </div>
                 )}
+                </div>
             </div>
 
             {modo === 'slot' && slotFoco && !loadingData && panoramaDoSlot && (
@@ -555,28 +867,67 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                                         const slotAulas = aulasTurno.filter(a => a.dia_semana === dia && a.aula_index === slotIdx);
 
                                                         const isSelected = aulaSelecionadaId && slotAulas.some(a => a.id === aulaSelecionadaId);
+                                                        const isTroca = aulaTrocaId && slotAulas.some(a => a.id === aulaTrocaId);
                                                         const isDestino = slotDestino?.dia === dia && slotDestino?.slot === slotIdx && slotDestino?.turnoId === tid;
+                                                        /* Célula de grade de referência: leitura. Ela está aqui para
+                                                           mostrar onde o professor já está, não para ser editada. */
+                                                        const soLeitura = slotAulas.length > 0 && slotAulas.every(a => a.movel === false);
 
                                                         return (
                                                             <td
                                                                 key={`${dia}-${slotIdx}`}
                                                                 className={cn(
-                                                                    'border-b border-r p-1 cursor-pointer transition-all min-w-[120px] h-[60px]',
+                                                                    'border-b border-r p-1 transition-all min-w-[120px] h-[60px]',
+                                                                    soLeitura ? 'cursor-not-allowed bg-muted/40' : 'cursor-pointer',
                                                                     isSelected && 'ring-2 ring-indigo-500 ring-inset bg-indigo-50/50 dark:bg-indigo-950/20',
+                                                                    isTroca && 'ring-2 ring-violet-500 ring-inset bg-violet-50/50 dark:bg-violet-950/20',
                                                                     isDestino && 'ring-2 ring-amber-500 ring-inset border-dashed bg-amber-50/30 dark:bg-amber-950/20',
-                                                                    !isSelected && !isDestino && 'hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20'
+                                                                    !isSelected && !isDestino && !isTroca && !soLeitura && 'hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20'
                                                                 )}
                                                                 onClick={() => {
+                                                                    if (soLeitura) {
+                                                                        toast({
+                                                                            title: 'Aula de outra grade',
+                                                                            description: `Esta aula é de ${slotAulas[0].horario_nome || 'outra grade'} e aparece aqui só como referência de conflito. Abra aquela grade para editá-la.`,
+                                                                        });
+                                                                        return;
+                                                                    }
+
                                                                     if (slotAulas.length > 0) {
-                                                                        setAulaSelecionadaId(slotAulas[0].id);
-                                                                        setSlotDestino(null);
-                                                                    } else if (aulaSelecionadaId) {
-                                                                        const origAula = todasAulas.find(a => a.id === aulaSelecionadaId);
-                                                                        if (origAula && origAula.turno_id === tid) {
-                                                                            setSlotDestino({ dia, slot: slotIdx, turnoId: tid });
-                                                                        } else {
-                                                                            toast({ variant: 'destructive', title: 'Ação não permitida', description: 'Você só pode mover a aula para outro horário dentro do mesmo turno físico.' });
+                                                                        const alvo = slotAulas.find(a => a.movel !== false) || slotAulas[0];
+
+                                                                        // Clicar de novo no que já está escolhido desfaz a
+                                                                        // escolha: é como se desiste sem ter que adivinhar
+                                                                        // onde clicar para "sair" da seleção.
+                                                                        if (alvo.id === aulaSelecionadaId) {
+                                                                            limparSelecao();
+                                                                            return;
                                                                         }
+                                                                        if (alvo.id === aulaTrocaId) {
+                                                                            // Desfaz só a segunda ponta; a primeira continua
+                                                                            // escolhida, pronta para outro destino.
+                                                                            setAulaTrocaId(null);
+                                                                            setTroca(null);
+                                                                            return;
+                                                                        }
+
+                                                                        // Com uma aula já selecionada, clicar noutra ocupada
+                                                                        // propõe a TROCA das duas — é o caminho para remanejar
+                                                                        // sem depender de haver slot vazio.
+                                                                        if (aulaSelecionadaId) {
+                                                                            setSlotDestino(null);
+                                                                            setImpacto(null);
+                                                                            setAulaTrocaId(alvo.id);
+                                                                        } else {
+                                                                            setAulaSelecionadaId(alvo.id);
+                                                                            setSlotDestino(null);
+                                                                            setAulaTrocaId(null);
+                                                                            setTroca(null);
+                                                                        }
+                                                                    } else if (aulaSelecionadaId) {
+                                                                        setAulaTrocaId(null);
+                                                                        setTroca(null);
+                                                                        setSlotDestino({ dia, slot: slotIdx, turnoId: tid });
                                                                     }
                                                                 }}
                                                             >
@@ -587,15 +938,12 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                                                 )}
 
                                                                 {slotAulas.map(a => (
-                                                                    <div key={a.id} className={cn(
-                                                                        "border rounded flex flex-col items-center justify-center p-1 w-full h-full relative transition-colors",
-                                                                        a.tipo === 'presencial' ? "bg-primary/10 hover:bg-primary/20 border-primary/20 text-primary" : "bg-orange-500/10 hover:bg-orange-500/20 border-orange-500/20 text-orange-600 dark:text-orange-400"
-                                                                    )}>
-                                                                        <span className="text-[11px] font-bold leading-tight">{a.componente_sigla || a.componente_nome}</span>
-                                                                        <span className="text-[9px] opacity-70 line-clamp-1">
-                                                                            {modo === 'turma' ? a.professor_nome : a.turma_nome} • {a.tipo === 'nao_presencial' ? 'NP' : 'P'}
-                                                                        </span>
-                                                                    </div>
+                                                                    <CartaoAula
+                                                                        key={a.id}
+                                                                        aula={a}
+                                                                        modo={modo}
+                                                                        elevada={a.id === aulaSelecionadaId || a.id === aulaTrocaId}
+                                                                    />
                                                                 ))}
                                                             </td>
                                                         );
@@ -638,12 +986,86 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                                     <div className="bg-muted/50 w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-3">
                                         <ArrowRightLeft className="w-5 h-5 text-muted-foreground" />
                                     </div>
-                                    <p>Clique sobre uma aula na grade para selecioná-la. Em seguida, clique sobre um slot vazio para testar o efeito de movê-la.</p>
+                                    <p>Clique sobre uma aula na grade para selecioná-la. Depois clique num slot vazio para movê-la, ou sobre outra aula para trocar as duas de lugar.</p>
                                 </div>
+                            ) : aulaTrocaId ? (
+                                troca ? (
+                                    <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                                        <div className={cn(
+                                            'p-4 rounded-xl border-l-4',
+                                            troca.status === 'ok'
+                                                ? 'bg-violet-50 border-violet-500 text-violet-900 dark:bg-violet-950/30 dark:text-violet-200'
+                                                : 'bg-red-50 border-red-500 text-red-800 dark:bg-red-950/30 dark:text-red-300',
+                                        )}>
+                                            <div className="flex gap-2 font-bold items-center mb-1">
+                                                {troca.status === 'ok' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                                                <span className="uppercase text-[11px] tracking-wide">
+                                                    {troca.status === 'ok' ? 'Troca válida' : 'Troca bloqueada'}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm opacity-90">{troca.mensagem}</p>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            {troca.lados.map(lado => {
+                                                const turnoOrigem = turnosById.get(lado.origem.turnoId);
+                                                const turnoDestino = turnosById.get(lado.destino.turnoId);
+                                                return (
+                                                    <div key={lado.aulaId} className={cn(
+                                                        'rounded-lg border p-3 text-xs space-y-2',
+                                                        lado.impedimento ? 'bg-red-50/60 border-red-200 dark:bg-red-950/20 dark:border-red-900' : 'bg-muted/40'
+                                                    )}>
+                                                        <p className="font-semibold text-foreground">{lado.rotulo}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex-1 rounded px-2 py-1 text-center bg-background border">
+                                                                <div className="text-[9px] uppercase font-bold text-muted-foreground">Sai de</div>
+                                                                <div className="font-bold">{DIA_SHORT[lado.origem.dia]} {ordinal(lado.origem.slot + 1)}</div>
+                                                                <div className="text-[9px] text-muted-foreground">{turnoOrigem?.horarios?.[lado.origem.slot]?.inicio ?? '--:--'}</div>
+                                                            </div>
+                                                            <MoveRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                                                            <div className="flex-1 rounded px-2 py-1 text-center bg-background border">
+                                                                <div className="text-[9px] uppercase font-bold text-muted-foreground">Vai para</div>
+                                                                <div className="font-bold">{DIA_SHORT[lado.destino.dia]} {ordinal(lado.destino.slot + 1)}</div>
+                                                                <div className="text-[9px] text-muted-foreground">{turnoDestino?.horarios?.[lado.destino.slot]?.inicio ?? '--:--'}</div>
+                                                            </div>
+                                                        </div>
+                                                        {lado.texto && (
+                                                            <p className="text-[11px] text-red-700 dark:text-red-400 flex gap-1.5">
+                                                                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                                                                <span>{lado.texto}</span>
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {troca.avisos.map((a, i) => (
+                                            <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400 flex gap-1.5">
+                                                <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
+                                                <span>{a}</span>
+                                            </p>
+                                        ))}
+
+                                        <Button
+                                            variant="outline"
+                                            className="w-full h-8 text-xs"
+                                            onClick={() => {
+                                                setAulaSelecionadaId(aulaTrocaId);
+                                                setAulaTrocaId(null);
+                                                setTroca(null);
+                                            }}
+                                        >
+                                            Selecionar esta aula em vez de trocar
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="flex justify-center mt-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground/60" /></div>
+                                )
                             ) : !slotDestino ? (
                                 <div className="text-sm text-amber-700 bg-amber-50 p-4 rounded-lg border border-amber-100 flex flex-col gap-2 dark:text-amber-400 dark:bg-amber-950/30 dark:border-amber-900">
                                     <span className="font-bold flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> Aula selecionada</span>
-                                    <span>Agora clique em um slot vazio na grade para testar a realocação.</span>
+                                    <span>Agora clique num slot vazio para testar a realocação, ou sobre outra aula para trocar as duas de lugar. Clique nela de novo para desistir.</span>
                                 </div>
                             ) : impacto ? (
                                 <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
@@ -702,15 +1124,27 @@ export function RefinoClient({ escolaId, horariosParaRefino }: RefinoClientProps
                         </div>
 
                         <div className="p-4 border-t bg-muted/50 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-                             <Button
-                                className="w-full disabled:opacity-40"
-                                size="lg"
-                                disabled={!canApply}
-                                onClick={handleApply}
-                            >
-                                {applying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
-                                Aplicar Mudança
-                            </Button>
+                            {aulaTrocaId ? (
+                                <Button
+                                    className="w-full disabled:opacity-40"
+                                    size="lg"
+                                    disabled={troca?.status !== 'ok' || applying}
+                                    onClick={handleTrocar}
+                                >
+                                    {applying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ArrowRightLeft className="w-4 h-4 mr-2" />}
+                                    Trocar as duas aulas
+                                </Button>
+                            ) : (
+                                <Button
+                                    className="w-full disabled:opacity-40"
+                                    size="lg"
+                                    disabled={!canApply}
+                                    onClick={handleApply}
+                                >
+                                    {applying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                                    Aplicar Mudança
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
