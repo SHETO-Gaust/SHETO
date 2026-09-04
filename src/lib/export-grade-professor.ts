@@ -13,6 +13,13 @@ import type { Turno } from '@/lib/types';
 import { timeToMinutes } from '@/lib/horario-slots';
 import { etiquetaDoSlot, type EtiquetaSlot, type ProfessorRestricoes } from '@/lib/restricoes-slot';
 import { abrirImpressaoPDF, cabecalhoPDF, dataPorExtenso, esc, rodapePDF } from '@/lib/pdf-layout';
+import {
+  CSS_CORES_PDF,
+  estiloDaCelula,
+  legendaCoresPDF,
+  type ComponenteColorivel,
+  type CoresPorComponente,
+} from '@/lib/cores-componentes';
 
 const DIAS_MAP = [
   { id: 'segunda', label: 'Seg' },
@@ -41,7 +48,8 @@ export type AulaProfessorPDF = {
   dia_semana: string;
   aula_index: number;
   turma?: { nome?: string | null } | null;
-  componente?: { nome?: string | null; sigla?: string | null } | null;
+  /** `id` é o que liga a aula à cor escolhida; sem ele a célula sai sem cor. */
+  componente?: { id?: string | null; nome?: string | null; sigla?: string | null } | null;
 };
 
 /** Um turno onde o professor tem carga, com as aulas dele naquele turno. */
@@ -106,7 +114,8 @@ function conteudoCelula(
   linha: Linha,
   diaId: string,
   slotLivre: MarcaSlotLivre,
-): { html: string; classe: string } {
+  cores?: CoresPorComponente | null,
+): { html: string; classe: string; estilo: string } {
   let etiqueta: EtiquetaSlot | null = null;
   // Nenhum turno desta faixa funciona neste dia? Então não é tempo livre do
   // professor: a unidade é que está fechada, e a célula fica traço, sem rótulo.
@@ -126,6 +135,7 @@ function conteudoCelula(
       return {
         html: `<b>${esc(turma.toUpperCase())}</b>/${esc(componente.toUpperCase())}`,
         classe: 'aula',
+        estilo: estiloDaCelula(cores, aula.componente?.id),
       };
     }
 
@@ -148,13 +158,36 @@ function conteudoCelula(
    * Na tela a marca continua visível, que é onde ela serve para conferência.
    */
   if (etiqueta && etiqueta.id !== 'indisponivel') {
-    return { html: esc(etiqueta.label.toUpperCase()), classe: 'restricao' };
+    return { html: esc(etiqueta.label.toUpperCase()), classe: 'restricao', estilo: '' };
   }
-  if (etiqueta) return { html: '', classe: 'vazia' };
+  if (etiqueta) return { html: '', classe: 'vazia', estilo: '' };
 
   return noExpediente && slotLivre === 'planejamento'
-    ? { html: esc(PLANEJAMENTO_INDIVIDUAL.toUpperCase()), classe: 'planejamento' }
-    : { html: '', classe: 'vazia' };
+    ? { html: esc(PLANEJAMENTO_INDIVIDUAL.toUpperCase()), classe: 'planejamento', estilo: '' }
+    : { html: '', classe: 'vazia', estilo: '' };
+}
+
+/**
+ * As disciplinas que aparecem na semana destes docentes.
+ *
+ * Cada relatório monta a própria lista: a legenda de um professor de Matemática
+ * não deve trazer as vinte disciplinas da unidade só porque o usuário escolheu
+ * cor para todas elas na tela.
+ */
+function componentesDasGrades(grades: GradeProfessorPDF[]): ComponenteColorivel[] {
+  const porId = new Map<string, ComponenteColorivel>();
+
+  for (const { blocos } of grades) {
+    for (const bloco of blocos) {
+      for (const aula of bloco.aulas) {
+        const c = aula.componente;
+        if (!c?.id || porId.has(c.id)) continue;
+        porId.set(c.id, { id: c.id, nome: c.nome || c.sigla || 'Disciplina', sigla: c.sigla || c.nome || '' });
+      }
+    }
+  }
+
+  return Array.from(porId.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 const CSS = `
@@ -223,6 +256,7 @@ const CSS = `
     width: auto;
   }
   p.sem-aulas { font-size: 10px; color: #6b7280; font-style: italic; }
+${CSS_CORES_PDF}
 `;
 
 /** Nome que vai no documento oficial; nome_horario é só a abreviação de grade. */
@@ -234,7 +268,11 @@ function nomeDoProfessor(professor: ProfessorPDF): string {
  * A semana de um professor — identificação e tabela. É o bloco que o relatório
  * individual usa sozinho e o consolidado repete, um por folha.
  */
-function secaoProfessor({ professor, blocos }: GradeProfessorPDF, slotLivre: MarcaSlotLivre): string {
+function secaoProfessor(
+  { professor, blocos }: GradeProfessorPDF,
+  slotLivre: MarcaSlotLivre,
+  cores?: CoresPorComponente | null,
+): string {
   const nome = nomeDoProfessor(professor);
   const totalAulas = blocos.reduce((soma, b) => soma + b.aulas.length, 0);
   const turnos = blocos.map(b => b.turno.nome).join(' · ');
@@ -275,9 +313,9 @@ function secaoProfessor({ professor, blocos }: GradeProfessorPDF, slotLivre: Mar
     }
 
     const celulas = diasAtivos.map(dia => {
-      const { html, classe } = conteudoCelula(professor, blocos, linha, dia.id, slotLivre);
+      const { html, classe, estilo } = conteudoCelula(professor, blocos, linha, dia.id, slotLivre, cores);
       return html
-        ? `<td class="${classe}">${html}</td>`
+        ? `<td class="${classe}"${estilo}>${html}</td>`
         : `<td class="vazia"><span></span></td>`;
     }).join('');
 
@@ -304,8 +342,10 @@ export function exportarGradeProfessorPDF(params: {
   blocos: BlocoTurnoProfessor[];
   escolaNome?: string | null;
   slotLivre?: MarcaSlotLivre;
+  /** Cor de fundo por disciplina. Ausente = o preto e branco de sempre. */
+  cores?: CoresPorComponente | null;
 }): void {
-  const { professor, blocos, escolaNome, slotLivre = 'planejamento' } = params;
+  const { professor, blocos, escolaNome, slotLivre = 'planejamento', cores } = params;
   const nome = nomeDoProfessor(professor);
 
   const cabecalho = cabecalhoPDF({
@@ -314,10 +354,17 @@ export function exportarGradeProfessorPDF(params: {
     subtitulo: `Gerado em ${dataPorExtenso()}`,
   });
 
+  const legenda = legendaCoresPDF(componentesDasGrades([{ professor, blocos }]), cores);
+
   abrirImpressaoPDF({
     titulo: `Horário — ${nome}`,
     css: CSS,
-    corpo: `${cabecalho}${secaoProfessor({ professor, blocos }, slotLivre)}${rodapePDF()}`,
+    // Mesma folha do PDF de turmas (`export-horario.ts`): a semana é uma grade
+    // larga, e em retrato as colunas dos dias ficam estreitas demais para o
+    // nome da turma caber sem quebrar no meio.
+    orientacao: 'paisagem',
+    cabecalho,
+    corpo: `${legenda}${secaoProfessor({ professor, blocos }, slotLivre, cores)}${rodapePDF()}`,
   });
 }
 
@@ -333,8 +380,10 @@ export function exportarGradeTodosProfessoresPDF(params: {
   grades: GradeProfessorPDF[];
   escolaNome?: string | null;
   slotLivre?: MarcaSlotLivre;
+  /** Cor de fundo por disciplina. Ausente = o preto e branco de sempre. */
+  cores?: CoresPorComponente | null;
 }): void {
-  const { grades, escolaNome, slotLivre = 'planejamento' } = params;
+  const { grades, escolaNome, slotLivre = 'planejamento', cores } = params;
 
   if (grades.length === 0) {
     alert('Não há professores com horário publicado para imprimir.');
@@ -347,9 +396,18 @@ export function exportarGradeTodosProfessoresPDF(params: {
     subtitulo: `${grades.length} professor(es) · gerado em ${dataPorExtenso()}`,
   });
 
+  /*
+   * A legenda sai uma vez, na primeira folha. Repeti-la por professor custaria
+   * altura numa página que já é a semana inteira de alguém, e o consolidado é
+   * lido como um caderno — quem procura o significado de um tom volta à capa.
+   */
+  const legenda = legendaCoresPDF(componentesDasGrades(grades), cores);
+
   abrirImpressaoPDF({
     titulo: 'Horário dos Professores',
     css: CSS,
-    corpo: `${cabecalho}${grades.map(g => secaoProfessor(g, slotLivre)).join('')}${rodapePDF()}`,
+    orientacao: 'paisagem',
+    cabecalho,
+    corpo: `${legenda}${grades.map(g => secaoProfessor(g, slotLivre, cores)).join('')}${rodapePDF()}`,
   });
 }
