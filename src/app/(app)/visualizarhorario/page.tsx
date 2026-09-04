@@ -1,5 +1,5 @@
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/db/server";
 import { redirect } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Search, AlertTriangle } from "lucide-react";
@@ -7,12 +7,12 @@ import { VisualizadorOperacionalClient } from "./visualizador-operacional-client
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function VisualizarHorarioPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('ue, escolas(escolar)')
     .eq('id', user.id)

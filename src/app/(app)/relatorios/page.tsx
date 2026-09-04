@@ -1,14 +1,14 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/db/server";
 import type { Profile, Turno } from "@/lib/types";
 import { AlertTriangle } from "lucide-react";
 import { RelatoriosClient } from "./relatorios-client";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function RelatoriosPage() {
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) {
     return (
@@ -21,7 +21,7 @@ export default async function RelatoriosPage() {
     );
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('ue')
     .eq('id', user.id)
@@ -42,7 +42,7 @@ export default async function RelatoriosPage() {
     );
   }
 
-  const { data: turnos } = await supabase
+  const { data: turnos } = await db
     .from('turnos')
     .select('*')
     .eq('escola_id', escolaId)

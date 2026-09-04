@@ -1,7 +1,7 @@
 
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type { HorarioCompleto, Turno, Escola, Horario } from '@/lib/types';
 import { requireEscolaEModulo } from '@/lib/auth/guards';
 
@@ -11,17 +11,17 @@ import { requireEscolaEModulo } from '@/lib/auth/guards';
  */
 export async function getHorariosEscolaCompletos(escolaId: string) {
     await requireEscolaEModulo(escolaId, 'horarios');
-    const supabase = await createClient();
+    const db = await createClient();
 
     // 1. Buscar todos os turnos da escola
-    const { data: turnos } = await supabase
+    const { data: turnos } = await db
         .from('turnos')
         .select('*')
         .eq('escola_id', escolaId)
         .order('nome', { ascending: true });
 
     // 2. Buscar todos os horários publicados
-    const { data: horarios } = await supabase
+    const { data: horarios } = await db
         .from('horarios')
         .select('*, turno:turnos(*)')
         .eq('escola_id', escolaId)
@@ -40,7 +40,7 @@ export async function getHorariosEscolaCompletos(escolaId: string) {
     let hasMore = true;
 
     while (hasMore) {
-        let query = supabase
+        let query = db
             .from('horario_aulas')
             .select(`
                 *, 

@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/auth/guards';
@@ -34,8 +34,8 @@ export type EscolaInput = z.infer<typeof escolaSchema>;
 
 export async function getEscolas(): Promise<EscolaCompleta[]> {
     await requireAdmin();
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createClient();
+    const { data, error } = await db
         .from('escolas')
         .select('*')
         .order('escolar', { ascending: true });
@@ -54,8 +54,8 @@ export async function createEscola(input: EscolaInput) {
         return { error: 'Dados inválidos.', errors: validated.error.flatten().fieldErrors };
     }
 
-    const supabase = await createClient();
-    const { error } = await supabase.from('escolas').insert([validated.data]);
+    const db = await createClient();
+    const { error } = await db.from('escolas').insert([validated.data]);
 
     if (error) {
         console.error('Erro ao criar escola:', error);
@@ -74,8 +74,8 @@ export async function updateEscola(id: number, input: EscolaInput) {
         return { error: 'Dados inválidos.', errors: validated.error.flatten().fieldErrors };
     }
 
-    const supabase = await createClient();
-    const { error } = await supabase
+    const db = await createClient();
+    const { error } = await db
         .from('escolas')
         .update(validated.data)
         .eq('id', id);
@@ -91,8 +91,8 @@ export async function updateEscola(id: number, input: EscolaInput) {
 
 export async function deleteEscola(id: number) {
     await requireAdmin();
-    const supabase = await createClient();
-    const { error } = await supabase.from('escolas').delete().eq('id', id);
+    const db = await createClient();
+    const { error } = await db.from('escolas').delete().eq('id', id);
 
     if (error) {
         console.error('Erro ao excluir escola:', error);

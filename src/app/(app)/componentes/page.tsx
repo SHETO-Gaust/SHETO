@@ -1,5 +1,5 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/db/server";
 import type { Profile } from "@/lib/types";
 import { getComponentes } from "./actions";
 import { AlertTriangle } from "lucide-react";
@@ -7,9 +7,9 @@ import { ComponentesClient } from "./componentes-client";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function ComponentesPage() {
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) {
     return (
@@ -22,7 +22,7 @@ export default async function ComponentesPage() {
     );
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('ue')
     .eq('id', user.id)

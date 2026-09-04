@@ -1,7 +1,7 @@
 import { getEscolas } from './actions';
 import { UnidadesClient } from './unidades-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { redirect } from 'next/navigation';
 
 export const metadata = {

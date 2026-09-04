@@ -5,7 +5,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 
 const GerarHorarioInputSchema = z.object({
   escolaId: z.string(),
@@ -76,13 +76,13 @@ const gerarHorarioFlow = ai.defineFlow(
     outputSchema: HorarioGeradoOutputSchema,
   },
   async (input) => {
-    const supabase = await createClient();
+    const db = await createClient();
 
     // 1. Buscar Turno
-    const { data: turno } = await supabase.from('turnos').select('*').eq('id', input.turnoId).single();
+    const { data: turno } = await db.from('turnos').select('*').eq('id', input.turnoId).single();
     
     // 2. Buscar Turmas do Turno com componentes da série e professores alocados
-    const { data: turmas } = await supabase
+    const { data: turmas } = await db
       .from('turmas')
       .select(`
         id, nome, 
@@ -93,7 +93,7 @@ const gerarHorarioFlow = ai.defineFlow(
       .filter('serie.turno_id', 'eq', input.turnoId);
 
     // 3. Buscar Professores e suas restrições
-    const { data: professores } = await supabase
+    const { data: professores } = await db
         .from('professores')
         .select('id, nome_horario, restricoes')
         .eq('escola_id', input.escolaId);

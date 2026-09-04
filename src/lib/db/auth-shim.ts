@@ -16,7 +16,7 @@ function repassarErroDeControleDoNext(err: unknown): void {
   if (typeof (err as { digest?: unknown } | null)?.digest === 'string') throw err;
 }
 
-/** Wrapper de auth compativel com a interface supabase.auth.* usada no restante do app, com NextAuth por baixo. */
+/** Wrapper de auth compativel com a interface `auth.*` que o app ja usava, com NextAuth por baixo. */
 export function createAuthShim(pool: Pool) {
   return {
     async getUser(): Promise<AuthResult<{ user: AuthUser | null }>> {

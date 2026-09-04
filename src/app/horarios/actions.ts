@@ -1,12 +1,12 @@
 
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import type { HorarioCompleto, Escola } from '@/lib/types';
 
 export async function getEscolaPorInep(inep: string): Promise<{ data?: Escola, error?: string }> {
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const db = await createClient();
+    const { data, error } = await db
         .from('escolas')
         .select('*')
         .eq('inep', inep)
@@ -19,10 +19,10 @@ export async function getEscolaPorInep(inep: string): Promise<{ data?: Escola, e
 }
 
 export async function getHorariosPublicos(escolaId: string): Promise<{ data?: HorarioCompleto[], error?: string }> {
-    const supabase = await createClient();
+    const db = await createClient();
     
     // Buscar horários publicados da escola
-    const { data: horarios, error: hError } = await supabase
+    const { data: horarios, error: hError } = await db
         .from('horarios')
         .select('*, turno:turnos(*)')
         .eq('escola_id', escolaId)
@@ -32,7 +32,7 @@ export async function getHorariosPublicos(escolaId: string): Promise<{ data?: Ho
     if (!horarios || horarios.length === 0) return { data: [] };
 
     // Buscar todos os turnos para identificar contraturnos
-    const { data: allTurnos } = await supabase.from('turnos').select('*').eq('escola_id', escolaId);
+    const { data: allTurnos } = await db.from('turnos').select('*').eq('escola_id', escolaId);
 
     const resultados: HorarioCompleto[] = [];
 
@@ -44,7 +44,7 @@ export async function getHorariosPublicos(escolaId: string): Promise<{ data?: Ho
             return false;
         }) || allTurnos?.find(t => t.id !== (h.turno as any).id);
 
-        const { data: aulas } = await supabase
+        const { data: aulas } = await db
             .from('horario_aulas')
             .select('*, componente:componentes_curriculares(id, nome, sigla), professor:professores(id, nome_horario), turma:turmas(id, nome)')
             .eq('horario_id', h.id)
@@ -64,10 +64,10 @@ export async function getHorariosPublicos(escolaId: string): Promise<{ data?: Ho
 
 // MELHORIA ITEM 3: Buscar horários consolidados por professor
 export async function getGradeProfessorPublica(escolaId: string, nomeProfessor: string): Promise<{ data?: any, error?: string }> {
-    const supabase = await createClient();
+    const db = await createClient();
 
     // 1. Achar o professor na escola
-    const { data: prof } = await supabase
+    const { data: prof } = await db
         .from('professores')
         .select('id, nome_horario, restricoes')
         .eq('escola_id', escolaId)
@@ -78,7 +78,7 @@ export async function getGradeProfessorPublica(escolaId: string, nomeProfessor: 
     if (!prof) return { error: 'Professor não encontrado nesta unidade.' };
 
     // 2. Buscar todas as aulas publicadas deste professor nesta escola
-    const { data: aulas } = await supabase
+    const { data: aulas } = await db
         .from('horario_aulas')
         .select(`
             *,

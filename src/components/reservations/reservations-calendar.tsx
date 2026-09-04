@@ -40,7 +40,7 @@ export function ReservationsCalendar({
   };
 
   const handleConfirmReservation = () => {
-    // In a real app, this would call a server action to create the reservation in Supabase
+    // In a real app, this would call a server action to create the reservation.
     if (selectedDate) {
       console.log('Reserving date:', selectedDate);
       toast({

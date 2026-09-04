@@ -44,7 +44,7 @@ next-env.d.ts
 firebase-debug.log
 firestore-debug.log
 
-# migracao supabase -> postgres local: NUNCA versionar dumps nem credenciais
+# NUNCA versionar dumps de banco nem credenciais
 /migracao/*.local
 /migracao/dumps/
 *.backup

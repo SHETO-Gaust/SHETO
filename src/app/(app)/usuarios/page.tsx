@@ -1,14 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getUsers } from './actions';
 import { UsersClient } from './users-client';
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/db/server";
 import type { Escola } from "@/lib/types";
 
 export default async function UsuariosPage() {
     const users = await getUsers();
     
-    const supabase = await createClient();
-    const { data: allEscolasData } = await supabase
+    const db = await createClient();
+    const { data: allEscolasData } = await db
         .from('escolas')
         .select('*')
         .order('escolar', { ascending: true });

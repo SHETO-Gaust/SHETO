@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { revalidatePath } from 'next/cache';
 import type { Horario, Turno, Escola } from '@/lib/types';
 import { sendMassCommunicationEmail } from '@/lib/mail';
@@ -48,22 +48,22 @@ export type AuditoriaStats = {
 
 export async function getAuditoriaStats(): Promise<AuditoriaStats> {
     await requireAdmin();
-    const supabase = await createClient();
+    const db = await createClient();
     try {
-        const { count: totalRascunhos } = await supabase
+        const { count: totalRascunhos } = await db
             .from('horarios')
             .select('*', { count: 'exact', head: true })
             .eq('status', 'em_rascunho');
 
-        const { count: totalPreProducao } = await supabase
+        const { count: totalPreProducao } = await db
             .from('horarios')
             .select('*', { count: 'exact', head: true })
             .eq('status', 'pre_producao');
 
-        const { data: allEscolas } = await supabase.from('escolas').select('id, regional');
+        const { data: allEscolas } = await db.from('escolas').select('id, regional');
         const totalEscolas = allEscolas?.length || 0;
 
-        const { data: pubData } = await supabase
+        const { data: pubData } = await db
             .from('horarios')
             .select('turnos!inner(escola_id)')
             .eq('status', 'publicado');
@@ -86,7 +86,7 @@ export async function getAuditoriaStats(): Promise<AuditoriaStats> {
             (pubData || []).map((d: any) => String(d.turnos.escola_id))
         );
 
-        const { data: allData } = await supabase
+        const { data: allData } = await db
             .from('horarios')
             .select('turnos!inner(escola_id)');
         const escolasComDados = new Set(
@@ -143,13 +143,13 @@ export async function getAuditoriaData({
     status?: string;
 }): Promise<{ data: AuditoriaRow[], total: number, error?: string }> {
     await requireAdmin();
-    const supabase = await createClient();
+    const db = await createClient();
 
     try {
         const start = (page - 1) * pageSize;
         const end = start + pageSize - 1;
 
-        let query = supabase
+        let query = db
             .from('escolas')
             .select('*', { count: 'exact' });
 
@@ -164,14 +164,14 @@ export async function getAuditoriaData({
 
         if (status && status !== 'all') {
             if (status === 'publicado' || status === 'em_rascunho' || status === 'pre_producao') {
-                const { data: hData } = await supabase.from('horarios').select('turnos!inner(escola_id)').eq('status', status);
+                const { data: hData } = await db.from('horarios').select('turnos!inner(escola_id)').eq('status', status);
                 const ids = Array.from(new Set((hData || []).map((d: any) => d.turnos.escola_id)));
                 if (ids.length === 0) {
                     return { data: [], total: 0 };
                 }
                 query = query.in('id', ids);
             } else if (status === 'sem_dados') {
-                const { data: hData } = await supabase.from('horarios').select('turnos!inner(escola_id)');
+                const { data: hData } = await db.from('horarios').select('turnos!inner(escola_id)');
                 const ids = Array.from(new Set((hData || []).map((d: any) => d.turnos.escola_id)));
                 if (ids.length > 0) {
                     query = query.not('id', 'in', `(${ids.join(',')})`);
@@ -192,7 +192,7 @@ export async function getAuditoriaData({
 
         const escolaIds = escolas.map(e => e.id);
 
-        const { data: turnos, error: tError } = await supabase
+        const { data: turnos, error: tError } = await db
             .from('turnos')
             .select('id, nome, escola_id')
             .in('escola_id', escolaIds)
@@ -204,7 +204,7 @@ export async function getAuditoriaData({
         let horarios: any[] = [];
 
         if (turnoIds.length > 0) {
-            const { data: hData, error: hError } = await supabase
+            const { data: hData, error: hError } = await db
                 .from('horarios')
                 .select('id, turno_id, status')
                 .in('turno_id', turnoIds);
@@ -262,8 +262,8 @@ export async function getAuditoriaData({
 
 export async function deleteHorarioAuditoria(id: string) {
     await requireAdmin();
-    const supabase = await createClient();
-    const { error } = await supabase.from('horarios').delete().eq('id', id);
+    const db = await createClient();
+    const { error } = await db.from('horarios').delete().eq('id', id);
     if (error) return { error: 'Não foi possível deletar o horário.' };
     revalidatePath('/auditoria');
     return { success: true };
@@ -271,9 +271,9 @@ export async function deleteHorarioAuditoria(id: string) {
 
 export async function limparRascunhosEscola(escolaId: string) {
     await requireAdmin();
-    const supabase = await createClient();
+    const db = await createClient();
     try {
-        const { data: turnos, error: tError } = await supabase
+        const { data: turnos, error: tError } = await db
             .from('turnos')
             .select('id')
             .eq('escola_id', escolaId);
@@ -283,7 +283,7 @@ export async function limparRascunhosEscola(escolaId: string) {
         const turnoIds = turnos.map(t => t.id);
         if (turnoIds.length === 0) return { success: true, count: 0 };
         
-        const { error, count } = await supabase
+        const { error, count } = await db
             .from('horarios')
             .delete({ count: 'exact' })
             .in('turno_id', turnoIds)
@@ -301,12 +301,12 @@ export async function limparRascunhosEscola(escolaId: string) {
 
 export async function limparRascunhosAntigos(dias: number) {
     await requireAdmin();
-    const supabase = await createClient();
+    const db = await createClient();
     const dataCorte = new Date();
     dataCorte.setDate(dataCorte.getDate() - dias);
 
     try {
-        const { error, count } = await supabase
+        const { error, count } = await db
             .from('horarios')
             .delete({ count: 'exact' })
             .eq('status', 'em_rascunho')
@@ -324,12 +324,12 @@ export async function limparRascunhosAntigos(dias: number) {
 
 export async function getResumoLimpeza(dias: number): Promise<{ data?: ResumoLimpeza[], error?: string }> {
     await requireAdmin();
-    const supabase = await createClient();
+    const db = await createClient();
     const dataCorte = new Date();
     dataCorte.setDate(dataCorte.getDate() - dias);
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await db
             .from('horarios')
             .select(`
                 id,
@@ -390,9 +390,9 @@ export type UserListItem = {
 
 export async function getUsersForCommunication(): Promise<{ data?: UserListItem[], error?: string }> {
     await requireAdmin();
-    const supabase = await createClient();
+    const db = await createClient();
     try {
-        const { data, error } = await supabase
+        const { data, error } = await db
             .from('profiles')
             .select('id, name, email, role')
             .eq('active', true)
@@ -416,26 +416,26 @@ export async function getUsersForCommunication(): Promise<{ data?: UserListItem[
 
 export async function enviarComunicadoMassaAction(data: { titulo: string, html: string, targetIds: string[] | 'all' }) {
     await requireAdmin();
-    const supabase = await createClient();
+    const db = await createClient();
     
     // Auth Check
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await db.auth.getUser();
     if (!user) return { error: 'Não autorizado.' };
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).single();
     if (profile?.role !== 'admin') return { error: 'Acesso restrito.' };
 
     try {
         let bccList: string[] = [];
 
         if (data.targetIds === 'all') {
-            const { data: profiles, error } = await supabase
+            const { data: profiles, error } = await db
                 .from('profiles')
                 .select('email')
                 .eq('active', true);
             if (error) throw error;
             bccList = (profiles || []).map(p => p.email);
         } else if (data.targetIds.length > 0) {
-            const { data: profiles, error } = await supabase
+            const { data: profiles, error } = await db
                 .from('profiles')
                 .select('email')
                 .in('id', data.targetIds)

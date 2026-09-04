@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { lerTurnos } from '@/lib/dados/leitura';
 import type { Turno, HorarioAula } from '@/lib/types';
 import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
@@ -20,7 +20,7 @@ export async function getTurnos(
   escolaId: string
 ): Promise<{ data?: Turno[]; error?: string }> {
     await requireEscolaEModulo(escolaId, 'turno');
-  const supabase = await createClient();
+  const db = await createClient();
 
   const { data, error: erroLeitura } = await lerTurnos(escolaId);
   if (erroLeitura) return { error: erroLeitura };
@@ -50,7 +50,7 @@ export async function getTurnos(
       },
     ];
 
-    const { data: newTurnos, error: insertError } = await supabase
+    const { data: newTurnos, error: insertError } = await db
       .from('turnos')
       .insert(defaultTurnos)
       .select();
@@ -87,7 +87,7 @@ export async function upsertTurno(
   formData: z.infer<typeof upsertTurnoSchema>
 ) {
     await requireEscolaEModulo(formData.escola_id, 'turno');
-  const supabase = await createClient(); 
+  const db = await createClient(); 
 
   const validated = upsertTurnoSchema.safeParse(formData);
   if (!validated.success) {
@@ -99,7 +99,7 @@ export async function upsertTurno(
 
   const { id, escola_id, nome, dias_semana, aulas_por_dia } = validated.data;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('turnos')
     .upsert(
       { id, escola_id, nome, dias_semana, aulas_por_dia },
@@ -127,9 +127,9 @@ export async function upsertTurno(
 
 export async function updateTurnoStatus(id: string, ativo: boolean) {
     await requireEscolaDoRecurso('turnos', id, 'turno');
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { error } = await supabase
+  const { error } = await db
     .from('turnos')
     .update({ ativo })
     .eq('id', id);
@@ -182,7 +182,7 @@ export async function updateTurnoHorarios(
 ) {
     // este formData nao carrega escola_id - resolvemos pelo proprio turno
     await requireEscolaDoRecurso('turnos', formData.id, 'turno');
-  const supabase = await createClient();
+  const db = await createClient();
 
   const validated = updateHorariosSchema.safeParse(formData);
   if (!validated.success) {
@@ -194,7 +194,7 @@ export async function updateTurnoHorarios(
 
   const { id, horarios } = validated.data;
 
-  const { error } = await supabase
+  const { error } = await db
     .from('turnos')
     .update({ horarios: horarios as HorarioAula[] })
     .eq('id', id);
@@ -213,9 +213,9 @@ export async function updateTurnoHorarios(
 /* -------------------------------------------------------------------------- */
 export async function deleteTurno(id: string) {
     await requireEscolaDoRecurso('turnos', id, 'turno');
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { error } = await supabase.from('turnos').delete().eq('id', id);
+  const { error } = await db.from('turnos').delete().eq('id', id);
 
   if (error) {
     console.error('Error deleting turno:', error);

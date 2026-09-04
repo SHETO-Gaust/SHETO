@@ -2,15 +2,15 @@
 import { Suspense } from 'react';
 import { AuthForm } from '@/components/auth-form';
 import { AuthShell } from '@/components/auth-shell';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { redirect } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 export default async function LoginPage() {
-  const supabase = await createClient();
+  const db = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   if (user) {
     redirect('/dashboard');

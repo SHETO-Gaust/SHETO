@@ -1,6 +1,6 @@
 
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/db/server";
 import type { Profile } from "@/lib/types";
 import { getTurnosAtivos } from "./actions";
 import { AlertTriangle } from "lucide-react";
@@ -8,9 +8,9 @@ import { GeradorHorarioClient } from "./gerador-horario-client";
 import { StepNavigation } from "@/components/step-navigation";
 
 export default async function GerarHorarioPage() {
-  const supabase = await createClient();
+  const db = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await db.auth.getUser();
 
   if (!user) {
     return (
@@ -23,7 +23,7 @@ export default async function GerarHorarioPage() {
     );
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await db
     .from('profiles')
     .select('ue')
     .eq('id', user.id)

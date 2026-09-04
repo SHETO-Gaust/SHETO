@@ -1,6 +1,6 @@
 
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import {
   SidebarProvider,
   Sidebar,
@@ -55,11 +55,11 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
+  const db = await createClient();
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await db.auth.getUser();
 
   // Se não houver usuário, manda para o login. 
   // Isso não gera loop porque o login não redireciona usuários nulos.
@@ -67,7 +67,7 @@ export default async function AppLayout({
     return redirect('/login');
   }
 
-  const { data: profileData } = await supabase
+  const { data: profileData } = await db
     .from('profiles')
     .select(`*, escolas(*)`)
     .eq('id', user.id)
@@ -112,7 +112,7 @@ export default async function AppLayout({
     );
   }
   
-  const { data: allEscolasData } = await supabase
+  const { data: allEscolasData } = await db
     .from('escolas')
     .select('*')
     .order('escolar', { ascending: true });

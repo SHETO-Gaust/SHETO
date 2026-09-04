@@ -144,6 +144,13 @@ src/app/api/auth/[...nextauth]/route.ts   rota de login/logout
 | `src/lib/supabase/client.ts` | Bloqueia acesso ao banco pelo navegador |
 | `src/middleware.ts` | Removida lógica de sessão do Supabase |
 
+> **Nota posterior (2026-09-03).** Os dois primeiros caminhos acima não existem
+> mais: `src/lib/supabase/server.ts` virou `src/lib/db/server.ts`, e o
+> `client.ts` foi apagado (era um stub que só lançava erro, e ninguém o
+> importava). A pasta `supabase/migrations/` também virou `migrations/`. Os
+> nomes ficam registrados aqui porque descrevem o que a migração fez na época —
+> quem for procurar os arquivos, procure nos caminhos novos.
+
 > Os outros ~45 arquivos de actions **não foram tocados**: todos importam
 > `createClient` de `server.ts`. Trocando só ele, todos passaram a usar o
 > Postgres sem saber da mudança.

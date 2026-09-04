@@ -40,7 +40,7 @@ export function ProfileForm({ userProfile }: ProfileFormProps) {
   });
 
   const onSubmit = async (data: ProfileFormValues) => {
-    // In a real app, this would call a server action to update the user profile in Supabase
+    // In a real app, this would call a server action to update the user profile.
     await new Promise(resolve => setTimeout(resolve, 1000));
     console.log(data);
     toast({
