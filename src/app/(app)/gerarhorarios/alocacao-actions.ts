@@ -13,7 +13,7 @@
  * exporia dado que a tela não usa para mais nada.
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { revalidatePath } from 'next/cache';
 import { requireEscolaDoRecurso } from '@/lib/auth/guards';
 import { aplicarMudancasRefino } from '@/app/(app)/refinodehorario/actions';
@@ -24,6 +24,7 @@ import {
     type ResultadoPreenchimento,
 } from '@/lib/preencher-vagas';
 import type { Turno } from '@/lib/types';
+import { regraDoProfessorNaMateria } from '@/lib/geminacao-professor';
 import {
     calcularAlocacaoComTrocas,
     type AulaAlocacao,
@@ -100,10 +101,19 @@ const SELECT_AULA =
  * turno oposto que começa noutra hora. Ignorar isso produziria uma alocação que
  * a tela aceita e a escola não consegue cumprir.
  */
-async function carregarContexto(horarioId: string): Promise<{ ctx?: Contexto; error?: string }> {
-    const supabase = await createClient();
+async function carregarContexto(
+    horarioId: string,
+    /**
+     * Grades que contam como ocupação, uma por turno, quando quem chama já as
+     * resolveu (é o caso do refino). Ausente = a política antiga, "toda grade
+     * publicada ou em pré-produção" — que não enxerga rascunho e por isso deixa
+     * passar o choque com o turno que ainda está sendo montado.
+     */
+    referenciasIds?: string[] | null,
+): Promise<{ ctx?: Contexto; error?: string }> {
+    const db = await createClient();
 
-    const { data: horario, error: hErr } = await supabase
+    const { data: horario, error: hErr } = await db
         .from('horarios')
         .select('*, turno:turnos(*)')
         .eq('id', horarioId)
@@ -112,32 +122,37 @@ async function carregarContexto(horarioId: string): Promise<{ ctx?: Contexto; er
 
     const escolaId = (horario as any).escola_id as string;
 
-    const { data: turnos } = await supabase.from('turnos').select('*').eq('escola_id', escolaId);
+    const { data: turnos } = await db.from('turnos').select('*').eq('escola_id', escolaId);
     const turnosById = new Map<string, Turno>(((turnos ?? []) as Turno[]).map(t => [t.id, t]));
 
-    const { data: aulasDeste, error: aErr } = await supabase
+    const { data: aulasDeste, error: aErr } = await db
         .from('horario_aulas')
         .select(SELECT_AULA)
         .eq('horario_id', horarioId);
     if (aErr) return { error: 'Não foi possível ler as aulas deste horário.' };
 
     // Aulas dos demais horários vigentes da escola, só para detectar choque.
-    const { data: outrosHorarios } = await supabase
-        .from('horarios')
-        .select('id')
-        .eq('escola_id', escolaId)
-        .in('status', ['publicado', 'pre_producao']);
-    const idsOutros = ((outrosHorarios ?? []) as { id: string }[])
-        .map(h => h.id)
-        .filter(id => id !== horarioId);
+    let idsOutros: string[];
+    if (referenciasIds) {
+        idsOutros = referenciasIds.filter(id => id !== horarioId);
+    } else {
+        const { data: outrosHorarios } = await db
+            .from('horarios')
+            .select('id')
+            .eq('escola_id', escolaId)
+            .in('status', ['publicado', 'pre_producao']);
+        idsOutros = ((outrosHorarios ?? []) as { id: string }[])
+            .map(h => h.id)
+            .filter(id => id !== horarioId);
+    }
 
     let aulasOutras: any[] = [];
     if (idsOutros.length > 0) {
-        const { data } = await supabase.from('horario_aulas').select(SELECT_AULA).in('horario_id', idsOutros);
+        const { data } = await db.from('horario_aulas').select(SELECT_AULA).in('horario_id', idsOutros);
         aulasOutras = data ?? [];
     }
 
-    const { data: profs, error: pErr } = await supabase
+    const { data: profs, error: pErr } = await db
         .from('professores')
         .select(
             'id, nome_horario, cpf, restricoes, aulas_disponiveis, aulas_planejamento,' +
@@ -146,7 +161,7 @@ async function carregarContexto(horarioId: string): Promise<{ ctx?: Contexto; er
         .eq('escola_id', escolaId);
     if (pErr) return { error: 'Não foi possível ler os professores da escola.' };
 
-    const { data: habilitacoes } = await supabase.from('professores_componentes').select('professor_id, componente_id');
+    const { data: habilitacoes } = await db.from('professores_componentes').select('professor_id, componente_id');
     const porProfessor = new Map<string, string[]>();
     for (const h of (habilitacoes ?? []) as { professor_id: string; componente_id: string }[]) {
         const lista = porProfessor.get(h.professor_id);
@@ -166,13 +181,14 @@ async function carregarContexto(horarioId: string): Promise<{ ctx?: Contexto; er
         aulas_planejamento: p.aulas_planejamento ?? 0,
     }));
 
-    const { data: turmas } = await supabase
+    const { data: turmas } = await db
         .from('turmas')
         .select(
             'id, nome, serie:series(id, turno_id, restricoes,' +
             ' componentes:series_componentes(aulas_presenciais, aulas_nao_presenciais,' +
             ' componente:componentes_curriculares(id, nome, sigla))),' +
-            ' professores:turmas_professores(componente_id, professor:professores(id, nome_horario))'
+            ' professores:turmas_professores(componente_id,' +
+            ' professor:professores(id, nome_horario, geminacao_personalizada))'
         )
         .eq('escola_id', escolaId);
 
@@ -191,9 +207,38 @@ async function carregarContexto(horarioId: string): Promise<{ ctx?: Contexto; er
     };
 }
 
-/** Teto de aulas da mesma disciplina no dia. Espelha o motor de geração. */
-function tetoDoDia(aulasPorDia: number, cargaSemanal: number, dias: number): number {
-    return Math.max(aulasPorDia >= 7 ? 4 : 3, Math.ceil(cargaSemanal / Math.max(1, dias)));
+/**
+ * Teto de aulas da mesma disciplina no dia. Espelha o motor de geração.
+ *
+ * `pessoal` é o `max_no_dia` da geminação personalizada do professor daquela
+ * disciplina, quando existe: ele substitui o teto da rede (4 no dia longo, 3 no
+ * curto) para os dois lados. O piso aritmético continua podendo levantá-lo —
+ * uma carga que não cabe de outro jeito não vira recusa aqui, do mesmo modo que
+ * não vira no motor.
+ */
+function tetoDoDia(aulasPorDia: number, cargaSemanal: number, dias: number, pessoal?: number): number {
+    const base = pessoal ?? (aulasPorDia >= 7 ? 4 : 3);
+    return Math.max(base, Math.ceil(cargaSemanal / Math.max(1, dias)));
+}
+
+/**
+ * Regra do dia que vale para a disciplina de UM professor.
+ *
+ * A grade salva não guarda a geminação usada na geração, então o limite de
+ * emenda assumido é o de quem não pediu geminação: 2. Quem personalizou o
+ * cadastro é a exceção — ali o número está gravado, e é dele que a regra sai,
+ * senão o refino ofereceria a troca que a geração recusou.
+ *
+ * `componenteId` porque o acordo é por matéria: o mesmo professor pode ter
+ * dobradinha em Matemática e nada em Projeto de Vida.
+ */
+function regraDoProfessor(
+    professor: { geminacao_personalizada?: unknown } | null | undefined,
+    componenteId: string,
+): { limiteRun: number; tetoPessoal?: number } {
+    const pessoal = regraDoProfessorNaMateria(professor?.geminacao_personalizada, componenteId);
+    if (!pessoal) return { limiteRun: 2 };
+    return { limiteRun: pessoal.max_consecutivas, tetoPessoal: pessoal.max_no_dia };
 }
 
 /**
@@ -313,6 +358,8 @@ export async function calcularAlocacao(
         ? comp.aulas_presenciais ?? 0
         : comp.aulas_nao_presenciais ?? 0;
 
+    const regraDaVaga = regraDoProfessor(prof?.professor, escolha.componente_id);
+
     const vaga: Vaga = {
         turma_id: turma.id,
         turma_nome: turma.nome,
@@ -327,11 +374,12 @@ export async function calcularAlocacao(
         aula_index: escolha.aula_index,
         // A grade salva não guarda a geminação usada, então o limite de emenda
         // assumido é o de quem NÃO pediu geminação: 2.
-        limiteRun: 2,
+        limiteRun: regraDaVaga.limiteRun,
         tetoDoDia: tetoDoDia(
             ctx.turno.aulas_por_dia ?? 0,
             carga,
             (ctx.turno.dias_semana ?? []).length || 5,
+            regraDaVaga.tetoPessoal,
         ),
     };
 
@@ -360,14 +408,14 @@ export async function aplicarAlocacao(
     await requireEscolaDoRecurso('horarios', horarioId, 'horarios');
     if (!movimentos || movimentos.length === 0) return { error: 'Nenhuma troca recebida.' };
 
-    const supabase = await createClient();
+    const db = await createClient();
 
     const idsParaTrocar = movimentos
         .filter((m): m is Extract<MovimentoAlocacao, { tipo: 'reatribuir' }> => m.tipo === 'reatribuir')
         .map(m => m.aulaId);
 
     if (idsParaTrocar.length > 0) {
-        const { data: atuais, error: lerErr } = await supabase
+        const { data: atuais, error: lerErr } = await db
             .from('horario_aulas')
             .select('id, horario_id, aula_fixa_id')
             .in('id', idsParaTrocar);
@@ -388,7 +436,7 @@ export async function aplicarAlocacao(
 
     for (const m of movimentos) {
         if (m.tipo === 'criar') {
-            const { error } = await supabase.from('horario_aulas').insert({
+            const { error } = await db.from('horario_aulas').insert({
                 horario_id: horarioId,
                 turma_id: m.turma_id,
                 componente_id: m.componente_id,
@@ -404,7 +452,7 @@ export async function aplicarAlocacao(
                 };
             }
         } else {
-            const { error } = await supabase
+            const { error } = await db
                 .from('horario_aulas')
                 .update({ professor_id: m.professor_id })
                 .eq('id', m.aulaId);
@@ -446,11 +494,15 @@ function montarPendencias(ctx: Contexto): PendenciaVaga[] {
             colocadas.set(k, (colocadas.get(k) ?? 0) + 1);
         }
 
-        const professorDe = new Map<string, { id: string | null; nome: string }>();
+        const professorDe = new Map<
+            string,
+            { id: string | null; nome: string; tetoPessoal?: number }
+        >();
         for (const tp of turma.professores ?? []) {
             professorDe.set(tp.componente_id, {
                 id: tp.professor?.id ?? null,
                 nome: tp.professor?.nome_horario ?? 'Sem professor',
+                tetoPessoal: regraDoProfessor(tp.professor, tp.componente_id).tetoPessoal,
             });
         }
 
@@ -472,7 +524,7 @@ function montarPendencias(ctx: Contexto): PendenciaVaga[] {
                         turno_id: ctx.turno.id,
                         professor_id: prof?.id ?? null,
                         professor_nome: prof?.nome ?? 'Sem professor',
-                        tetoDoDia: tetoDoDia(ctx.turno.aulas_por_dia ?? 0, carga, dias),
+                        tetoDoDia: tetoDoDia(ctx.turno.aulas_por_dia ?? 0, carga, dias, prof?.tetoPessoal),
                     });
                 }
             }
@@ -491,9 +543,11 @@ function montarPendencias(ctx: Contexto): PendenciaVaga[] {
  */
 export async function calcularPreenchimentoDeVagas(
     horarioId: string,
+    /** As mesmas grades de referência que a tela de refino está considerando. */
+    referenciasIds?: string[] | null,
 ): Promise<{ data?: ResultadoPreenchimento; error?: string }> {
     await requireEscolaDoRecurso('horarios', horarioId, 'horarios');
-    const { ctx, error } = await carregarContexto(horarioId);
+    const { ctx, error } = await carregarContexto(horarioId, referenciasIds);
     if (!ctx) return { error };
 
     const pendencias = montarPendencias(ctx);
@@ -546,7 +600,7 @@ export async function aplicarPreenchimentoDeVagas(
         }));
 
     if (mudancas.length > 0) {
-        const r = await aplicarMudancasRefino(mudancas);
+        const r = await aplicarMudancasRefino(mudancas, horarioId);
         if ((r as any)?.error) {
             return { error: `Nenhuma alteração foi gravada. ${(r as any).error}` };
         }
@@ -566,8 +620,8 @@ export async function aplicarPreenchimentoDeVagas(
         }));
 
     if (novas.length > 0) {
-        const supabase = await createClient();
-        const { error } = await supabase.from('horario_aulas').insert(novas);
+        const db = await createClient();
+        const { error } = await db.from('horario_aulas').insert(novas);
         if (error) {
             return {
                 error:
@@ -604,9 +658,9 @@ export async function aplicarPreenchimentoDeVagas(
  * teria de vir com motivo apurado, e inventar um seria pior que não ter.
  */
 export async function sincronizarPendencias(horarioId: string): Promise<void> {
-    const supabase = await createClient();
+    const db = await createClient();
 
-    const { data: horario } = await supabase
+    const { data: horario } = await db
         .from('horarios')
         .select('id, nome, escola_id, pendencias')
         .eq('id', horarioId)
@@ -624,12 +678,12 @@ export async function sincronizarPendencias(horarioId: string): Promise<void> {
     // Nada guardado: só garante que o nome não mente.
     if (guardadas.length === 0) {
         if (nomeLimpo !== (horario as any).nome) {
-            await supabase.from('horarios').update({ nome: nomeLimpo }).eq('id', horarioId);
+            await db.from('horarios').update({ nome: nomeLimpo }).eq('id', horarioId);
         }
         return;
     }
 
-    const { data: aulas } = await supabase
+    const { data: aulas } = await db
         .from('horario_aulas')
         .select('turma_id, componente_id, tipo, turma:turmas(nome), componente:componentes_curriculares(nome)')
         .eq('horario_id', horarioId);
@@ -640,7 +694,7 @@ export async function sincronizarPendencias(horarioId: string): Promise<void> {
         colocadas.set(k, (colocadas.get(k) ?? 0) + 1);
     }
 
-    const { data: turmas } = await supabase
+    const { data: turmas } = await db
         .from('turmas')
         .select(
             'nome, serie:series(componentes:series_componentes(aulas_presenciais, aulas_nao_presenciais,' +
@@ -678,7 +732,7 @@ export async function sincronizarPendencias(horarioId: string): Promise<void> {
 
     if (sobreviventes.length === guardadas.length && nomeLimpo === (horario as any).nome) return;
 
-    await supabase
+    await db
         .from('horarios')
         .update({
             pendencias: sobreviventes,

@@ -2,13 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/db/server';
 import type { ProfessorComDados, ComponenteCurricular, Turno, SolicitacaoRestricao, LivreDocenciaItem, LivreDocenciaPeriodo } from '@/lib/types';
 import { sendRestrictionRequestEmail, sendPreferenciasConfirmacaoEmail } from '@/lib/mail';
 import { randomBytes } from 'crypto';
 import { lerProfessores } from '@/lib/dados/leitura';
 import { validateCPF } from '@/lib/utils';
 import { requireEscolaDaSolicitacao, requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards';
+import { invalidarCacheGeracao } from '@/lib/geracao/dados';
 
 /* -------------------------------------------------------------------------- */
 /* GET PROFESSORES                               */
@@ -40,11 +41,26 @@ const upsertProfessorSchema = z.object({
   sem_preferencia_livre_docencia: z.boolean().optional(),
   justificativa: z.string().nullable().optional(),
   dias_preferidos: z.array(z.string()).optional(),
+  // Mapa `componente_id` → regra: o acordo é por matéria, não por pessoa.
+  //
+  // `null` grava o campo como nulo de propósito: é assim que o professor volta
+  // a seguir a configuração da tela de geração. `optional()` sozinho deixaria a
+  // personalização antiga no banco quando o usuário desligasse a última chave.
+  geminacao_personalizada: z
+    .record(
+      z.string(),
+      z.object({
+        max_consecutivas: z.union([z.literal(2), z.literal(3)]),
+        max_no_dia: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+      }),
+    )
+    .nullable()
+    .optional(),
 });
 
 export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSchema>) {
     await requireEscolaEModulo(formData.escola_id, 'professores');
-  const supabase = await createClient(); 
+  const db = await createClient(); 
   
   const validated = upsertProfessorSchema.safeParse(formData);
   if (!validated.success) {
@@ -54,7 +70,7 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
   const { id, componente_ids, ...dataToUpsert } = validated.data;
 
   // 1. Verificar vínculos em outras escolas pelo CPF
-  const { data: outrosVinculos } = await supabase
+  const { data: outrosVinculos } = await db
     .from('professores')
     .select('escola:escolas(escolar)')
     .eq('cpf', dataToUpsert.cpf)
@@ -62,7 +78,7 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
 
   const escolasVinculadas = outrosVinculos?.map(v => (v.escola as any)?.escolar).filter(Boolean) || [];
   
-  const { data: professor, error } = await supabase
+  const { data: professor, error } = await db
     .from('professores')
     .upsert(id ? { id, ...dataToUpsert } : dataToUpsert, { onConflict: 'id' })
     .select()
@@ -86,7 +102,7 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
   // o insert falhasse: ele some da lista de "professores qualificados" na alocação
   // de turmas, sem nada indicar o motivo.
   if (componente_ids !== undefined) {
-    const { error: delLinksError } = await supabase
+    const { error: delLinksError } = await db
         .from('professores_componentes')
         .delete()
         .eq('professor_id', professor.id);
@@ -98,7 +114,7 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
 
     if (componente_ids.length > 0) {
         const linksToInsert = componente_ids.map(componente_id => ({ professor_id: professor.id, componente_id }));
-        const { error: insLinksError } = await supabase
+        const { error: insLinksError } = await db
             .from('professores_componentes')
             .insert(linksToInsert);
 
@@ -109,6 +125,19 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
     }
   }
 
+  /**
+   * O cadastro do professor é entrada do motor, e o motor lê de um cache de 30s.
+   *
+   * `carregarDadosDaGeracao` guarda a lista de professores inteira — carga,
+   * turnos, restrições, livre docência, geminação combinada. Sem esta linha,
+   * quem salva o cadastro e clica em "gerar" em seguida (o fluxo natural) roda
+   * sobre o retrato de antes da edição: a regra que ele acabou de combinar não
+   * vale naquela geração, sem erro, sem aviso, e sem repetir meio minuto depois.
+   *
+   * `turmas/actions.ts`, `gerarhorarios/actions.ts` e `salvar-grade.ts` já fazem
+   * o mesmo pelos dados deles; este módulo era o que faltava.
+   */
+  invalidarCacheGeracao();
   revalidatePath('/professores');
   return { 
     data: professor, 
@@ -123,9 +152,10 @@ export async function upsertProfessor(formData: z.infer<typeof upsertProfessorSc
 /* -------------------------------------------------------------------------- */
 export async function deleteProfessor(id: string) {
     await requireEscolaDoRecurso('professores', id, 'professores');
-  const supabase = await createClient();
-  const { error } = await supabase.from('professores').delete().eq('id', id);
+  const db = await createClient();
+  const { error } = await db.from('professores').delete().eq('id', id);
   if (error) return { error: 'Não foi possível deletar the professor.' };
+  invalidarCacheGeracao();
   revalidatePath('/professores');
   return { success: true };
 }
@@ -135,14 +165,15 @@ export async function deleteProfessor(id: string) {
 /* -------------------------------------------------------------------------- */
 export async function updateProfessorComponentes(professorId: string, componenteIds: string[]) {
     await requireEscolaDoRecurso('professores', professorId, 'professores');
-    const supabase = await createClient();
-    const { error: deleteError } = await supabase.from('professores_componentes').delete().eq('professor_id', professorId);
+    const db = await createClient();
+    const { error: deleteError } = await db.from('professores_componentes').delete().eq('professor_id', professorId);
     if (deleteError) return { error: 'Não foi possível limpar as disciplinas antigas.' };
     if (componenteIds.length > 0) {
         const linksToInsert = componenteIds.map(componente_id => ({ professor_id: professorId, componente_id }));
-        const { error: insertError } = await supabase.from('professores_componentes').insert(linksToInsert);
+        const { error: insertError } = await db.from('professores_componentes').insert(linksToInsert);
         if (insertError) return { error: 'Não foi possível salvar as novas disciplinas.' };
     }
+    invalidarCacheGeracao();
     revalidatePath('/professores');
     return { success: true };
 }
@@ -158,7 +189,7 @@ export async function updateProfessorRestricoes(
     diasPreferidos?: string[]
 ) {
     await requireEscolaDoRecurso('professores', professorId, 'professores');
-    const supabase = await createClient();
+    const db = await createClient();
     const updateData: any = { 
         restricoes,
         sem_preferencia_livre_docencia: semPreferencia
@@ -174,7 +205,7 @@ export async function updateProfessorRestricoes(
         updateData.dias_preferidos = diasPreferidos;
     }
 
-    const { error: error } = await supabase.from('professores').update(updateData).eq('id', professorId);
+    const { error: error } = await db.from('professores').update(updateData).eq('id', professorId);
     if (error) return { error: 'Não foi possível salvar as restrições de horário.' };
     revalidatePath('/professores');
     return { success: true };
@@ -185,15 +216,15 @@ export async function updateProfessorRestricoes(
 /* -------------------------------------------------------------------------- */
 export async function solicitarRestricoesEmail(professorId: string) {
     await requireEscolaDoRecurso('professores', professorId, 'professores');
-    const supabase = await createClient();
+    const db = await createClient();
     
-    const { data: prof, error: pError } = await supabase.from('professores').select('*, escola:escolas(*)').eq('id', professorId).maybeSingle();
+    const { data: prof, error: pError } = await db.from('professores').select('*, escola:escolas(*)').eq('id', professorId).maybeSingle();
     if (pError || !prof) return { error: 'Professor não encontrado.' };
     if (!prof.email) return { error: 'Professor não possui e-mail institucional cadastrado.' };
 
     const token = randomBytes(32).toString('hex');
 
-    const { error: sError } = await supabase.from('solicitacoes_restricoes').insert({
+    const { error: sError } = await db.from('solicitacoes_restricoes').insert({
         professor_id: professorId,
         token,
         status: 'pendente'
@@ -218,9 +249,9 @@ export async function solicitarRestricoesEmail(professorId: string) {
 /* PÁGINA PÚBLICA: GET POR TOKEN                       */
 /* -------------------------------------------------------------------------- */
 export async function getSolicitacaoByToken(token: string) {
-    const supabase = await createAdminClient(); 
+    const db = await createAdminClient(); 
     
-    const { data: sol, error } = await supabase
+    const { data: sol, error } = await db
         .from('solicitacoes_restricoes')
         .select(`
             *,
@@ -245,7 +276,7 @@ export async function getSolicitacaoByToken(token: string) {
     if (new Date(sol.expires_at) < new Date()) return { error: 'Este link expirou.' };
 
     const professor = (sol as any).professor;
-    const { data: turnos } = await supabase.from('turnos').select('*').in('id', professor.turnos_ids);
+    const { data: turnos } = await db.from('turnos').select('*').in('id', professor.turnos_ids);
 
     return { 
         data: {
@@ -267,12 +298,12 @@ export async function responderSolicitacao(
     justificativa: string,
     diasPreferidos: string[] = []
 ) {
-    const supabase = await createAdminClient();
+    const db = await createAdminClient();
     
-    const { data: sol } = await supabase.from('solicitacoes_restricoes').select('id, status').eq('token', token).maybeSingle();
+    const { data: sol } = await db.from('solicitacoes_restricoes').select('id, status').eq('token', token).maybeSingle();
     if (!sol || sol.status !== 'pendente') return { error: 'Não é possível responder esta solicitação.' };
 
-    const { error } = await supabase
+    const { error } = await db
         .from('solicitacoes_restricoes')
         .update({
             dados_temp: restricoes,
@@ -302,9 +333,9 @@ export async function processarRespostaRestricao(
     enviarEmail: boolean = false
 ) {
     await requireEscolaDaSolicitacao(solicitacaoId, 'professores');
-    const supabase = await createClient();
+    const db = await createClient();
     
-    const { data: sol } = await supabase
+    const { data: sol } = await db
         .from('solicitacoes_restricoes')
         .select('*, professor:professores(id, nome_completo, email, escola:escolas(escolar))')
         .eq('id', solicitacaoId)
@@ -319,7 +350,7 @@ export async function processarRespostaRestricao(
         // Coordenador pode sobrescrever os dias preferidos na revisão
         const diasParaAplicar     = diasPreferidosFinal !== undefined ? diasPreferidosFinal : ((sol as any).dias_preferidos_temp || []);
         
-        const { error: pError } = await supabase
+        const { error: pError } = await db
             .from('professores')
             .update({ 
                 restricoes: dadosParaAplicar,
@@ -344,7 +375,7 @@ export async function processarRespostaRestricao(
                 const restricoesParaEmail = dadosParaAplicar || {};
                 const turnoIds = Object.keys(restricoesParaEmail);
                 if (turnoIds.length > 0) {
-                    const { data: turnosData } = await supabase
+                    const { data: turnosData } = await db
                         .from('turnos')
                         .select('id, nome, horarios')
                         .in('id', turnoIds);
@@ -368,7 +399,7 @@ export async function processarRespostaRestricao(
         }
     }
 
-    const { error: sError } = await supabase
+    const { error: sError } = await db
         .from('solicitacoes_restricoes')
         .update({ status: 'concluido' })
         .eq('id', solicitacaoId);
