@@ -1,7 +1,7 @@
 
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/db/server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getProfessores } from '@/app/(app)/professores/actions';
@@ -29,9 +29,9 @@ export async function getEnsalamentoDependencies(escolaId: string): Promise<{
     turnos: Turno[],
 }> {
     await requireEscolaEModulo(escolaId, 'turmas');
-    const supabase = await createClient();
+    const db = await createClient();
     const [seriesResult, professoresResult, componentesResult, turnosResult] = await Promise.all([
-        supabase.from('series').select(`
+        db.from('series').select(`
             *,
             turno:turnos(id, nome),
             componentes:series_componentes(
@@ -42,7 +42,7 @@ export async function getEnsalamentoDependencies(escolaId: string): Promise<{
             )
         `).eq('escola_id', escolaId),
         getProfessores(escolaId),
-        supabase.from('componentes_curriculares').select('*').eq('escola_id', escolaId),
+        db.from('componentes_curriculares').select('*').eq('escola_id', escolaId),
         // Os turnos completos (dias, aulas por dia, horários) alimentam a grade da
         // tela de fixação; o `turno` embutido na série só traz id e nome.
         lerTurnos(escolaId),
@@ -68,14 +68,14 @@ const upsertTurmaSchema = z.object({
 
 export async function upsertTurma(formData: z.infer<typeof upsertTurmaSchema>) {
     await requireEscolaEModulo(formData.escola_id, 'turmas');
-    const supabase = await createClient();
+    const db = await createClient();
     const validated = upsertTurmaSchema.safeParse(formData);
     if (!validated.success) {
         return { error: 'Dados inválidos.', errors: validated.error.flatten().fieldErrors };
     }
     const { id, ...dataToUpsert } = validated.data;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
         .from('turmas')
         .upsert(id ? { id, ...dataToUpsert } : dataToUpsert, { onConflict: 'id' })
         .select().single();
@@ -97,8 +97,8 @@ export async function upsertTurma(formData: z.infer<typeof upsertTurmaSchema>) {
 /* -------------------------------------------------------------------------- */
 export async function deleteTurma(id: string) {
     await requireEscolaDoRecurso('turmas', id, 'turmas');
-    const supabase = await createClient();
-    const { error } = await supabase.from('turmas').delete().eq('id', id);
+    const db = await createClient();
+    const { error } = await db.from('turmas').delete().eq('id', id);
     if (error) {
         console.error("Error deleting turma:", error);
         return { error: 'Não foi possível deletar a turma.' };
@@ -121,14 +121,14 @@ const alocacaoSchema = z.object({
 
 export async function updateAlocacaoProfessores(formData: z.infer<typeof alocacaoSchema>) {
     await requireEscolaDoRecurso('turmas', formData.turma_id, 'turmas');
-    const supabase = await createClient();
+    const db = await createClient();
     const validated = alocacaoSchema.safeParse(formData);
     if (!validated.success) return { error: 'Dados de alocação inválidos.' };
     
     const { turma_id, assignments } = validated.data;
 
     // Delete old assignments for this turma
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await db
         .from('turmas_professores')
         .delete()
         .eq('turma_id', turma_id);
@@ -147,7 +147,7 @@ export async function updateAlocacaoProfessores(formData: z.infer<typeof alocaca
         }));
 
     if (toInsert.length > 0) {
-        const { error: insertError } = await supabase
+        const { error: insertError } = await db
             .from('turmas_professores')
             .insert(toInsert);
         
@@ -184,8 +184,8 @@ const aulasFixasSchema = z.object({
  * Contexto de validação de uma turma: turno em que ela funciona, turno oposto
  * (para as aulas não presenciais) e a carga horária de cada componente.
  */
-async function contextoDaTurma(supabase: any, turmaId: string) {
-    const { data: turma } = await supabase
+async function contextoDaTurma(db: any, turmaId: string) {
+    const { data: turma } = await db
         .from('turmas')
         .select('id, escola_id, serie_id, serie:series(id, nome, turno_id)')
         .eq('id', turmaId)
@@ -194,8 +194,8 @@ async function contextoDaTurma(supabase: any, turmaId: string) {
     if (!turma?.serie) return { erro: 'Turma não encontrada.' as const };
 
     const [{ data: turnos }, { data: componentes }] = await Promise.all([
-        supabase.from('turnos').select('*').eq('escola_id', turma.escola_id),
-        supabase
+        db.from('turnos').select('*').eq('escola_id', turma.escola_id),
+        db
             .from('series_componentes')
             .select('componente_id, aulas_presenciais, aulas_nao_presenciais')
             .eq('serie_id', (turma.serie as any).id),
@@ -214,13 +214,13 @@ async function contextoDaTurma(supabase: any, turmaId: string) {
 
 export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasSchema>) {
     await requireEscolaDoRecurso('turmas', formData.turma_id, 'turmas');
-    const supabase = await createClient();
+    const db = await createClient();
     const validated = aulasFixasSchema.safeParse(formData);
     if (!validated.success) return { error: 'Dados inválidos.' };
 
     const { turma_id, aulas_fixas } = validated.data;
 
-    const ctx = await contextoDaTurma(supabase, turma_id);
+    const ctx = await contextoDaTurma(db, turma_id);
     if ('erro' in ctx) return { error: ctx.erro };
     const { turno, turnoOposto, componentes } = ctx;
 
@@ -272,7 +272,7 @@ export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasS
     }
 
     // ── 2. Remover o que saiu ───────────────────────────────────────────────
-    const { data: existentes } = await supabase
+    const { data: existentes } = await db
         .from('turmas_aulas_fixas')
         .select('id')
         .eq('turma_id', turma_id);
@@ -281,10 +281,21 @@ export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasS
     const idsParaRemover = (existentes || []).map((f: any) => f.id).filter((id: string) => !idsRecebidos.has(id));
 
     if (idsParaRemover.length > 0) {
-        const erroGuarda = await recusarSeUsadaEmHorario(supabase, idsParaRemover);
-        if (erroGuarda) return { error: erroGuarda };
-
-        const { error: removeErr } = await supabase
+        /*
+         * Destravar não pergunta se algum horário já usou aquele travamento.
+         *
+         * Perguntava, e recusava: "exclua ou regenere o horário antes". Era uma
+         * regra sem lastro — a FK de `horario_aulas.aula_fixa_id` é ON DELETE
+         * SET NULL, então apagar a fixação nunca deixou órfã nem quebrou grade
+         * nenhuma. A aula que estava travada continua exatamente onde está, só
+         * que deixa de ser imóvel: é isso que "destravar" quer dizer, e é o que
+         * todo leitor de `aula_fixa_id` já entende de um valor nulo.
+         *
+         * O que a regra fazia de fato era prender o usuário: bastava gerar uma
+         * vez para o travamento virar permanente, e desfazê-lo exigia apagar um
+         * horário pronto.
+         */
+        const { error: removeErr } = await db
             .from('turmas_aulas_fixas')
             .delete()
             .in('id', idsParaRemover);
@@ -305,7 +316,7 @@ export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasS
 
     const novas = aulas_fixas.filter(f => !f.id);
     if (novas.length > 0) {
-        const { error: insertErr } = await supabase
+        const { error: insertErr } = await db
             .from('turmas_aulas_fixas')
             .insert(novas.map(linha));
         if (insertErr) {
@@ -318,7 +329,7 @@ export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasS
     }
 
     for (const f of aulas_fixas.filter(f => !!f.id)) {
-        const { error: updateErr } = await supabase
+        const { error: updateErr } = await db
             .from('turmas_aulas_fixas')
             .update(linha(f))
             .eq('id', f.id!);
@@ -336,23 +347,6 @@ export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasS
     invalidarCacheGeracao();
     revalidatePath('/turmas');
     return { success: true };
-}
-
-/**
- * Fixação já usada por um horário gerado não pode sumir: a grade publicada
- * aponta para ela por `horario_aulas.aula_fixa_id`.
- */
-async function recusarSeUsadaEmHorario(supabase: any, ids: string[]): Promise<string | null> {
-    const { data } = await supabase
-        .from('horario_aulas')
-        .select('id, aula_fixa_id')
-        .in('aula_fixa_id', ids)
-        .limit(1);
-
-    if (data && data.length > 0) {
-        return 'Um ou mais travamentos removidos já foram usados para gerar um horário. Exclua ou regenere o horário antes de removê-los.';
-    }
-    return null;
 }
 
 const copiarFixasSchema = z.object({
@@ -375,9 +369,9 @@ export async function copiarAulasFixasTurma(formData: z.infer<typeof copiarFixas
     await requireEscolaDoRecurso('turmas', origem_turma_id, 'turmas');
     await requireEscolaDoRecurso('turmas', destino_turma_id, 'turmas');
 
-    const supabase = await createClient();
+    const db = await createClient();
 
-    const { data: turmas } = await supabase
+    const { data: turmas } = await db
         .from('turmas')
         .select('id, serie_id')
         .in('id', [origem_turma_id, destino_turma_id]);
@@ -390,16 +384,15 @@ export async function copiarAulasFixasTurma(formData: z.infer<typeof copiarFixas
     }
 
     const [{ data: fixasOrigem }, { data: fixasDestino }] = await Promise.all([
-        supabase.from('turmas_aulas_fixas').select('*').eq('turma_id', origem_turma_id),
-        supabase.from('turmas_aulas_fixas').select('id').eq('turma_id', destino_turma_id),
+        db.from('turmas_aulas_fixas').select('*').eq('turma_id', origem_turma_id),
+        db.from('turmas_aulas_fixas').select('id').eq('turma_id', destino_turma_id),
     ]);
 
     const idsDestino = (fixasDestino || []).map((f: any) => f.id);
     if (idsDestino.length > 0) {
-        const erroGuarda = await recusarSeUsadaEmHorario(supabase, idsDestino);
-        if (erroGuarda) return { error: erroGuarda };
-
-        const { error: delErr } = await supabase
+        // Mesma decisão do salvar: substituir os travamentos do destino não
+        // depende de nenhum horário já gerado (ver o comentário lá).
+        const { error: delErr } = await db
             .from('turmas_aulas_fixas')
             .delete()
             .in('id', idsDestino);
@@ -415,7 +408,7 @@ export async function copiarAulasFixasTurma(formData: z.infer<typeof copiarFixas
     }));
 
     if (copias.length > 0) {
-        const { error: insErr } = await supabase.from('turmas_aulas_fixas').insert(copias);
+        const { error: insErr } = await db.from('turmas_aulas_fixas').insert(copias);
         if (insErr) {
             console.error('Error copying turmas_aulas_fixas:', insErr);
             return { error: 'Erro ao copiar os travamentos.' };
