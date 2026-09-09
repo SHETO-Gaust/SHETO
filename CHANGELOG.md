@@ -8,7 +8,113 @@ O projeto ainda não tem versões publicadas; esta seção cobre o que a branch
 
 ---
 
-## [Não lançado] — branch `All_In`
+## [Não lançado] — `All_In`, rodada de 04/09/2026
+
+Nove commits (`a7c83f1`..`4ab85e7`). Geminação combinada com cada professor,
+regeração de uma grade a partir de outra, e a saída do que restava do Supabase.
+
+### ⚠️ Ao atualizar
+
+- **Uma migration nova**: `20260903_professor_geminacao_personalizada.sql` —
+  coluna `professores.geminacao_personalizada` (jsonb, nula por padrão). **Sem
+  ela a geminação personalizada some em silêncio**: o campo volta `undefined`,
+  o motor não vê acordo nenhum e a tela grava num lugar que não existe.
+- **Duas migrations antigas estavam pendentes** e foram aplicadas nesta rodada:
+  `20260820_add_tutoriais_vistos.sql` (sem ela o tutorial de tela reaparece a
+  cada F5) e `20260827_professor_nome_cpf_repetidos.sql` (sem ela, cadastrar
+  homônimo ou um segundo vínculo com o mesmo CPF estoura com mensagem errada).
+  O código já as dava como feitas.
+- **A pasta das migrations mudou de lugar**: `supabase/migrations/` →
+  `migrations/`. Quem tiver script apontando para o caminho antigo precisa
+  ajustar; `scripts/aplicar-migration.js` já foi.
+- **Não rode `20260521_add_pre_producao_status.sql` de novo.** Ela termina com
+  um `UPDATE` que rebaixa para rascunho todo horário em pré-produção. Já está
+  aplicada.
+- **A política de privacidade foi corrigida** e agora não afirma onde os dados
+  são hospedados — dizia "plataforma Supabase", o que é falso há tempos. Vale
+  uma revisão de quem sabe a resposta.
+
+### Adicionado
+
+**Geminação combinada por professor**
+
+- Cada professor pode ter, **por matéria**, um acordo próprio de geminação:
+  máximo de aulas seguidas (2x ou 3x) e máximo no mesmo dia (2x a 5x). Onde
+  houver acordo, ele **vence** a configuração da tela de gerar horário nas
+  turmas daquele docente — inclusive para ligar geminação que a tela deixou
+  desligada.
+- O alcance é o par professor+matéria: dois professores de Matemática saem com
+  regras diferentes na mesma grade, e o mesmo professor pode aceitar dobradinha
+  em Matemática e recusar em Projeto de Vida.
+- Um pedido maior que a carga vira o maior bloco possível, não pendência:
+  acordo de 3 numa disciplina de 2 aulas sai como par.
+- A seção "Disciplinas Habilitadas" do cadastro ganhou uma seta. Fechada, lista
+  as disciplinas marcadas com o resumo do acordo de cada uma; aberta, traz uma
+  linha de configuração por disciplina que o professor leciona.
+
+**Regerar uma grade a partir de outra**
+
+- O botão de duplicar do card virou um modal com **duas ações**: Duplicar ou
+  Regerar. Regerar abre a configuração da geração com aquela grade como ponto
+  de partida.
+- O resultado é uma grade **nova** — a original continua na lista, intacta, e a
+  nova nasce como rascunho, com nome derivado da base ("Horário V1 (regerado)")
+  e sem colidir com o `UNIQUE (escola_id, turno_id, nome)`.
+- A grade sai o mais parecida possível com a base, já aplicando o que mudou no
+  cadastro: professor novo, restrição nova, travamento novo. Medido na Escola
+  Estadual Professora Elizângela Glória Cardoso, regerando depois de cadastrar
+  livre docência e indisponibilidades: **80% das aulas no mesmo slot**, contra
+  ~10% de uma geração do zero, e as 12 aulas em horário bloqueado da grade
+  antiga caíram para 2 — as duas que o próprio usuário havia travado ali.
+
+### Alterado
+
+- **PDF do professor sai em paisagem**, como o de turmas. Em retrato as colunas
+  dos dias ficavam estreitas demais para o nome da turma caber inteiro.
+- **"Folga" virou "L.d."** na grade de restrições.
+- **"Reunião de Fluxo" virou "Planejamento Coletivo"** em toda a interface:
+  ferramenta, célula, relatório de gargalos e mensagens do motor. A chave
+  gravada no banco continua `reuniao_fluxo` — as marcações já existentes seguem
+  valendo.
+- A opção "permitir mais de 2 aulas no mesmo dia para a mesma turma" **saiu da
+  tela** de geração. O motor mantém o comportamento permissivo, que é o que ele
+  sempre fez.
+- **Saída do Supabase.** Não havia mais dependência nem import; restava o nome.
+  `src/lib/supabase/server.ts` virou `src/lib/db/server.ts`, a variável
+  `supabase` virou `db` em 45 arquivos, o cliente de browser (um stub que só
+  lançava erro) foi apagado, e README, CLAUDE.md e a política de privacidade
+  passaram a descrever o que o projeto é hoje.
+
+### Corrigido
+
+- **Destravar aula deixou de ser proibido quando já existe horário gerado.** A
+  recusa não tinha lastro: a FK de `horario_aulas.aula_fixa_id` é
+  `ON DELETE SET NULL`, e a aula apenas deixa de ser imóvel — continua onde
+  está. Na prática a regra prendia o usuário: bastava gerar uma vez para o
+  travamento virar permanente.
+- **Salvar o cadastro do professor invalida o cache da geração.** Havia uma
+  janela de 30 segundos em que salvar e clicar em "gerar" logo em seguida — o
+  fluxo natural — rodava sobre o retrato de antes da edição. A regra recém-salva
+  não valia naquela geração, sem erro e sem aviso. Vale para restrições, livre
+  docência e disciplinas também, não só para a geminação.
+- **O motor passou a de fato preservar a grade de referência.** Herdar uma grade
+  já existia, mas era só um empurrão inicial: a semelhança ao fim do orçamento
+  era 11%, contra 10% de uma geração do zero. A distância até a base entrou na
+  função de custo como desempate estrito (abaixo de pendência e de geminação),
+  as posições da base viraram preferência na remontagem, quem já está no lugar
+  certo escapa da ruína, e a primeira grade perfeita deixou de encerrar a busca
+  quando há referência — a resposta certa é a mais parecida, não a primeira.
+
+### Verificação
+
+- `npx tsx scripts/verificar-features.ts` — 40 verificações desta rodada contra
+  o banco e o motor, gravando apenas dentro de transações que sofrem ROLLBACK.
+- `npm run verificar:geminacao` (guarda do contrato de geminação e da regra do
+  dia) continua passando inteiro após as mudanças no motor.
+
+---
+
+## [Não lançado] — branch `All_In` (rodadas anteriores)
 
 55 commits, de 31/07/2026 a 31/08/2026. A `main` está inteiramente contida
 nesta branch.
