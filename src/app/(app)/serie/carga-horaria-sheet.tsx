@@ -23,6 +23,8 @@ import { updateCargaHoraria } from './actions';
 import type { SerieComDados, ComponenteCurricular, Turno, ProfessorComDados } from '@/lib/types';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { resolverTurnoOposto } from '@/lib/turno-oposto';
+import { capacidadeNaoPresencialDaSerie } from '@/lib/capacidade-serie';
 
 const formSchema = z.object({
   serie_id: z.string(),
@@ -52,6 +54,8 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [hasContraturno, setHasContraturno] = useState(false);
+  /** Slots que a série marcou como Aula Não Presencial na aba Restrições. */
+  const [slotsNP, setSlotsNP] = useState(0);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -72,18 +76,32 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
   const totalNPDistribuidas = watchedComponentes.reduce((sum, comp) => sum + Number(comp.aulas_nao_presenciais || 0), 0);
   const saldoAulasNP = watchedTotalNP - totalNPDistribuidas;
 
+  /**
+   * A série põe as NP no próprio horário (marcou slots) ou manda para o
+   * contraturno? Marcou slot, usa o próprio turno — a mesma regra que o motor lê
+   * de `serieUsaNpNoProprioTurno`.
+   */
+  const npNoProprioTurno = slotsNP > 0;
+  const podeUsarNP = hasContraturno || npNoProprioTurno;
+  /** No modo próprio turno, as NP só cabem onde há slot marcado. */
+  const slotsNPFaltando = npNoProprioTurno ? Math.max(0, Number(watchedTotalNP || 0) - slotsNP) : 0;
+
   useEffect(() => {
     if (isOpen) {
-      if (serie.turno) {
-        const turnoNome = serie.turno.nome.toLowerCase();
-        if (turnoNome.includes('matutino')) {
-          setHasContraturno(dependencies.turnos.some(t => t.nome.toLowerCase().includes('vespertino') && t.ativo));
-        } else if (turnoNome.includes('vespertino')) {
-          setHasContraturno(dependencies.turnos.some(t => t.nome.toLowerCase().includes('matutino') && t.ativo));
-        } else {
-          setHasContraturno(false);
-        }
-      }
+      /*
+       * A detecção do contraturno era feita à mão aqui, e só reconhecia
+       * "matutino" e "vespertino": todo o resto caía num `else` que desabilitava
+       * a funcionalidade inteira. O Noturno nunca teve contraturno por causa
+       * disso — e uma escola que chame os turnos de "Manhã"/"Tarde" também não.
+       *
+       * `resolverTurnoOposto` é a regra canônica e já cobre os três turnos e os
+       * apelidos. Aqui só se filtra por `ativo`, que é o que a tela quer dizer
+       * com "o turno oposto precisa estar ativo".
+       */
+      setHasContraturno(
+        serie.turno ? resolverTurnoOposto(serie.turno, dependencies.turnos.filter(t => t.ativo)) !== null : false
+      );
+      setSlotsNP(capacidadeNaoPresencialDaSerie(serie.turno, serie.restricoes as any));
 
       const cargaExistente = new Map(serie.componentes.map(c => [c.componente_id, { p: c.aulas_presenciais, np: c.aulas_nao_presenciais }]));
       const formComponentes = dependencies.componentes.map(comp => ({
@@ -146,7 +164,7 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
                       render={({ field }) => (
                         <FormItem className="space-y-0 text-center">
                           <FormControl>
-                            <Input type="number" min="0" {...field} className="h-8 text-lg font-bold text-center p-0 bg-transparent border-0 focus-visible:ring-0" disabled={!hasContraturno} />
+                            <Input type="number" min="0" {...field} className="h-8 text-lg font-bold text-center p-0 bg-transparent border-0 focus-visible:ring-0" disabled={!podeUsarNP} />
                           </FormControl>
                           <FormLabel className="text-xs font-normal text-muted-foreground">Total</FormLabel>
                         </FormItem>
@@ -158,9 +176,27 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
                 </div>
               </div>
 
-              {!hasContraturno && (
+              {!podeUsarNP && (
                 <p className="text-xs text-center text-orange-600 bg-orange-50 p-2 rounded-md dark:text-orange-400 dark:bg-orange-950/30">
-                  Para habilitar aulas não presenciais (contraturno), o turno oposto precisa estar ativo na tela de Turnos.
+                  Para habilitar aulas não presenciais, marque slots como <strong>Aula Não Presencial</strong> na aba
+                  Restrições da série — elas ficam no próprio horário da turma. Como alternativa, ative o turno oposto
+                  na tela de Turnos para usá-las no contraturno.
+                </p>
+              )}
+
+              {npNoProprioTurno && (
+                <p className="text-xs text-center text-muted-foreground bg-muted/50 p-2 rounded-md">
+                  Esta série tem <strong>{slotsNP}</strong> {slotsNP === 1 ? 'slot marcado' : 'slots marcados'} como Aula Não
+                  Presencial na aba Restrições. As aulas não presenciais caem nesses horários, no próprio turno
+                  {serie.turno ? ` (${serie.turno.nome})` : ''}.
+                </p>
+              )}
+
+              {slotsNPFaltando > 0 && (
+                <p className="text-xs text-center text-destructive bg-destructive/10 p-2 rounded-md">
+                  Faltam <strong>{slotsNPFaltando}</strong> {slotsNPFaltando === 1 ? 'slot marcado' : 'slots marcados'} para
+                  as {watchedTotalNP} aulas não presenciais caberem. Marque mais slots na aba Restrições da série ou reduza
+                  o total — senão essas aulas ficam pendentes na geração.
                 </p>
               )}
 
@@ -204,7 +240,7 @@ export function CargaHorariaSheet({ isOpen, setIsOpen, serie, dependencies, onCa
                             <FormItem className="flex items-center gap-2 space-y-0">
                               <FormLabel className="text-xs">Não Pres.</FormLabel>
                               <FormControl>
-                                <Input type="number" min="0" {...aulasField} className="w-20" disabled={!hasContraturno} />
+                                <Input type="number" min="0" {...aulasField} className="w-20" disabled={!podeUsarNP} />
                               </FormControl>
                             </FormItem>
                           )}

@@ -10,6 +10,7 @@ import { requireEscolaDoRecurso, requireEscolaEModulo } from '@/lib/auth/guards'
 import { lerTurmas, lerTurnos } from '@/lib/dados/leitura';
 import { invalidarCacheGeracao } from '@/lib/geracao/dados';
 import { resolverTurnoOposto } from '@/lib/turno-oposto';
+import { serieUsaNpNoProprioTurno, slotEhNaoPresencial } from '@/lib/capacidade-serie';
 
 /* -------------------------------------------------------------------------- */
 /*                                  GET TURMAS                                */
@@ -187,7 +188,12 @@ const aulasFixasSchema = z.object({
 async function contextoDaTurma(db: any, turmaId: string) {
     const { data: turma } = await db
         .from('turmas')
-        .select('id, escola_id, serie_id, serie:series(id, nome, turno_id)')
+        // `restricoes` é obrigatório aqui: é dele que sai se a série põe as aulas
+        // não presenciais no próprio turno (slots marcados) ou no contraturno.
+        // Sem a coluna no select, `serieUsaNpNoProprioTurno` responde `false` para
+        // todo mundo e a validação libera slot errado em silêncio — o tipo é `any`
+        // e não acusa nada.
+        .select('id, escola_id, serie_id, serie:series(id, nome, turno_id, restricoes)')
         .eq('id', turmaId)
         .single();
 
@@ -204,10 +210,15 @@ async function contextoDaTurma(db: any, turmaId: string) {
     const turno = (turnos || []).find((t: Turno) => t.id === (turma.serie as any).turno_id) || null;
     if (!turno) return { erro: 'A série desta turma não tem turno definido.' as const };
 
+    const restricoesSerie = (turma.serie as any).restricoes;
+
     return {
         turma,
         turno,
         turnoOposto: resolverTurnoOposto(turno, turnos || []),
+        restricoesSerie,
+        /** A série marcou slots como Aula Não Presencial? Então as NP ficam aqui mesmo. */
+        npNoProprioTurno: serieUsaNpNoProprioTurno(restricoesSerie, turno),
         componentes: (componentes || []) as { componente_id: string; aulas_presenciais: number; aulas_nao_presenciais: number }[],
     };
 }
@@ -222,7 +233,7 @@ export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasS
 
     const ctx = await contextoDaTurma(db, turma_id);
     if ('erro' in ctx) return { error: ctx.erro };
-    const { turno, turnoOposto, componentes } = ctx;
+    const { turno, turnoOposto, componentes, npNoProprioTurno, restricoesSerie } = ctx;
 
     // ── 1. Validar as fixações recebidas ────────────────────────────────────
     if (aulas_fixas.length > 0) {
@@ -245,16 +256,27 @@ export async function updateAulasFixasTurma(formData: z.infer<typeof aulasFixasS
         }
 
         for (const f of aulas_fixas) {
-            // Aula não presencial acontece no contraturno: os limites são os dele.
-            const turnoDaAula = f.tipo_aula === 'presencial' ? turno : turnoOposto;
+            /*
+             * Onde a aula acontece de fato. A não presencial cai no contraturno —
+             * a não ser que a série tenha marcado slots como Aula Não Presencial,
+             * caso em que ela fica no próprio turno. É a mesma decisão que o motor
+             * toma em `construirTodosOsBlocos`; divergir aqui faria a tela travar
+             * num turno e a geração colocar noutro.
+             */
+            const npAqui = f.tipo_aula === 'nao_presencial' && npNoProprioTurno;
+            const turnoDaAula = f.tipo_aula === 'presencial' || npAqui ? turno : turnoOposto;
             if (!turnoDaAula) {
-                return { error: 'Não há turno oposto ativo para travar aulas não presenciais.' };
+                return { error: 'Não há turno oposto ativo para travar aulas não presenciais. Como alternativa, marque slots como Aula Não Presencial na aba Restrições da série.' };
             }
             if (!(turnoDaAula.dias_semana || []).includes(f.dia_semana)) {
                 return { error: `O dia "${f.dia_semana}" não pertence ao turno ${turnoDaAula.nome}.` };
             }
             if (f.aula_index >= (turnoDaAula.aulas_por_dia || 0)) {
                 return { error: `A ${f.aula_index + 1}ª aula ultrapassa o limite do turno ${turnoDaAula.nome} (${turnoDaAula.aulas_por_dia} aulas/dia).` };
+            }
+            // No próprio turno, a NP só cabe onde a série reservou lugar para ela.
+            if (npAqui && !slotEhNaoPresencial(restricoesSerie, f.dia_semana, f.aula_index)) {
+                return { error: `A ${f.aula_index + 1}ª aula de ${f.dia_semana} não está marcada como Aula Não Presencial na série. Marque o slot na aba Restrições da série antes de travar uma aula não presencial ali.` };
             }
         }
 

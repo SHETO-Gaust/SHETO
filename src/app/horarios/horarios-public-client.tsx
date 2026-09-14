@@ -80,16 +80,26 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
   const GradeHoraria = ({ aulas, turnoInfo, label, tipo, targetId, isProfessorView }: any) => {
     if (!turnoInfo) return null;
 
+    /**
+     * A aula pertence a esta grade?
+     *
+     * Pelo turno FÍSICO, não pelo tipo. A não presencial que a série põe dentro
+     * do próprio horário acontece no turno da turma, e filtrar por tipo a tiraria
+     * da grade regular para jogá-la numa tabela de contraturno que não é dela.
+     * Fallback por tipo para linha antiga sem `turno_id`.
+     */
+    const daGrade = (a: any) => (a.turno_id ? a.turno_id === turnoInfo.id : a.tipo === tipo);
+
     const getAulaNoSlot = (dia: string, index: number) => {
-        return aulas.find((a: any) => 
-            (isProfessorView ? true : a.turma_id === targetId) && 
-            a.dia_semana === dia && 
+        return aulas.find((a: any) =>
+            (isProfessorView ? true : a.turma_id === targetId) &&
+            a.dia_semana === dia &&
             a.aula_index === index &&
-            a.tipo === tipo
+            daGrade(a)
         );
     };
 
-    const hasAulas = aulas.some((a: any) => (isProfessorView ? true : a.turma_id === targetId) && a.tipo === tipo);
+    const hasAulas = aulas.some((a: any) => (isProfessorView ? true : a.turma_id === targetId) && daGrade(a));
     if (!hasAulas && (tipo === 'nao_presencial' || isProfessorView)) return null;
 
     const dias = diasAtivos(turnoInfo);
@@ -235,15 +245,20 @@ export function HorariosPublicClient({ horarios, escolaId }: Props) {
                         </div>
                         
                         {/*
-                            Só desenha o contraturno se a turma tiver aula não
-                            presencial. `turno_oposto` é um palpite do servidor —
-                            na falta de par matutino/vespertino ele elege outro
-                            turno qualquer da escola —, e numa escola sem
-                            contraturno isso mostrava uma tabela inteira vazia,
-                            sugerindo um turno que a turma não frequenta.
+                            Só desenha o contraturno se a turma tiver aula FORA do
+                            turno do horário. `turno_oposto` é um palpite do
+                            servidor — na falta de par matutino/vespertino ele
+                            elege outro turno qualquer da escola —, e numa escola
+                            sem contraturno isso mostrava uma tabela inteira
+                            vazia, sugerindo um turno que a turma não frequenta.
+
+                            A condição olha o turno, e não mais o tipo: a aula não
+                            presencial que a série pôs no próprio horário já
+                            aparece na grade regular acima.
                         */}
                         {currentHorario.turno_oposto && currentHorario.aulas.some(
                             (a: any) => a.turma_id === selectedTurmaId && a.tipo === 'nao_presencial'
+                                && (a.turno_id ? a.turno_id !== currentHorario.turno_id : true)
                         ) && (
                             <div className="animate-in fade-in zoom-in-95 duration-500 delay-150">
                                 <GradeHoraria 

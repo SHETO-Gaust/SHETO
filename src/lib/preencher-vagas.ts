@@ -166,6 +166,18 @@ export function calcularPreenchimentoAutomatico(
   professores: ProfessorAlocacao[],
   turnosById: Map<string, Turno>,
   pendencias: PendenciaVaga[],
+  /**
+   * O slot da série aceita uma aula deste tipo?
+   *
+   * Este módulo enumerava todo slot vazio da turma como buraco utilizável, sem
+   * olhar `series.restricoes` — então preenchia um horário que a série fechou, e
+   * agora preencheria também os que ela reservou para Aula Não Presencial,
+   * desfazendo sozinho a reserva feita na tela da série.
+   *
+   * O padrão aceita tudo para não mudar o comportamento de quem chama sem passar
+   * nada (os scripts de bancada, entre outros).
+   */
+  slotAceita: (turmaId: string, dia: string, slot: number, tipo: string) => boolean = () => true,
 ): ResultadoPreenchimento {
   const inicioMs = Date.now();
   const acabou = () => Date.now() - inicioMs > MAX_TEMPO_MS;
@@ -391,10 +403,11 @@ export function calcularPreenchimentoAutomatico(
   // ── A aula pode ir para lá? ─────────────────────────────────────────────
 
   /** Por que esta aula não pode ir para ali, ou `null` se pode. */
-  type Empecilho = 'travada' | 'turma_ocupada' | 'restricao' | 'professor_ocupado' | 'regra_do_dia';
+  type Empecilho = 'travada' | 'turma_ocupada' | 'restricao' | 'professor_ocupado' | 'regra_do_dia' | 'slot_da_serie';
 
   const motivoNaoMove = (a: AulaAlocacao, para: Posicao): Empecilho | null => {
     if (a.aula_fixa_id) return 'travada'; // travada na série: imóvel por contrato
+    if (!slotAceita(a.turma_id, para.dia, para.slot, a.tipo)) return 'slot_da_serie';
     if (turmaOcupada(a.turma_id, para, a.id)) return 'turma_ocupada';
     if (restrito(a.professor_id, para)) return 'restricao';
     if (!professorLivre(a.professor_id, a.professor_cpf, para, a.id)) return 'professor_ocupado';
@@ -408,6 +421,7 @@ export function calcularPreenchimentoAutomatico(
   const podeMover = (a: AulaAlocacao, para: Posicao): boolean => motivoNaoMove(a, para) === null;
 
   const podeNascer = (pend: PendenciaVaga, pos: Posicao): boolean => {
+    if (!slotAceita(pend.turma_id, pos.dia, pos.slot, pend.tipo)) return false;
     if (turmaOcupada(pend.turma_id, pos)) return false;
     if (restrito(pend.professor_id, pos)) return false;
     const cpf = pend.professor_id ? profPorId.get(pend.professor_id)?.cpf ?? null : null;
@@ -419,13 +433,16 @@ export function calcularPreenchimentoAutomatico(
 
   // ── Onde estão os buracos de uma turma ──────────────────────────────────
 
-  const buracosDaTurma = (turmaId: string, turnoId: string): Posicao[] => {
+  const buracosDaTurma = (turmaId: string, turnoId: string, tipo: string): Posicao[] => {
     const turno = turnosById.get(turnoId);
     if (!turno) return [];
     const vazios: Posicao[] = [];
     for (const dia of turno.dias_semana ?? []) {
       for (let s = 0; s < (turno.aulas_por_dia ?? 0); s++) {
         const pos = { dia, slot: s, turnoId };
+        // Slot que a série fechou, ou reservou para outro tipo de aula, não é
+        // buraco: é uma decisão do usuário na tela da série.
+        if (!slotAceita(turmaId, dia, s, tipo)) continue;
         if (!turmaOcupada(turmaId, pos)) vazios.push(pos);
       }
     }
@@ -511,7 +528,7 @@ export function calcularPreenchimentoAutomatico(
     const vistos = new Set<string>();
 
     type No = { buraco: Posicao; movimentos: { aula: AulaAlocacao; para: Posicao }[] };
-    const fila: No[] = buracosDaTurma(pend.turma_id, pend.turno_id).map(b => ({
+    const fila: No[] = buracosDaTurma(pend.turma_id, pend.turno_id, pend.tipo).map(b => ({
       buraco: b,
       movimentos: [],
     }));
@@ -859,7 +876,7 @@ export function calcularPreenchimentoAutomatico(
      * vazio andar, alguma aula da turma precisa se mudar para dentro dele — e
      * aqui se conta quantas poderiam e o que impede cada uma.
      */
-    for (const vazio of buracosDaTurma(pend.turma_id, pend.turno_id)) {
+    for (const vazio of buracosDaTurma(pend.turma_id, pend.turno_id, pend.tipo)) {
       const contagem = new Map<string, number>();
       let candidatas = 0;
       for (const a of porTurma.get(pend.turma_id) ?? []) {
@@ -870,6 +887,7 @@ export function calcularPreenchimentoAutomatico(
 
       const rotuloEmpecilho: Record<string, string> = {
         travada: 'aula travada na série',
+        slot_da_serie: 'a série fechou ou reservou esse horário',
         turma_ocupada: 'a turma já tem aula nesse instante',
         restricao: 'o professor tem bloqueio ou livre docência nesse horário',
         professor_ocupado: 'o professor está em outra turma nesse horário',

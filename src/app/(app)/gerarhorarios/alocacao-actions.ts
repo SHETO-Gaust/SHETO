@@ -25,6 +25,7 @@ import {
 } from '@/lib/preencher-vagas';
 import type { Turno } from '@/lib/types';
 import { regraDoProfessorNaMateria } from '@/lib/geminacao-professor';
+import { serieUsaNpNoProprioTurno, slotAceitaAula } from '@/lib/capacidade-serie';
 import {
     calcularAlocacaoComTrocas,
     type AulaAlocacao,
@@ -41,6 +42,14 @@ export type SlotVago = {
     turno_id: string;
     inicio: string | null;
     fim: string | null;
+    /**
+     * Que tipos de aula este horário aceita.
+     *
+     * Quase sempre é só `['presencial']`. Numa série que marcou horários como
+     * Aula Não Presencial, esses slots aceitam `['nao_presencial']` e só isso —
+     * pôr aula comum ali desfaria a reserva que o usuário fez na tela da série.
+     */
+    aceita: ('presencial' | 'nao_presencial')[];
 };
 
 /** Uma aula que o cadastro pede e a grade não tem. */
@@ -303,11 +312,18 @@ export async function getVagasDoHorario(
         // proíbe. Slot proibido na série não é vaga: foi o usuário quem fechou.
         const ocupados = new Set(aulasDaTurma.map(a => `${a.dia_semana}|${a.aula_index}`));
         const restricoes = turma.serie?.restricoes ?? {};
+        const npAqui = serieUsaNpNoProprioTurno(restricoes, ctx.turno);
         const slotsVagos: SlotVago[] = [];
         for (const dia of dias) {
             for (let i = 0; i < (ctx.turno.aulas_por_dia ?? 0); i++) {
                 if (ocupados.has(`${dia}|${i}`)) continue;
-                if (restricoes?.[dia]?.[i] === 'proibido') continue;
+                // O que o slot aceita sai da mesma regra que o motor usa. Um slot
+                // reservado para Aula Não Presencial não é vaga para aula comum,
+                // e vice-versa: oferecer os dois aqui deixaria a tela permitir o
+                // que a geração nunca faria.
+                const aceita = (['presencial', 'nao_presencial'] as const)
+                    .filter(tp => slotAceitaAula(restricoes, dia, i, tp, npAqui));
+                if (aceita.length === 0) continue;
                 const hor = ctx.turno.horarios?.[i];
                 slotsVagos.push({
                     dia_semana: dia,
@@ -315,6 +331,7 @@ export async function getVagasDoHorario(
                     turno_id: ctx.turno.id,
                     inicio: hor?.inicio ?? null,
                     fim: hor?.fim ?? null,
+                    aceita: [...aceita],
                 });
             }
         }
@@ -352,6 +369,24 @@ export async function calcularAlocacao(
 
     const comp = (turma.serie?.componentes ?? []).find((c: any) => c.componente?.id === escolha.componente_id);
     if (!comp) return { error: 'Esta disciplina não faz parte da grade da série desta turma.' };
+
+    /*
+     * O slot escolhido aceita este tipo de aula?
+     *
+     * A tela só oferece slots compatíveis, mas a rota é calculada sobre uma grade
+     * de segundos atrás e chega aqui por uma action pública. Sem esta guarda, uma
+     * aula comum podia entrar num horário que a série reservou para Aula Não
+     * Presencial — e a grade sairia violando a própria tela da série, em silêncio.
+     */
+    const restricoesDaSerie = (turma.serie as any)?.restricoes;
+    const npAqui = serieUsaNpNoProprioTurno(restricoesDaSerie, ctx.turno);
+    if (!slotAceitaAula(restricoesDaSerie, escolha.dia_semana, escolha.aula_index, escolha.tipo, npAqui)) {
+        return {
+            error: escolha.tipo === 'presencial'
+                ? 'Este horário está reservado para Aula Não Presencial na série. Escolha outro.'
+                : 'Aula não presencial só cabe nos horários marcados como Aula Não Presencial na série.',
+        };
+    }
 
     const prof = (turma.professores ?? []).find((p: any) => p.componente_id === escolha.componente_id);
     const carga = escolha.tipo === 'presencial'
@@ -564,6 +599,21 @@ export async function calcularPreenchimentoDeVagas(
         a => !ctx.aulasDoHorario.some(d => d.id === a.id),
     );
 
+    /*
+     * As marcas da série, por turma.
+     *
+     * O preenchimento automático enumerava todo slot vazio como buraco e não
+     * consultava `series.restricoes` — enchia horário que a série fechou, e
+     * encheria também os reservados para Aula Não Presencial. Um clique desfazia
+     * a reserva feita na tela da série, sem aviso nenhum.
+     */
+    const restricoesPorTurma = new Map<string, any>(
+        ctx.turmas.map(t => [t.id, (t.serie as any)?.restricoes]),
+    );
+    const npPorTurma = new Map<string, boolean>(
+        ctx.turmas.map(t => [t.id, serieUsaNpNoProprioTurno((t.serie as any)?.restricoes, ctx.turno)]),
+    );
+
     return {
         data: calcularPreenchimentoAutomatico(
             ctx.aulasDoHorario,
@@ -571,6 +621,13 @@ export async function calcularPreenchimentoDeVagas(
             ctx.professores,
             ctx.turnosById,
             pendencias,
+            (turmaId, dia, slot, tipo) => slotAceitaAula(
+                restricoesPorTurma.get(turmaId),
+                dia,
+                slot,
+                tipo as 'presencial' | 'nao_presencial',
+                !!npPorTurma.get(turmaId),
+            ),
         ),
     };
 }

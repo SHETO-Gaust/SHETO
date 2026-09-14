@@ -156,6 +156,21 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
 
   const isIntegral = horario.turno.nome.toLowerCase().includes('integral');
 
+  /**
+   * A aula pertence à grade deste turno?
+   *
+   * O critério era o `tipo` da aula, e toda não presencial ia para a tabela do
+   * contraturno. Isso deixou de bastar quando a NP passou a poder ficar no
+   * próprio horário da turma: pelo tipo, ela sairia da grade regular e iria
+   * desenhar uma segunda tabela embaixo, com os horários errados.
+   *
+   * Quem manda agora é o turno FÍSICO em que a aula acontece, e o `tipo` volta a
+   * ser o que sempre deveria ter sido — o marcador visual de que aquela aula é
+   * não presencial. O fallback por tipo cobre linha antiga sem `turno_id`.
+   */
+  const ehDoTurno = (a: any, turnoId: string, tipoLegado: string) =>
+    a.turno_id ? a.turno_id === turnoId : a.tipo === tipoLegado;
+
   const handleConsolidar = () => {
       startAction(async () => {
           const result = await consolidarHorario(horario.id);
@@ -183,7 +198,7 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
   const GradeHoraria = ({ targetId, isProfessorView, label, turnoInfo, dataset, tipo }: any) => {
     if (!turnoInfo) return null;
 
-    const sourceData = dataset || (tipo ? horario.aulas.filter(a => a.tipo === tipo) : horario.aulas);
+    const sourceData = dataset || (tipo ? horario.aulas.filter(a => ehDoTurno(a, turnoInfo.id, tipo)) : horario.aulas);
 
     const getAulaNoSlot = (dia: string, index: number) => {
         return sourceData.find((a: any) => 
@@ -321,6 +336,14 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                                                         : "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800"
                                             )}>
                                             {aula.componente.sigla || aula.componente.nome}
+                                            {/*
+                                              * Numa grade que mistura os dois tipos — o caso da série que põe as
+                                              * NP no próprio horário — a cor sozinha não diz o que a célula é.
+                                              * Na grade do contraturno, onde tudo é NP, o rótulo seria ruído.
+                                              */}
+                                            {aula.tipo === 'nao_presencial' && tipo !== 'nao_presencial' && (
+                                                <span className="block text-[7px] font-black tracking-wider opacity-70">NÃO PRESENCIAL</span>
+                                            )}
                                             </div>
                                             <div className={cn(
                                                 "text-[8px] font-bold truncate w-full uppercase",
@@ -388,14 +411,28 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
   const ContraturnoDaTurma = (turmaId: string) => {
     if (isIntegral) return null;
 
-    const temNaoPresencial = horario.aulas.some(a => a.turma_id === turmaId && a.tipo === 'nao_presencial');
-    if (!temNaoPresencial) return null;
+    /*
+     * Só entra aqui o que acontece FORA do turno do horário.
+     *
+     * A condição era "existe aula não presencial nesta turma?". Quando a série põe
+     * as NP no próprio horário, elas já saem desenhadas na grade regular — e a
+     * condição antiga mandava desenhá-las de novo aqui, duplicando cada aula numa
+     * segunda tabela. O que define contraturno é a aula estar noutro turno, não
+     * ser não presencial.
+     */
+    const aulasDeOutroTurno = horario.aulas.filter(
+      a => a.turma_id === turmaId
+        && a.tipo === 'nao_presencial'
+        && (a.turno_id ? a.turno_id !== horario.turno_id : true)
+    );
+    if (aulasDeOutroTurno.length === 0) return null;
 
     return (
       <GradeHoraria
         targetId={turmaId}
         label={horario.turno_oposto ? 'Grade do Contraturno' : 'Grade do Contraturno — turno oposto não configurado'}
         turnoInfo={horario.turno_oposto ?? horario.turno}
+        dataset={aulasDeOutroTurno}
         tipo="nao_presencial"
       />
     );
@@ -622,8 +659,12 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                                                 </div>
                                             </td>
                                             {turmas.map(t => {
-                                                const aula = horario.aulas.find(a => 
-                                                    a.turma_id === t.id && a.dia_semana === dia.id && a.aula_index === aulaIndex && a.tipo === 'presencial'
+                                                // Pelo turno físico, não pelo tipo: a NP que a série põe no
+                                                // próprio horário ocupa este slot, e filtrar por 'presencial'
+                                                // deixaria a célula vazia como se fosse um buraco na grade.
+                                                const aula = horario.aulas.find(a =>
+                                                    a.turma_id === t.id && a.dia_semana === dia.id && a.aula_index === aulaIndex
+                                                    && ehDoTurno(a, horario.turno.id, 'presencial')
                                                 );
                                                 return (
                                                     <td key={t.id} className="p-2 text-center border-r last:border-r-0">
@@ -631,11 +672,16 @@ export function VisualizadorHorarioClient({ horario, forceView, forceTeacherId, 
                                                             <div className="flex flex-col items-center justify-center gap-1">
                                                                 <div className={cn(
                                                                     "font-bold text-[10px] leading-tight uppercase px-2 py-1 rounded border w-full shadow-sm",
-                                                                    aula.professor_id
-                                                                        ? "bg-primary/5 border-primary/10 text-primary"
-                                                                        : "bg-destructive/10 border-destructive/30 border-dashed text-destructive"
+                                                                    !aula.professor_id
+                                                                        ? "bg-destructive/10 border-destructive/30 border-dashed text-destructive"
+                                                                        : aula.tipo === 'nao_presencial'
+                                                                            ? "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800"
+                                                                            : "bg-primary/5 border-primary/10 text-primary"
                                                                 )}>
                                                                     {aula.componente.sigla || aula.componente.nome}
+                                                                    {aula.tipo === 'nao_presencial' && (
+                                                                        <span className="block text-[7px] font-black tracking-wider opacity-70">NÃO PRESENCIAL</span>
+                                                                    )}
                                                                 </div>
                                                                 <div className={cn(
                                                                     "text-[9px] font-bold uppercase truncate w-full",

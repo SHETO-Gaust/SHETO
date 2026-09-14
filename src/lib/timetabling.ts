@@ -1,5 +1,9 @@
 
-import { capacidadeSemanalDaSerie } from './capacidade-serie';
+import {
+  capacidadeSemanalDaSerie,
+  serieUsaNpNoProprioTurno,
+  slotAceitaAula,
+} from './capacidade-serie';
 import { mapaGeminacaoPorProfessor, regraDaMateria } from './geminacao-professor';
 import {
   DIA_LONGO_MIN_AULAS,
@@ -105,6 +109,17 @@ type BlocoGeracao = {
   priority: number;
   serie_restricoes?: Record<string, Record<number, string>>;
   turno_np_id?: string | null; // turno NP pré-determinado para este bloco
+  /**
+   * Bloco não presencial que fica no PRÓPRIO turno da série, e não no contraturno.
+   *
+   * Vale quando a série marcou slots como `nao_presencial` na aba Restrições. Muda
+   * três coisas: `turno_np_id` é o turno da própria série, o bloco só cabe nos
+   * slots marcados, e as regras de agrupamento (geminação, sequência, teto diário,
+   * dias preferidos) não se aplicam — são aulas soltas, colocadas sem rigor de
+   * ordenação. O que continua valendo são as restrições duras do professor e o
+   * choque de horário: o professor segue sem poder estar em dois lugares.
+   */
+  np_no_proprio_turno?: boolean;
   placed?: boolean;
 };
 
@@ -558,6 +573,43 @@ export function gerarHorarioAlgoritmico(
   // Turno NP global (único, determinístico) para este horário
   const turnoNP = resolverTurnoNP(turno, todosTurnos);
 
+  /**
+   * Séries que põem as aulas NP dentro do próprio horário, em vez do contraturno.
+   *
+   * Indexado por turma porque é assim que o motor navega. A resposta vem do dado
+   * — a série marcou slots como `nao_presencial`? — e não de uma configuração
+   * à parte, então série antiga responde `false` e segue no contraturno.
+   */
+  const npNoProprioTurnoPorTurma = new Map<string, boolean>(
+    turmas.map(t => [t.id, serieUsaNpNoProprioTurno(t.serie?.restricoes as any, turno)])
+  );
+
+  /**
+   * O turno FÍSICO onde um bloco acontece.
+   *
+   * Lê `turno_np_id`, que já vem resolvido na criação do bloco, em vez de deduzir
+   * do tipo. Era `tipo === 'presencial' ? turno : turnoNP` repetido em meia dúzia
+   * de lugares — o que não deixava um bloco NP acontecer no próprio turno nem que
+   * quisesse. Agora o destino é uma propriedade do bloco, e o resto do motor
+   * (restrições duras, minutos reais, choque de professor) passa a valer sobre o
+   * turno certo sem saber que existe um modo novo.
+   */
+  const turnoDoBloco = (b: Pick<BlocoGeracao, 'tipo' | 'turno_np_id'>): Turno => {
+    if (b.tipo === 'presencial') return turno;
+    return turnosById.get(b.turno_np_id ?? '') ?? turnoNP;
+  };
+
+  /**
+   * O slot aceita este bloco, olhando só as marcas da série?
+   *
+   * Três casos, e o do meio é o novo: presencial recusa `proibido` e
+   * `nao_presencial`; NP no próprio turno aceita SÓ os slots marcados
+   * `nao_presencial`; NP no contraturno aceita qualquer um, porque as marcas
+   * descrevem a grade de outro turno e não dizem nada sobre onde ela cai.
+   */
+  const slotLiberadoPelaSerie = (b: BlocoGeracao, dia: string, idx: number): boolean =>
+    slotAceitaAula(b.serie_restricoes as any, dia, idx, b.tipo, !!b.np_no_proprio_turno);
+
   // ── Normalizar ocupações externas (publicadas) com minutos reais ──
   const ocupacoesExistentesPorProfessorDia = new Map<string, OcupacaoExistenteNormalizada[]>();
 
@@ -615,7 +667,7 @@ export function gerarHorarioAlgoritmico(
     const emCache = dominioCache.get(chave);
     if (emCache !== undefined) return emCache;
 
-    const alvo = b.tipo === 'presencial' ? turno : turnoNP;
+    const alvo = turnoDoBloco(b);
     const prof = b.professor_id ? professoresById.get(b.professor_id) : undefined;
     const travadosDaTurma = new Set(
       aulasFixas
@@ -631,7 +683,7 @@ export function gerarHorarioAlgoritmico(
         for (let k = 0; k < b.size; k++) {
           const idx = i + k;
           if (travadosDaTurma.has(`${b.tipo}|${d}|${idx}`)) { viavel = false; break; }
-          if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') { viavel = false; break; }
+          if (!slotLiberadoPelaSerie(b, d, idx)) { viavel = false; break; }
           if (prof) {
             if (isBanHardBlocked(prof, alvo.id, d, idx)) { viavel = false; break; }
             if (isReuniaoFluxoHardBlocked(prof, alvo.id, d, idx)) { viavel = false; break; }
@@ -779,6 +831,12 @@ export function gerarHorarioAlgoritmico(
       if (blocoPedido <= 1) continue;
 
       for (const tipo of ['presencial', 'nao_presencial'] as const) {
+        // NP no próprio turno não gemina: são aulas soltas, encaixadas nos slots
+        // que a série marcou, sem rigor de ordenação. Não registrar o requisito
+        // aqui é o que impede `verificarGeminacoes` de cobrar depois uma promessa
+        // que nunca foi feita.
+        if (tipo === 'nao_presencial' && npNoProprioTurnoPorTurma.get(t.id)) continue;
+
         const nFixa = aulasFixas.filter(af =>
           af.turma_id === t.id && af.componente_id === c.componente_id && af.tipo_aula === tipo
         ).length;
@@ -859,6 +917,10 @@ export function gerarHorarioAlgoritmico(
           ? (c.aulas_presenciais || 0)
           : (c.aulas_nao_presenciais || 0);
         if (bruto <= 0) continue;
+        // NP no próprio turno não tem teto diário, então também não precisa de
+        // piso para levantá-lo.
+        if (tipo === 'nao_presencial' && npNoProprioTurnoPorTurma.get(t.id)) continue;
+        // Chegou aqui: ou e presencial, ou e NP de contraturno.
         const alvo = tipo === 'presencial' ? turno : turnoNP;
         const dias = alvo?.dias_semana?.length || 5;
         pisoDiario.set(
@@ -903,6 +965,11 @@ export function gerarHorarioAlgoritmico(
   const tetoDeAulasNoDia = (
     turmaId: string, compId: string, tipo: string, turnoId: string, dia: string,
   ): number => {
+    // Aula NP no próprio turno não tem teto diário: as cinco podem cair na mesma
+    // sexta se for lá que a série marcou os slots. O teto existe para espalhar
+    // aula presencial pela semana, e esta não é uma delas.
+    if (tipo === 'nao_presencial' && npNoProprioTurnoPorTurma.get(turmaId)) return Number.POSITIVE_INFINITY;
+
     const chave = `${turmaId}|${compId}|${tipo}|${turnoId}|${dia}`;
     const guardado = memoTeto.get(chave);
     if (guardado !== undefined) return guardado;
@@ -1049,10 +1116,14 @@ export function gerarHorarioAlgoritmico(
           }
         }
 
-        // NP — no turno oposto determinístico
+        // NP — no contraturno, ou no próprio turno quando a série marcou slots
+        const npProprio = !!npNoProprioTurnoPorTurma.get(t.id);
         const nNP = Math.max(0, (c.aulas_nao_presenciais || 0) - nFixaNP);
         if (nNP > 0) {
-          const tamanhoGemNP = forcarIndividuais
+          // No próprio turno as NP são sempre avulsas: `limitesGeminacao` nem
+          // chega a registrar entrada para elas, e forçar 1 aqui deixa isso
+          // explícito no lugar onde o bloco nasce.
+          const tamanhoGemNP = (forcarIndividuais || npProprio)
             ? 1
             : (limitesGeminacao.get(`${t.id}|${c.componente_id}|nao_presencial`) ?? 1);
           const naoPresenciais = criarBlocos(nNP, tamanhoGemNP);
@@ -1069,9 +1140,14 @@ export function gerarHorarioAlgoritmico(
               professor_nome: profNome,
               size,
               geminado: size > 1,
+              // O bloco NP precisa das marcas da série para saber quais slots
+              // são os dele. Só o bloco presencial carregava — sem isto, o modo
+              // "no próprio turno" não teria como localizar os slots marcados.
+              serie_restricoes: t.serie.restricoes,
               workload: 0,
               priority: 1, // NP tem prioridade alta (menor número = alocado antes)
-              turno_np_id: turnoNP.id,
+              turno_np_id: npProprio ? turno.id : turnoNP.id,
+              np_no_proprio_turno: npProprio,
             });
           }
         }
@@ -1205,10 +1281,24 @@ export function gerarHorarioAlgoritmico(
      */
     const aulasProfTurmaDia = new Map<string, number>();
 
+    /**
+     * A aula é NP no próprio turno, e portanto invisível ao teto do professor na
+     * turma?
+     *
+     * O teto conta quantas aulas o professor dá àquela turma no dia. A não
+     * presencial no próprio horário não disputa esse orçamento: ela cai onde a
+     * série reservou, e nem escolhe. Contá-la faria a NP de sexta ser recusada
+     * porque o professor já tem duas aulas presenciais naquela sexta — pendência
+     * por uma regra que não é sobre ela. Por isso não conta nem é contada.
+     */
+    const foraDoTetoProfTurma = (turmaId: string, tipo?: string) =>
+      tipo === 'nao_presencial' && !!npNoProprioTurnoPorTurma.get(turmaId);
+
     const somarProfTurmaDia = (
-      profKey: string | null | undefined, turmaId: string, dia: string, delta: number,
+      profKey: string | null | undefined, turmaId: string, dia: string, delta: number, tipo?: string,
     ) => {
       if (!profKey || permitirMaisDeDuasAulasProfNaTurma) return;
+      if (foraDoTetoProfTurma(turmaId, tipo)) return;
       const k = `${profKey}|${turmaId}|${dia}`;
       const novo = (aulasProfTurmaDia.get(k) ?? 0) + delta;
       if (novo > 0) aulasProfTurmaDia.set(k, novo);
@@ -1223,9 +1313,10 @@ export function gerarHorarioAlgoritmico(
      * o padrão: aí o motor se comporta exatamente como antes desta regra existir.
      */
     const excederiaTetoProfNaTurma = (
-      profKey: string | null | undefined, turmaId: string, dia: string, quantidade: number,
+      profKey: string | null | undefined, turmaId: string, dia: string, quantidade: number, tipo?: string,
     ): boolean => {
       if (permitirMaisDeDuasAulasProfNaTurma || !profKey) return false;
+      if (foraDoTetoProfTurma(turmaId, tipo)) return false;
       const teto = tetoProfNaTurma.get(`${profKey}|${turmaId}`) ?? TETO_PROF_TURMA_DIA;
       return (aulasProfTurmaDia.get(`${profKey}|${turmaId}|${dia}`) ?? 0) + quantidade > teto;
     };
@@ -1297,6 +1388,18 @@ export function gerarHorarioAlgoritmico(
       ini: number,
       size: number,
     ): boolean => {
+      /*
+       * Aula NP no próprio turno não responde à regra do dia.
+       *
+       * A regra existe para espalhar a disciplina pela semana e impedir emenda que
+       * ninguém pediu. Estas aulas não escolhem onde cair: vão nos slots que a
+       * série marcou, e se a série marcou as cinco sextas aulas, é lá que elas
+       * ficam — sequência, espaçamento e teto diário não têm o que dizer. Único
+       * ponto de saída da regra inteira, de propósito: é por aqui que passam o
+       * laço principal, `podeAlocarMetaEmSlot` e o reparo.
+       */
+      if (tipo === 'nao_presencial' && npNoProprioTurnoPorTurma.get(turmaId)) return false;
+
       // Não há mais a saída por `forcarIndividuais` que existia aqui: largar a
       // geminação é abrir mão do bloco pedido, não é liberar sequência de
       // qualquer tamanho. Era por essa porta que o último recurso devolvia a
@@ -1351,7 +1454,11 @@ export function gerarHorarioAlgoritmico(
       if (!turma) continue; // turma de outro turno
 
       const { dia_semana: dia, aula_index: idx, tipo_aula } = aulaFixa;
-      const targetTurno = tipo_aula === 'presencial' ? turno : (resolverTurnoNP(turno, todosTurnos));
+      // A NP travada cai no contraturno, ou no próprio turno quando a série usa
+      // os slots marcados. Mesma decisão que a criação dos blocos toma.
+      const targetTurno = tipo_aula === 'presencial' || npNoProprioTurnoPorTurma.get(turma.id)
+        ? turno
+        : resolverTurnoNP(turno, todosTurnos);
       const [ini, fim] = getSlotMinutes(targetTurno, idx);
       const slotKey = `${turma.id}|${targetTurno.id}|${dia}|${idx}`;
 
@@ -1393,7 +1500,7 @@ export function gerarHorarioAlgoritmico(
         // O travamento entra de qualquer jeito — é decisão do usuário, não do
         // motor. Mas conta para o teto: se a fixa já usou as duas, o laço
         // principal não coloca uma terceira do mesmo professor naquele dia.
-        somarProfTurmaDia(profKey, turma.id, dia, 1);
+        somarProfTurmaDia(profKey, turma.id, dia, 1, tipo_aula);
       }
     }
 
@@ -1412,9 +1519,9 @@ export function gerarHorarioAlgoritmico(
       );
       if (jaRegistrada) continue;
 
-      const targetTurnoGarantia = aulaFixa.tipo_aula === 'presencial'
+      const targetTurnoGarantia = aulaFixa.tipo_aula === 'presencial' || npNoProprioTurnoPorTurma.get(turma.id)
         ? turno
-        : (resolverTurnoNP(turno, todosTurnos));
+        : resolverTurnoNP(turno, todosTurnos);
       const [iniG, fimG] = getSlotMinutes(targetTurnoGarantia, aulaFixa.aula_index);
       const slotKeyG = `${turma.id}|${targetTurnoGarantia.id}|${aulaFixa.dia_semana}|${aulaFixa.aula_index}`;
 
@@ -1445,7 +1552,7 @@ export function gerarHorarioAlgoritmico(
               const filtered = arr.filter(o => !(o.aula_index === intruso.aula_index && o.turno_id === intruso.turno_id));
               if (filtered.length > 0) ocupacaoProfessoresPorDia.set(mapKey, filtered);
               else ocupacaoProfessoresPorDia.delete(mapKey);
-              somarProfTurmaDia(pKey, intruso.turma_id, intruso.dia_semana, -1);
+              somarProfTurmaDia(pKey, intruso.turma_id, intruso.dia_semana, -1, intruso.tipo);
             }
           }
         }
@@ -1480,7 +1587,7 @@ export function gerarHorarioAlgoritmico(
           inicio_min: iniG,
           fim_min: fimG,
         });
-        somarProfTurmaDia(profKeyG, turma.id, aulaFixa.dia_semana, 1);
+        somarProfTurmaDia(profKeyG, turma.id, aulaFixa.dia_semana, 1, aulaFixa.tipo_aula);
       }
     }
     // ── FIM DA GARANTIA ──────────────────────────────────────────────────────────
@@ -1515,6 +1622,7 @@ export function gerarHorarioAlgoritmico(
         priority: a.tipo === 'nao_presencial' ? 1 : 2,
         serie_restricoes: turmaData.serie.restricoes,
         turno_np_id: a.tipo === 'nao_presencial' ? a.turno_id : undefined,
+        np_no_proprio_turno: a.tipo === 'nao_presencial' && !!npNoProprioTurnoPorTurma.get(a.turma_id),
       };
     };
 
@@ -1555,7 +1663,7 @@ export function gerarHorarioAlgoritmico(
         const novo = arr.filter(occ => !(occ.turno_id === a.turno_id && occ.aula_index === a.aula_index));
         if (novo.length > 0) ocupacaoProfessoresPorDia.set(mapKey, novo);
         else ocupacaoProfessoresPorDia.delete(mapKey);
-        somarProfTurmaDia(profKey, a.turma_id, a.dia_semana, -1);
+        somarProfTurmaDia(profKey, a.turma_id, a.dia_semana, -1, a.tipo);
       }
     };
 
@@ -1580,7 +1688,7 @@ export function gerarHorarioAlgoritmico(
           inicio_min: ini,
           fim_min: fim,
         });
-        somarProfTurmaDia(meta.professor_key, meta.turma_id, dia, 1);
+        somarProfTurmaDia(meta.professor_key, meta.turma_id, dia, 1, meta.tipo);
       }
       return nova;
     };
@@ -1610,10 +1718,10 @@ export function gerarHorarioAlgoritmico(
       // valida o bloco inteiro de uma vez, e perguntar aqui slot a slot deixaria
       // passar um bloco de 3 contra um teto de 2 (cada aula, sozinha, cabe).
       if (runGeminacao > 0 && excederiaTetoProfNaTurma(
-        meta.professor_key, meta.turma_id, dia, runGeminacao,
+        meta.professor_key, meta.turma_id, dia, runGeminacao, meta.tipo,
       )) return false;
 
-      if (meta.tipo === 'presencial' && meta.serie_restricoes?.[dia]?.[idx] === 'proibido') {
+      if (!slotLiberadoPelaSerie(meta, dia, idx)) {
         return false;
       }
 
@@ -1685,7 +1793,7 @@ export function gerarHorarioAlgoritmico(
 
       for (const b of pendentesAtuais) {
         if (b.placed || b.size !== 1) continue;
-        const targetTurno = b.tipo === 'presencial' ? turno : (turnosById.get(b.turno_np_id!) || turnoNP);
+        const targetTurno = turnoDoBloco(b);
 
         // Estratégia A: mover uma aula da mesma turma para liberar um slot melhor para a pendência.
         const aulasMesmaTurma = aulasGeradas
@@ -1776,7 +1884,7 @@ export function gerarHorarioAlgoritmico(
             if (resolveu) break;
             const slotKey = slotKeyOf(b.turma_id, targetTurno.id, d, idx);
             if (ocupacaoTurmas.has(slotKey)) continue;
-            if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') continue;
+            if (!slotLiberadoPelaSerie(b, d, idx)) continue;
             /**
              * Teto de sequência, que faltava nesta estratégia inteira.
              *
@@ -1795,7 +1903,7 @@ export function gerarHorarioAlgoritmico(
             // Mesma história do teto de sequência: das três saídas desta
             // estratégia só uma passa por `podeAlocarMetaEmSlot`. Uma linha aqui
             // cobre as três.
-            if (excederiaTetoProfNaTurma(b.professor_key, b.turma_id, d, b.size)) continue;
+            if (excederiaTetoProfNaTurma(b.professor_key, b.turma_id, d, b.size, b.tipo)) continue;
 
             const prof = b.professor_id ? professoresById.get(b.professor_id) : undefined;
             if (isBanHardBlocked(prof, targetTurno.id, d, idx)) continue;
@@ -1993,7 +2101,7 @@ export function gerarHorarioAlgoritmico(
               // da memória de uma geração feita com a opção LIGADA, e sem esta
               // linha o defeito voltaria inteiro pela semeadura.
               !excederiaTetoProfNaTurma(
-                bloco.professor_key, bloco.turma_id, trecho[0].dia_semana, bloco.size,
+                bloco.professor_key, bloco.turma_id, trecho[0].dia_semana, bloco.size, bloco.tipo,
               );
             if (!cabe) break; // restrição mudou desde que a grade foi gerada
 
@@ -2074,10 +2182,7 @@ export function gerarHorarioAlgoritmico(
       let alocado = false;
 
       // Determinar turnos a testar para este bloco
-      const turnosParaTestar: Turno[] =
-        b.tipo === 'presencial'
-          ? [turno]
-          : [turnosById.get(b.turno_np_id!) || turnoNP];
+      const turnosParaTestar: Turno[] = [turnoDoBloco(b)];
 
       for (const targetTurno of turnosParaTestar) {
         if (alocado) break;
@@ -2091,7 +2196,9 @@ export function gerarHorarioAlgoritmico(
           b.professor_key,
           ocupacaoProfessoresPorDia,
           ocupacoesExistentesPorProfessorDia,
-          ignorarDiasPreferidos,
+          // Dia preferido é preferência do professor sobre onde dar aula. A NP no
+          // próprio turno não escolhe dia: vai onde a série marcou o slot.
+          ignorarDiasPreferidos || !!b.np_no_proprio_turno,
           curProgLocal,
           permitirMesmoProfDisciplinasMesmoDia,
           rng,
@@ -2106,7 +2213,7 @@ export function gerarHorarioAlgoritmico(
           // professor com aulas demais nesta turma hoje? Vindo antes de
           // `ordenarSlots` ela descarta o dia inteiro de uma vez, em vez de
           // repetir a mesma resposta em cada slot candidato.
-          if (excederiaTetoProfNaTurma(b.professor_key, b.turma_id, d, b.size)) continue;
+          if (excederiaTetoProfNaTurma(b.professor_key, b.turma_id, d, b.size, b.tipo)) continue;
 
           const maxStart = targetTurno.aulas_por_dia - b.size;
 
@@ -2151,8 +2258,11 @@ export function gerarHorarioAlgoritmico(
               // ── HARD CONSTRAINT 1: slot da turma já ocupado ──────────────
               if (ocupacaoTurmas.has(slotKey)) { livre = false; break; }
 
-              // ── HARD CONSTRAINT 2: restrição proibida da série ───────────
-              if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') {
+              // ── HARD CONSTRAINT 2: o slot é da série, e é deste tipo? ─────
+              // Presencial recusa `proibido` e `nao_presencial`; NP no próprio
+              // turno só aceita os slots marcados; NP no contraturno aceita
+              // qualquer um, porque as marcas são da grade de outro turno.
+              if (!slotLiberadoPelaSerie(b, d, idx)) {
                 livre = false; break;
               }
 
@@ -2253,7 +2363,7 @@ export function gerarHorarioAlgoritmico(
                     inicio_min: ini,
                     fim_min: fim,
                   });
-                  somarProfTurmaDia(b.professor_key, b.turma_id, d, 1);
+                  somarProfTurmaDia(b.professor_key, b.turma_id, d, 1, b.tipo);
                 }
               }
               alocado = true;
@@ -2442,6 +2552,12 @@ export function gerarHorarioAlgoritmico(
     const descartadas = new Set<HorarioAulaGeradaAlgoritmo>();
     for (const [k, aulas] of porGrupo) {
       const [turmaId, componenteId, tipo, turnoIdDoGrupo, diaDoGrupo] = k.split('|');
+
+      // NP no próprio turno não responde à regra do dia, então não há o que podar.
+      // Sem esta saída a aula entraria pelo laço e sumiria na volta pela memória,
+      // sem erro em lugar nenhum — o mesmo motivo pelo qual a travada é poupada.
+      if (tipo === 'nao_presencial' && npNoProprioTurnoPorTurma.get(turmaId)) continue;
+
       const limite = limiteFinalDeSequencia(turmaId, componenteId, tipo);
       const teto = tetoDeAulasNoDia(turmaId, componenteId, tipo, turnoIdDoGrupo, diaDoGrupo);
       aulas.sort((x, y) => x.aula_index - y.aula_index);
@@ -2891,7 +3007,7 @@ export function gerarHorarioAlgoritmico(
         continue;
       }
 
-      const turnosParaTestar = b.tipo === 'presencial' ? [turno] : [turnosById.get(b.turno_np_id!) || turnoNP];
+      const turnosParaTestar = [turnoDoBloco(b)];
 
       // Contadores de rejeição por motivo (para este bloco)
       let motivos = {
@@ -2924,7 +3040,7 @@ export function gerarHorarioAlgoritmico(
                 turmaLivre = false;
                 break;
               }
-              if (b.tipo === 'presencial' && b.serie_restricoes?.[d]?.[idx] === 'proibido') {
+              if (!slotLiberadoPelaSerie(b, d, idx)) {
                 primeiraMotivoRejeicao = 'restricao_serie';
                 turmaLivre = false;
                 break;

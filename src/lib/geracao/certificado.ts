@@ -19,7 +19,12 @@ import type { Turno, ProfessorComDados } from '@/lib/types';
 import { bloqueadoParaSempre } from '@/lib/restricoes-professor';
 import { resolverTurnoOposto } from '@/lib/turno-oposto';
 import { getSlotMinutes, minutesConflitam } from '@/lib/horario-slots';
-import { capacidadeSemanalDaSerie } from '@/lib/capacidade-serie';
+import {
+    capacidadeNaoPresencialDaSerie,
+    capacidadeSemanalDaSerie,
+    serieUsaNpNoProprioTurno,
+    slotAceitaAula,
+} from '@/lib/capacidade-serie';
 
 export type CausaInviabilidade = {
     tipo: 'carga_turma' | 'carga_professor' | 'horario_sem_cobertura' | 'turno_sem_horario';
@@ -189,17 +194,36 @@ export function certificar(dados: DadosCertificado): Certificado {
 
         const demandaNP = comps.reduce((s: number, c: any) => s + (c.aulas_nao_presenciais || 0), 0);
         if (demandaNP > 0) {
-            const capNP = turnoOposto ? (turnoOposto.dias_semana?.length || 0) * (turnoOposto.aulas_por_dia || 0) : 0;
+            /*
+             * Onde as NP desta turma cabem depende do modo da série.
+             *
+             * Se ela marcou slots como Aula Não Presencial, a capacidade são
+             * exatamente esses slots, no próprio turno — e não a grade do
+             * contraturno. Medir pelo contraturno aqui produziria o falso "não tem
+             * contraturno suficiente" justamente nas séries que não usam
+             * contraturno nenhum, o Noturno à frente delas.
+             */
+            const npNoProprioTurno = serieUsaNpNoProprioTurno(t.serie?.restricoes, turno);
+            const capNP = npNoProprioTurno
+                ? capacidadeNaoPresencialDaSerie(turno, t.serie?.restricoes)
+                : (turnoOposto ? (turnoOposto.dias_semana?.length || 0) * (turnoOposto.aulas_por_dia || 0) : 0);
+
             if (demandaNP > capNP) {
                 causas.push({
                     tipo: 'carga_turma',
-                    titulo: `A turma ${t.nome} não tem contraturno suficiente`,
-                    detalhe: turnoOposto
-                        ? `São ${demandaNP} aulas não presenciais para ${capNP} horários no turno ${turnoOposto.nome}.`
-                        : `Há ${demandaNP} aulas não presenciais, mas nenhum turno oposto ativo para recebê-las.`,
-                    correcao: turnoOposto
-                        ? `Reduza as aulas não presenciais da série ou amplie o turno ${turnoOposto.nome}.`
-                        : `Ative o turno oposto na tela de Turnos, ou zere as aulas não presenciais da série.`,
+                    titulo: npNoProprioTurno
+                        ? `A turma ${t.nome} não tem slots não presenciais suficientes`
+                        : `A turma ${t.nome} não tem contraturno suficiente`,
+                    detalhe: npNoProprioTurno
+                        ? `São ${demandaNP} aulas não presenciais para ${capNP} horário(s) marcado(s) como Aula Não Presencial na série ${t.serie?.nome ?? ''}.`
+                        : turnoOposto
+                            ? `São ${demandaNP} aulas não presenciais para ${capNP} horários no turno ${turnoOposto.nome}.`
+                            : `Há ${demandaNP} aulas não presenciais, mas nenhum turno oposto ativo para recebê-las.`,
+                    correcao: npNoProprioTurno
+                        ? `Marque mais ${demandaNP - capNP} horário(s) como Aula Não Presencial na aba Restrições da série, ou reduza as aulas não presenciais na carga horária.`
+                        : turnoOposto
+                            ? `Reduza as aulas não presenciais da série ou amplie o turno ${turnoOposto.nome}.`
+                            : `Ative o turno oposto na tela de Turnos, marque horários como Aula Não Presencial na aba Restrições da série, ou zere as aulas não presenciais da série.`,
                 });
             }
         }
@@ -228,7 +252,10 @@ export function certificar(dados: DadosCertificado): Certificado {
             const abertos = slotsPossiveisPorProf.get(v.professor_id) ?? new Set<string>();
             for (const d of dias) {
                 for (let i = 0; i < aulasPorDia; i++) {
-                    if ((t.serie as any)?.restricoes?.[d]?.[i] !== 'proibido') abertos.add(`${d}|${i}`);
+                    // Slot reservado para Aula Não Presencial também não está
+                    // aberto ao presencial — contá-lo daria ao professor uma
+                    // folga que nenhuma turma pode usar.
+                    if (slotAceitaAula((t.serie as any)?.restricoes, d, i, 'presencial', false)) abertos.add(`${d}|${i}`);
                 }
             }
             slotsPossiveisPorProf.set(v.professor_id, abertos);
