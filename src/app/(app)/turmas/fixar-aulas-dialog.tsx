@@ -36,6 +36,7 @@ import { Loader2, Lock, X, AlertTriangle, Copy, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TurmaComDados, Turno } from '@/lib/types';
 import { resolverTurnoOposto } from '@/lib/turno-oposto';
+import { serieUsaNpNoProprioTurno, slotEhNaoPresencial } from '@/lib/capacidade-serie';
 import { updateAulasFixasTurma, copiarAulasFixasTurma } from './actions';
 
 const DIAS_LABEL: Record<string, string> = {
@@ -103,6 +104,19 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
     [turno, turnos]
   );
 
+  /**
+   * A série marcou slots como Aula Não Presencial? Então as NP ficam no próprio
+   * turno, e é a grade dele que a aba desenha — não a do contraturno.
+   */
+  const npNoProprioTurno = useMemo(
+    () => serieUsaNpNoProprioTurno((turma.serie as any).restricoes, turno),
+    [turma.serie, turno]
+  );
+
+  /** O turno onde a aba de cada tipo acontece de fato. */
+  const turnoDaAba = (tipo: TipoAula): Turno | null =>
+    tipo === 'presencial' || npNoProprioTurno ? turno : turnoOposto;
+
   useEffect(() => {
     if (!isOpen) return;
     setFixas((turma.aulas_fixas || []).map(f => ({
@@ -153,7 +167,7 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
 
   const totalCarga = componentes.reduce((s, c) => s + c.presenciais + c.naoPresenciais, 0);
 
-  const temNaoPresencial = componentes.some(c => c.naoPresenciais > 0) && !!turnoOposto;
+  const temNaoPresencial = componentes.some(c => c.naoPresenciais > 0) && (!!turnoOposto || npNoProprioTurno);
 
   /**
    * Choques com as outras turmas.
@@ -169,7 +183,13 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
     const turnoDaFixa = (t: TurmaComDados, tipo: TipoAula): Turno | null => {
       const seu = turnos.find(x => x.id === t.serie.turno_id) ?? null;
       if (!seu) return null;
-      return tipo === 'presencial' ? seu : resolverTurnoOposto(seu, turnos.filter(x => x.ativo));
+      if (tipo === 'presencial') return seu;
+      // Cada turma decide pela própria série: uma pode usar o contraturno e a
+      // outra o próprio horário, e o choque só é real se as duas caírem no
+      // mesmo turno físico.
+      return serieUsaNpNoProprioTurno((t.serie as any).restricoes, seu)
+        ? seu
+        : resolverTurnoOposto(seu, turnos.filter(x => x.ativo));
     };
 
     const achados: { professor: string; turma: string; dia: string; aula: number; componente: string }[] = [];
@@ -227,6 +247,10 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
 
   const clicarNoSlot = (tipo: TipoAula, dia: string, idx: number) => {
     if (!selecionada) return;
+    // No próprio turno a NP só cabe onde a série reservou lugar. O servidor
+    // recusa de qualquer jeito; barrar aqui evita o usuário montar a grade
+    // inteira para descobrir no Salvar.
+    if (tipo === 'nao_presencial' && npNoProprioTurno && !slotEhNaoPresencial((turma.serie as any).restricoes, dia, idx)) return;
     const atual = porSlot.get(chaveSlot(tipo, dia, idx));
 
     // Clicar de novo na mesma disciplina destrava — evita ter que mirar no X.
@@ -326,7 +350,16 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
                   const comp = fixa ? componentes.find(c => c.id === fixa.componente_id) : null;
                   const profDoSlot = fixa ? professorDoComponente.get(fixa.componente_id) : null;
                   const ehASelecionada = !!fixa && fixa.componente_id === selecionada;
-                  const podeReceber = !!selecionada && (ehASelecionada || saldoDaSelecionada(tipo, fixa?.componente_id) > 0);
+                  /**
+                   * No modo "NP no próprio turno", só os slots que a série marcou
+                   * aceitam aula não presencial. Os outros são a grade presencial
+                   * da turma, e travar ali criaria uma aula que o motor não pode
+                   * honrar.
+                   */
+                  const slotValeParaOTipo = !(tipo === 'nao_presencial' && npNoProprioTurno)
+                    || slotEhNaoPresencial((turma.serie as any).restricoes, dia, idx);
+                  const podeReceber = !!selecionada && slotValeParaOTipo
+                    && (ehASelecionada || saldoDaSelecionada(tipo, fixa?.componente_id) > 0);
 
                   if (fixa && comp) {
                     return (
@@ -368,21 +401,25 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
                       disabled={!podeReceber}
                       onClick={() => clicarNoSlot(tipo, dia, idx)}
                       title={
-                        !selecionada ? 'Escolha uma disciplina à esquerda'
-                          : podeReceber ? `Travar ${nomeSelecionada} aqui`
-                            : `${nomeSelecionada} já está com todas as aulas travadas`
+                        !slotValeParaOTipo ? 'Este horário não está marcado como Aula Não Presencial na série'
+                          : !selecionada ? 'Escolha uma disciplina à esquerda'
+                            : podeReceber ? `Travar ${nomeSelecionada} aqui`
+                              : `${nomeSelecionada} já está com todas as aulas travadas`
                       }
                       className={cn(
                         'group rounded-md border-2 border-dashed min-h-[3.25rem] flex items-center justify-center transition-colors',
                         podeReceber
                           ? 'border-primary/30 hover:border-primary hover:bg-primary/10 cursor-pointer'
-                          : 'border-muted-foreground/15 cursor-default'
+                          : 'border-muted-foreground/15 cursor-default',
+                        !slotValeParaOTipo && 'bg-muted/40'
                       )}
                     >
-                      <Plus className={cn(
-                        'h-3.5 w-3.5',
-                        podeReceber ? 'text-primary/40 group-hover:text-primary' : 'text-muted-foreground/20'
-                      )} />
+                      {slotValeParaOTipo && (
+                        <Plus className={cn(
+                          'h-3.5 w-3.5',
+                          podeReceber ? 'text-primary/40 group-hover:text-primary' : 'text-muted-foreground/20'
+                        )} />
+                      )}
                     </button>
                   );
                 })}
@@ -532,10 +569,19 @@ export function FixarAulasDialog({ isOpen, setIsOpen, turma, todasAsTurmas, turn
                 <Tabs value={aba} onValueChange={v => { setAba(v as TipoAula); setSelecionada(null); }}>
                   <TabsList>
                     <TabsTrigger value="presencial">Presencial — {turno.nome}</TabsTrigger>
-                    <TabsTrigger value="nao_presencial">Não presencial — {turnoOposto!.nome}</TabsTrigger>
+                    <TabsTrigger value="nao_presencial">
+                      {npNoProprioTurno ? 'Não presencial — no próprio turno' : `Não presencial — ${turnoOposto!.nome}`}
+                    </TabsTrigger>
                   </TabsList>
                   <TabsContent value="presencial" className="mt-3">{renderGrade('presencial', turno)}</TabsContent>
-                  <TabsContent value="nao_presencial" className="mt-3">{renderGrade('nao_presencial', turnoOposto!)}</TabsContent>
+                  <TabsContent value="nao_presencial" className="mt-3">
+                    {npNoProprioTurno && (
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Só os horários marcados como Aula Não Presencial na aba Restrições da série aceitam travamento aqui.
+                      </p>
+                    )}
+                    {renderGrade('nao_presencial', turnoDaAba('nao_presencial')!)}
+                  </TabsContent>
                 </Tabs>
               ) : (
                 renderGrade('presencial', turno)

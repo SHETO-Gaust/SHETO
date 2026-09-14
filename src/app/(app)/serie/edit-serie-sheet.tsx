@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Ban } from 'lucide-react';
+import { Loader2, Ban, Eraser, MonitorSmartphone } from 'lucide-react';
 import { upsertSerie } from './actions';
 import type { SerieComDados, NivelEnsino, Turno } from '@/lib/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -44,9 +44,46 @@ const DIAS_SEMANA_MAP = [
   { id: 'sexta', label: 'Sex' }, { id: 'sabado', label: 'Sáb' },
 ];
 
+/**
+ * Etiquetas que a grade da série sabe pintar.
+ *
+ * Mesmo modelo da tela de restrições de professor: escolhe a etiqueta na barra,
+ * depois pinta as células. Antes daqui o clique era um toggle binário de
+ * `proibido` — com dois status pintáveis, toggle cego não serve mais.
+ *
+ * `nao_presencial` é o status que reserva o slot para aula NP dentro do próprio
+ * turno. A regra de contagem dele vive em `@/lib/capacidade-serie`.
+ */
+const ETIQUETAS = [
+  {
+    id: 'proibido',
+    label: 'Bloqueio',
+    icone: Ban,
+    celula: 'bg-red-100 dark:bg-red-900/30',
+    marca: 'text-red-600',
+    botao: 'border-red-500 bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+    ajuda: 'Nenhuma aula cai neste horário.',
+  },
+  {
+    id: 'nao_presencial',
+    label: 'Aula Não Presencial',
+    icone: MonitorSmartphone,
+    celula: 'bg-orange-100 dark:bg-orange-900/30',
+    marca: 'text-orange-600',
+    botao: 'border-orange-500 bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+    ajuda: 'Aula não presencial no próprio horário da turma.',
+  },
+] as const;
+
+type EtiquetaId = (typeof ETIQUETAS)[number]['id'];
+type Ferramenta = EtiquetaId | 'limpar';
+
+const etiquetaPor = (id: string | undefined) => ETIQUETAS.find(e => e.id === id);
+
 export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencies, onSerieUpdated }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [ferramenta, setFerramenta] = useState<Ferramenta | null>(null);
   const isEdit = !!serie;
 
   const form = useForm<FormValues>({
@@ -65,7 +102,9 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
     if (isOpen) {
       // CORREÇÃO 2: Destrava clique no corpo da página
       document.body.style.pointerEvents = 'auto';
-      
+
+      setFerramenta(null);
+
       form.reset({
         id: serie?.id,
         escola_id: String(escolaId),
@@ -78,17 +117,25 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
   }, [isOpen, serie, escolaId, form]);
 
   const handleCellClick = (dia: string, aulaIndex: number) => {
+    if (!ferramenta) {
+      toast({ title: 'Selecione um tipo acima', description: 'Escolha Bloqueio, Aula Não Presencial ou Limpar antes de clicar na grade.' });
+      return;
+    }
+
     const currentRestricoes = form.getValues('restricoes') || {};
     const newRestricoes = JSON.parse(JSON.stringify(currentRestricoes));
-    
+
     if (!newRestricoes[dia]) newRestricoes[dia] = {};
     const currentStatus = newRestricoes[dia][aulaIndex];
 
-    if (currentStatus === 'proibido') {
-        delete newRestricoes[dia][aulaIndex];
+    // Clicar de novo com a mesma etiqueta limpa — é o toggle que a tela sempre
+    // teve, agora por etiqueta em vez de global.
+    if (ferramenta === 'limpar' || currentStatus === ferramenta) {
+      delete newRestricoes[dia][aulaIndex];
     } else {
-        newRestricoes[dia][aulaIndex] = 'proibido';
+      newRestricoes[dia][aulaIndex] = ferramenta;
     }
+
     form.setValue('restricoes', newRestricoes, { shouldDirty: true });
   };
 
@@ -155,8 +202,42 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                     </div>
                 </TabsContent>
 
-                <TabsContent value="restricoes" className="pt-4">
+                <TabsContent value="restricoes" className="pt-4 space-y-3">
                     {turnoInfo ? (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {ETIQUETAS.map(et => {
+                                const Icone = et.icone;
+                                const ativa = ferramenta === et.id;
+                                return (
+                                    <button key={et.id} type="button" title={et.ajuda}
+                                        onClick={() => setFerramenta(ativa ? null : et.id)}
+                                        className={cn(
+                                            "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                                            ativa ? et.botao : "bg-background hover:bg-accent"
+                                        )}>
+                                        <Icone className="h-3.5 w-3.5" />
+                                        {et.label}
+                                    </button>
+                                );
+                            })}
+                            <button type="button" title="Apaga a marca da célula."
+                                onClick={() => setFerramenta(ferramenta === 'limpar' ? null : 'limpar')}
+                                className={cn(
+                                    "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                                    ferramenta === 'limpar' ? "border-foreground/40 bg-muted" : "bg-background hover:bg-accent"
+                                )}>
+                                <Eraser className="h-3.5 w-3.5" />
+                                Limpar
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                            {ferramenta
+                                ? (ferramenta === 'limpar' ? 'Clique nas células para apagar a marca.' : etiquetaPor(ferramenta)?.ajuda)
+                                : 'Escolha um tipo acima e clique nas células da grade.'}
+                        </p>
+
                         <div className="rounded-xl border bg-card overflow-hidden">
                             <table className="w-full text-sm text-center">
                                 <thead>
@@ -178,14 +259,16 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                                             </td>
                                             {DIAS_SEMANA_MAP.filter(d => turnoInfo.dias_semana.includes(d.id)).map(dia => {
                                                 const restricoes = form.watch('restricoes') || {};
-                                                const status = restricoes[dia.id]?.[aulaIndex];
+                                                const etiqueta = etiquetaPor(restricoes[dia.id]?.[aulaIndex]);
+                                                const Marca = etiqueta?.icone;
                                                 return (
                                                     <td key={dia.id} className="p-0">
                                                         <div onClick={() => handleCellClick(dia.id, aulaIndex)}
+                                                            title={etiqueta?.label}
                                                             className={cn("h-14 w-full flex items-center justify-center cursor-pointer transition-colors",
-                                                                status === 'proibido' ? 'bg-red-100 dark:bg-red-900/30' : 'hover:bg-accent'
+                                                                etiqueta ? etiqueta.celula : 'hover:bg-accent'
                                                             )}>
-                                                            {status === 'proibido' && <Ban className="h-5 w-5 text-red-600" />}
+                                                            {Marca && <Marca className={cn("h-5 w-5", etiqueta!.marca)} />}
                                                         </div>
                                                     </td>
                                                 )
@@ -195,6 +278,7 @@ export function EditSerieSheet({ isOpen, setIsOpen, serie, escolaId, dependencie
                                 </tbody>
                             </table>
                         </div>
+                      </>
                     ) : (
                         <p className="text-muted-foreground text-center py-10">Selecione um turno na aba "Dados" para liberar as restrições.</p>
                     )}

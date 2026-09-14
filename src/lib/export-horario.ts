@@ -33,17 +33,42 @@ const DIAS_MAP = [
 function rotuloAula(aula: HorarioCompleto['aulas'][number]): string {
   const sigla = aula.componente?.sigla || aula.componente?.nome || '';
   const prof = aula.professor?.nome_horario || 'SEM PROF.';
-  return `${sigla} | ${prof}`;
+  const marca = aula.tipo === 'nao_presencial' ? ' (NP)' : '';
+  return `${sigla}${marca} | ${prof}`;
+}
+
+type AulaExportada = HorarioCompleto['aulas'][number];
+
+/**
+ * Quais aulas pertencem à grade do turno do horário.
+ *
+ * O critério era o `tipo`, e toda não presencial saía da grade regular para a aba
+ * de contraturno. Isso deixou de bastar quando a NP passou a poder ficar no
+ * próprio horário da turma: ela sumia da aba da turma e reaparecia numa aba CT
+ * com os horários deslocados. Quem manda agora é o turno FÍSICO da aula.
+ *
+ * `horario_aulas.turno_id` é NOT NULL, mas o fallback por tipo fica para grades
+ * antigas que cheguem aqui sem ele.
+ */
+function ehDaGradeRegular(a: AulaExportada, turnoDoHorarioId: string): boolean {
+  return a.turno_id ? a.turno_id === turnoDoHorarioId : a.tipo === 'presencial';
+}
+
+/** Aulas que acontecem fora do turno do horário — o contraturno de verdade. */
+function ehDoContraturno(a: AulaExportada, turnoDoHorarioId: string): boolean {
+  if (a.tipo !== 'nao_presencial') return false;
+  return a.turno_id ? a.turno_id !== turnoDoHorarioId : true;
 }
 
 function buildGradeSheet(
   turmaId: string,
   horario: HorarioCompleto,
   turnoInfo: Turno,
-  tipo: 'presencial' | 'nao_presencial'
+  /** Quais aulas desta turma entram nesta aba — ver `ehDaGradeRegular`/`ehDoContraturno`. */
+  pertence: (a: AulaExportada) => boolean
 ): XLSX.WorkSheet {
   const diasAtivos = DIAS_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
-  const aulas = horario.aulas.filter(a => a.turma_id === turmaId && a.tipo === tipo);
+  const aulas = horario.aulas.filter(a => a.turma_id === turmaId && pertence(a));
 
   const header = ['Horário', 'Início - Fim', ...diasAtivos.map(d => d.label)];
   const rows: (string | null)[][] = [header];
@@ -134,7 +159,8 @@ function buildPorDiaSheet(horario: HorarioCompleto): XLSX.WorkSheet {
 
       for (const [turmaId] of turmas) {
         const aula = horario.aulas.find(
-          a => a.turma_id === turmaId && a.dia_semana === dia.id && a.aula_index === idx && a.tipo === 'presencial'
+          a => a.turma_id === turmaId && a.dia_semana === dia.id && a.aula_index === idx
+            && ehDaGradeRegular(a, horario.turno_id)
         );
         row.push(aula
           ? `${aula.componente?.sigla || aula.componente?.nome || ''} / ${aula.professor?.nome_horario || 'SEM PROF.'}`
@@ -189,7 +215,9 @@ function buildWorkbook(horario: HorarioCompleto): XLSX.WorkBook {
   };
 
   for (const [turmaId, turmaLabel] of turmas) {
-    const ws = buildGradeSheet(turmaId, horario, turno, 'presencial');
+    // A aba da turma leva tudo o que acontece no turno dela — inclusive a aula
+    // não presencial que a série pôs dentro do próprio horário, marcada com (NP).
+    const ws = buildGradeSheet(turmaId, horario, turno, a => ehDaGradeRegular(a, horario.turno_id));
     XLSX.utils.book_append_sheet(wb, ws, nomeAbaUnico(`T-${turmaLabel}`));
   }
 
@@ -202,12 +230,16 @@ function buildWorkbook(horario: HorarioCompleto): XLSX.WorkBook {
    * do que a grade tem e parecia completa. Agora, se existe aula não
    * presencial, a aba sai; na falta do turno oposto usa-se a grade do próprio
    * turno como régua, o que desloca os horários mas não perde aula nenhuma.
+   *
+   * A condição olha o TURNO da aula, não o tipo: a não presencial que fica no
+   * próprio horário da turma já saiu na aba dela, e contá-la aqui geraria uma aba
+   * CT com as mesmas aulas de novo.
    */
-  const temNaoPresencial = horario.aulas.some(a => a.tipo === 'nao_presencial');
-  if (temNaoPresencial && !isIntegral) {
+  const temContraturno = horario.aulas.some(a => ehDoContraturno(a, horario.turno_id));
+  if (temContraturno && !isIntegral) {
     const turnoCT = horario.turno_oposto ?? turno;
     for (const [turmaId, turmaLabel] of turmas) {
-      const ws = buildGradeSheet(turmaId, horario, turnoCT, 'nao_presencial');
+      const ws = buildGradeSheet(turmaId, horario, turnoCT, a => ehDoContraturno(a, horario.turno_id));
       XLSX.utils.book_append_sheet(wb, ws, nomeAbaUnico(`CT-${turmaLabel}`));
     }
   }
@@ -280,13 +312,14 @@ function tabelaHTML(
   turmaLabel: string,
   horario: HorarioCompleto,
   turnoInfo: Turno,
-  tipo: 'presencial' | 'nao_presencial',
+  /** Quais aulas desta turma entram nesta tabela — ver `ehDaGradeRegular`/`ehDoContraturno`. */
+  pertence: (a: AulaExportada) => boolean,
   rotulo: string,
   /** Cor de fundo por disciplina. `null` = o preto e branco de sempre. */
   cores?: CoresPorComponente | null,
 ): string {
   const diasAtivos = DIAS_MAP.filter(d => turnoInfo.dias_semana.includes(d.id));
-  const aulas = horario.aulas.filter(a => a.turma_id === turmaId && a.tipo === tipo);
+  const aulas = horario.aulas.filter(a => a.turma_id === turmaId && pertence(a));
   if (aulas.length === 0) return '';
 
   const desenhadas = new Set<typeof aulas[number]>();
@@ -302,7 +335,9 @@ function tabelaHTML(
       noSlot.forEach(a => desenhadas.add(a));
       if (noSlot.length === 0) return '<td class="vazia"></td>';
       const conteudo = noSlot
-        .map(a => `<span class="disc">${esc(a.componente?.sigla || a.componente?.nome || '')}</span>` +
+        // O "(NP)" só faz sentido onde os dois tipos convivem — na tabela do
+        // contraturno toda aula é não presencial, e o sufixo viraria ruído.
+        .map(a => `<span class="disc">${esc((a.componente?.sigla || a.componente?.nome || '') + (a.tipo === 'nao_presencial' && a.turno_id === horario.turno_id ? ' (NP)' : ''))}</span>` +
           `<span class="prof">${esc(a.professor?.nome_horario || 'SEM PROF.')}</span>`)
         .join('<hr class="sep">');
       /*
@@ -394,13 +429,17 @@ export function exportarHorarioPDF(
     return;
   }
 
-  const temNaoPresencial = horario.aulas.some(a => a.tipo === 'nao_presencial');
+  // Pelo turno da aula, não pelo tipo: a NP que fica no próprio horário da turma
+  // já sai na tabela regular, e repeti-la aqui imprimiria a mesma aula duas vezes.
+  const temContraturno = horario.aulas.some(a => ehDoContraturno(a, horario.turno_id));
   const turnoCT = horario.turno_oposto ?? turno;
 
   const secoes = turmas.map(([turmaId, turmaLabel]) => {
-    const regular = tabelaHTML(turmaId, turmaLabel, horario, turno, 'presencial', `Turno ${turno.nome}`, cores);
-    const contraturno = (temNaoPresencial && !isIntegral)
-      ? tabelaHTML(turmaId, turmaLabel, horario, turnoCT, 'nao_presencial',
+    const regular = tabelaHTML(turmaId, turmaLabel, horario, turno,
+      a => ehDaGradeRegular(a, horario.turno_id), `Turno ${turno.nome}`, cores);
+    const contraturno = (temContraturno && !isIntegral)
+      ? tabelaHTML(turmaId, turmaLabel, horario, turnoCT,
+          a => ehDoContraturno(a, horario.turno_id),
           `Contraturno${horario.turno_oposto ? ` — ${turnoCT.nome}` : ' (turno oposto não configurado)'}`, cores)
       : '';
     return regular + contraturno;
