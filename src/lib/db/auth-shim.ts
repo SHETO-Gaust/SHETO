@@ -124,6 +124,29 @@ export function createAuthShim(pool: Pool) {
           return { data: { user: null }, error: { message: err?.message ?? String(err) } };
         }
       },
+
+      /**
+       * Remove a conta (auth.users) e o perfil (public.profiles) numa transacao.
+       * No Supabase o perfil caia junto por FK; aqui nao ha FK entre as duas
+       * tabelas, entao apagar so um lado deixaria login sem perfil (ou o
+       * contrario). Os tokens de redefinicao de senha caem por ON DELETE CASCADE.
+       */
+      async deleteUser(id: string): Promise<AuthResult<null>> {
+        const client = await pool.connect();
+        try {
+          await client.query('begin');
+          const perfil = await client.query('delete from public.profiles where id = $1', [id]);
+          const conta = await client.query('delete from auth.users where id = $1', [id]);
+          await client.query('commit');
+          if (!perfil.rowCount && !conta.rowCount) return { data: null, error: { message: 'Usuário não encontrado.' } };
+          return { data: null, error: null };
+        } catch (err: any) {
+          await client.query('rollback').catch(() => {});
+          return { data: null, error: { message: err?.message ?? String(err) } };
+        } finally {
+          client.release();
+        }
+      },
     },
   };
 }
