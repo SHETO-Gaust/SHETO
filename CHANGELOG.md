@@ -8,6 +8,124 @@ O projeto ainda não tem versões publicadas; esta seção cobre o que a branch
 
 ---
 
+## [Não lançado] — `All_In`, rodada de 14/09/2026
+
+Commit `f776ff5`. Aula Não Presencial passa a poder ficar dentro do próprio
+turno da série, e o Noturno destrava contraturno.
+
+### Adicionado
+
+- **Aula Não Presencial no próprio turno.** `series.restricoes` ganha um
+  segundo valor ao lado de `proibido`: `nao_presencial`. A aba Restrições da
+  série vira paleta de etiquetas (Bloqueio / Aula Não Presencial / Limpar),
+  igual à tela de professores. Slot marcado sai da capacidade presencial e
+  entra na NP — não é uma aula a mais, é uma presencial a menos que virou vaga
+  de NP. Série sem marca nenhuma continua indo para o contraturno, então nada
+  do que já está cadastrado muda de lugar.
+- No motor, o modo novo é só `turno_np_id = turno.id` (o turno físico do
+  próprio bloco) em vez do turno oposto. Restrições duras do professor e
+  choque de horário passam a valer sobre o turno certo automaticamente. Essas
+  aulas ignoram geminação, dias preferidos, sequência, espaçamento, teto
+  diário e o teto do professor na turma (decisão do usuário) — mas continuam
+  respeitando indisponibilidade, livre docência, planejamento coletivo e
+  choque de professor, inclusive contra grades publicadas.
+- Visualizador, exportação `.xlsx`, PDF e portal público passam a decidir a
+  tabela pela grade do `turno_id` físico da aula, não mais pelo `tipo` — evita
+  desenhar a mesma NP duas vezes (presencial e contraturno) quando ela mora no
+  próprio turno.
+- Sétimo cenário na suíte do motor: 5 NP emendadas na mesma sexta sem rigor de
+  geminação/espaçamento, professor indisponível continua bloqueando, NP
+  travada fica no próprio turno.
+
+### Corrigido
+
+- **O Noturno nunca teve contraturno.** `carga-horaria-sheet.tsx` só
+  reconhecia "matutino"/"vespertino" ao detectar o turno oposto; qualquer
+  outro nome (Noturno, ou escola que chama os turnos de "Manhã"/"Tarde") caía
+  num `else` que zerava `hasContraturno` e desabilitava os dois campos de NP.
+  Passa a usar `resolverTurnoOposto`, a mesma regra canônica que o resto do
+  sistema já usava.
+- `preencher-vagas` enumerava todo slot vazio como buraco sem consultar
+  `series.restricoes` — preenchia horário que a série tinha fechado, e
+  preenchia também os slots reservados para NP. `calcularAlocacao` aceitava
+  qualquer slot vindo da tela sem essa checagem. Os dois passam pela mesma
+  regra do motor agora.
+- `contextoDaTurma` não trazia `restricoes` no select — sem a coluna, a
+  validação de NP-no-próprio-turno respondia sempre "não" e liberava slot
+  errado em silêncio.
+
+### ⚠️ Ao atualizar
+
+- Sem migration nova (a coluna `series.restricoes` já era jsonb). Dados
+  existentes não mudam: hoje só há marcas `proibido` no banco, e as aulas NP
+  já geradas continuam todas no contraturno.
+- **Refino por drag-and-drop ainda não checa `series.restricoes`** — dá para
+  arrastar uma NP para fora do slot marcado, do mesmo jeito que já dava para
+  arrastar uma presencial para dentro de um `proibido`. Fica para depois.
+
+### Verificação
+
+- Sete cenários contra o motor compilado (geminação, indisponibilidade,
+  travamento, regressão do contraturno).
+- Conferido contra o banco de produção: `restricoes` só tinha `proibido` (336
+  slots), `horario_aulas.turno_id` é `NOT NULL` sem nulos, e as 499 aulas NP
+  existentes estão todas no contraturno — a troca de critério (tipo →
+  turno_id) não move nenhuma delas.
+- `bancada-motor`: 1344 fecha 3/3 com geminação 88/88; 1120 não fecha
+  (melhor=2) — igual à linha de base do próprio script.
+- `typecheck` com 33 erros, igual ao pré-existente antes da mudança.
+
+---
+
+## [Não lançado] — `All_In`, rodada de 11/09/2026 (Setembro V2)
+
+Ainda sem commit. O teto diário da geminação personalizada passa a ser teto de
+verdade, e o controle ganhou 1x nos dois lados.
+
+### Adicionado
+
+- **1x nos dois controles do acordo de geminação personalizada.** Em "Máximo de
+  aulas consecutivas", 1x passa a existir e significa **sem geminação** para
+  aquele professor naquela matéria — vence a tela mesmo quando ela pede
+  dobradinha para os demais professores da disciplina. Em "Máximo de aulas no
+  mesmo dia" o intervalo passa a ser 1x–4x (**5x saiu**, não fazia sentido para
+  nenhum turno da rede).
+- **Avisos discretos quando um lado trava o outro.** "No mesmo dia" em 1x
+  desabilita e trava "consecutivas" em 1x (bloco de 2 já estoura um teto
+  diário de 1); "consecutivas" acima de 1x desabilita o 1x de "no mesmo dia".
+  As duas travas já existiam de um lado (`disabled` em "no mesmo dia"); o que
+  faltava era a volta, e o texto explicando o motivo em ambas.
+- Cenário 8 em `verificar-geminacao.js`: prova que o teto pessoal vence o piso
+  aritmético da carga semanal — inclusive numa carga que torna a semana
+  inevitavelmente incompleta sob aquele teto, o que o motor agora prefere a
+  furar o combinado.
+
+### Corrigido
+
+- **"Máximo de aulas no mesmo dia" era piso, não teto.** `tetoDeAulasNoDia`
+  deixava o piso aritmético (carga semanal ÷ dias do turno) e o default de dia
+  longo (4 aulas/dia em turnos de 7+ aulas) **levantarem** o teto que o
+  professor combinou — um acordo de "no máximo 3 de Matemática por dia" podia
+  sair da geração com 4, em silêncio. Agora, quando o professor personaliza,
+  o valor dele é absoluto: só uma aula já travada (Aula Fixa) naquele dia
+  continua podendo superá-lo — é a única das quatro fontes que o motor de fato
+  não pode desfazer. Relatado por uma escola: professora de Matemática, turno
+  Integral, combinado 3x/dia, grade publicada com 4.
+
+### ⚠️ Ao atualizar
+
+- **Regere as grades de turmas com professor em geminação personalizada.**
+  Grades publicadas antes desta correção podem ter mais aulas por dia daquela
+  disciplina do que o professor combinou; a correção só age em geração nova.
+
+### Verificação
+
+- `npm run verificar:geminacao` — cenário 8 novo, os outros sete continuam
+  passando. Revertido o motor a propósito para confirmar que o cenário 8
+  reprova sem a correção (terça com 4 aulas de MAT) antes de restaurá-la.
+
+---
+
 ## [Não lançado] — `All_In`, rodada de 04/09/2026
 
 Nove commits (`a7c83f1`..`4ab85e7`). Geminação combinada com cada professor,
