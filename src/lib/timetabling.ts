@@ -976,18 +976,33 @@ export function gerarHorarioAlgoritmico(
 
     const alvo = turnosById.get(turnoId);
     const grupo = `${turmaId}|${compId}|${tipo}`;
+    const personalizado = tetoPersonalizado.get(grupo);
+
     /**
-     * O professor que personalizou substitui o teto da rede pelo dele — para
-     * baixo também: "no máximo 2 de Matemática por dia" só significa alguma
-     * coisa se puder ficar abaixo dos 3 que o dia curto permitiria.
+     * O professor que personalizou tem TETO, não piso: "no máximo 3 de
+     * Matemática por dia" significa no máximo 3, e nem o piso aritmético nem o
+     * default da rede podem levantar esse número — foi exatamente essa
+     * elevação silenciosa que produziu uma grade com 4 aulas de Matemática num
+     * dia para uma professora que combinou 3.
      *
-     * Os outros três termos do `Math.max` continuam podendo levantá-lo, e é
-     * proposital: piso aritmético, bloco pedido e aulas travadas são
-     * impossibilidades, não preferências, e um teto que os contrarie não
-     * produziria uma grade mais limpa — produziria uma grade que não fecha.
+     * `limitesGeminacao` nunca precisa entrar nesta conta: `normalizarRegra`
+     * (em `geminacao-professor.ts`) já garante `max_no_dia >= max_consecutivas`,
+     * e o bloco pedido nunca passa de `max_consecutivas` — então já está contido
+     * no teto pessoal.
+     *
+     * A única exceção é aula TRAVADA: travar é uma ordem que o motor nunca
+     * desfaz (ver a poda mais abaixo, que pula aula com `aula_fixa_id`), então
+     * um teto pessoal menor que o que já está fisicamente fixado no dia não
+     * produziria uma grade mais fiel ao combinado — produziria uma grade que
+     * não fecha.
      */
-    const base = tetoPersonalizado.get(grupo)
-      ?? ((alvo?.aulas_por_dia ?? 0) >= DIA_LONGO_MIN_AULAS ? TETO_DIA_LONGO : TETO_DIA_CURTO);
+    if (personalizado !== undefined) {
+      const teto = Math.max(personalizado, travadasPorGrupoDia.get(`${grupo}|${dia}`) ?? 0);
+      memoTeto.set(chave, teto);
+      return teto;
+    }
+
+    const base = (alvo?.aulas_por_dia ?? 0) >= DIA_LONGO_MIN_AULAS ? TETO_DIA_LONGO : TETO_DIA_CURTO;
     const teto = Math.max(
       base,
       pisoDiario.get(grupo) ?? 1,

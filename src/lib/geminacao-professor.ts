@@ -16,10 +16,10 @@
 
 import type { GeminacaoPersonalizada, GeminacaoPorComponente } from './types';
 
-/** Emendas oferecidas na tela. Mexer aqui muda a tela e o que o motor aceita. */
-export const OPCOES_MAX_CONSECUTIVAS = [2, 3] as const;
+/** Emendas oferecidas na tela. `1` = sem geminação. Mexer aqui muda a tela e o que o motor aceita. */
+export const OPCOES_MAX_CONSECUTIVAS = [1, 2, 3] as const;
 /** Tetos diários oferecidos na tela. */
-export const OPCOES_MAX_NO_DIA = [2, 3, 4, 5] as const;
+export const OPCOES_MAX_NO_DIA = [1, 2, 3, 4] as const;
 
 export const GEMINACAO_PERSONALIZADA_PADRAO: GeminacaoPersonalizada = {
   max_consecutivas: 2,
@@ -50,12 +50,12 @@ export function normalizarRegra(bruto: unknown): GeminacaoPersonalizada | null {
   const obj = bruto as Record<string, unknown>;
 
   const consBruto = Number(obj.max_consecutivas);
-  if (!Number.isFinite(consBruto) || consBruto < 2) return null;
-  const max_consecutivas = (consBruto >= 3 ? 3 : 2) as GeminacaoPersonalizada['max_consecutivas'];
+  if (!Number.isFinite(consBruto) || consBruto < 1) return null;
+  const max_consecutivas = (consBruto >= 3 ? 3 : consBruto <= 1 ? 1 : 2) as GeminacaoPersonalizada['max_consecutivas'];
 
   const diaBruto = Number(obj.max_no_dia);
   const dia = Number.isFinite(diaBruto) ? diaBruto : max_consecutivas;
-  const max_no_dia = Math.min(5, Math.max(max_consecutivas, Math.round(dia))) as GeminacaoPersonalizada['max_no_dia'];
+  const max_no_dia = Math.min(4, Math.max(max_consecutivas, Math.round(dia))) as GeminacaoPersonalizada['max_no_dia'];
 
   return { max_consecutivas, max_no_dia };
 }

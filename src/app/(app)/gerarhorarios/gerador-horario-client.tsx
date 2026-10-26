@@ -46,6 +46,13 @@ import { Progress } from '@/components/ui/progress';
 
 type HorarioComTurno = Horario & { turno_nome?: string };
 
+/** As três frases do modal de progresso, na ordem em que `faseDoMotor` as indexa. */
+const TEXTO_FASE_MOTOR = [
+    'Analisando disponibilidade ideal dos professores...',
+    'Otimizando janelas e horários de planejamento...',
+    'Relaxando restrições secundárias para garantir carga horária total...',
+] as const;
+
 type GeradorHorarioClientProps = {
     escolaId: string;
     turnosAtivos: Turno[];
@@ -191,6 +198,8 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
     // estado local de progresso a manter em sincronia.
     const isProcessing = geracao?.emAndamento ?? false;
     const progressoRelativo = geracao?.orcamento ? geracao.tentativas / geracao.orcamento : 0;
+    /** Índice em `TEXTO_FASE_MOTOR` — separado do texto para dar `key` estável ao parágrafo que anima. */
+    const faseDoMotor = progressoRelativo < 0.15 ? 0 : progressoRelativo < 0.70 ? 1 : 2;
     const genError = !isProcessing && resultadoVisivel ? geracao?.erro ?? null : null;
     const diagnostico = (!isProcessing && resultadoVisivel ? geracao?.diagnostico : null) as DiagnosticoFalha | null;
     /**
@@ -237,6 +246,43 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
         return [...mapa.entries()].map(([turma, itens]) => ({ turma, itens }));
     })();
     const provado = certificado?.veredito === 'impossivel';
+
+    /**
+     * O aviso de geminação perdida (`descreverGeminacoes`, em
+     * `geracao/orquestrador.ts`) chega como uma frase só, uma por turno, com as
+     * turmas/disciplinas separadas por vírgula — ótimo para o log, ilegível numa
+     * tela quando passa de umas 4 entradas. Esse é o único canal de texto do job
+     * até aqui, então a lista volta a ficar estruturada RELENDO o formato que
+     * `descreverGeminacoes` produz, e não editando-o direto: turma nunca tem "/"
+     * no nome (é sempre "NN.NN"), então dividir no primeiro "/" é seguro.
+     */
+    const avisosGeminacaoPorTurno = useMemo(() => {
+        if (!apenasAviso || !genError) return [];
+        const RE_SENTENCA = /No turno "([^"]+)", \d+ geminação\(ões\) não couberam e as aulas ficaram separadas: (.+?\(\d+x\))\.(?=\s|$)/g;
+        const RE_ITEM = /^(.+?)\/(.+) \((\d+)x\)$/;
+        const porTurno: { turno: string; total: number; porTurma: { turma: string; itens: { componente: string; tamanho: number }[] }[] }[] = [];
+
+        for (const m of genError.matchAll(RE_SENTENCA)) {
+            const [, turno, lista] = m;
+            const porTurma = new Map<string, { componente: string; tamanho: number }[]>();
+            let total = 0;
+            for (const parte of lista.split(', ')) {
+                const item = RE_ITEM.exec(parte.trim());
+                if (!item) continue;
+                total++;
+                const entrada = { componente: item[2], tamanho: Number(item[3]) };
+                const doTurma = porTurma.get(item[1]);
+                if (doTurma) doTurma.push(entrada); else porTurma.set(item[1], [entrada]);
+            }
+            // Zero itens reconhecidos = o formato mudou por baixo do tapete; volta
+            // pro texto cru em vez de mostrar um card vazio sem explicação.
+            if (total > 0) {
+                porTurno.push({ turno, total, porTurma: [...porTurma.entries()].map(([turma, itens]) => ({ turma, itens })) });
+            }
+        }
+        return porTurno;
+    }, [apenasAviso, genError]);
+    const totalGeminacoesSoltas = avisosGeminacaoPorTurno.reduce((soma, t) => soma + t.total, 0);
 
     const [isBaixandoTodos, setIsBaixandoTodos] = useState(false);
     const [baixarProgresso, setBaixarProgresso] = useState<{ atual: number; total: number } | null>(null);
@@ -704,12 +750,49 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                             </AlertTitle>
                             <AlertDescription className="mt-4 space-y-6">
                                 {!diagnostico && (
-                                    <div className={cn(
-                                        'text-sm bg-background/90 p-5 rounded-xl border-2 shadow-inner whitespace-pre-line leading-relaxed font-mono',
-                                        apenasAviso ? 'border-amber-300/60 dark:border-amber-900/60' : 'border-destructive/20'
-                                    )}>
-                                        {genError}
-                                    </div>
+                                    avisosGeminacaoPorTurno.length > 0 ? (
+                                        <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <p className="text-sm text-amber-900 dark:text-amber-300 leading-relaxed">
+                                                Nada quebrou: todas as aulas estão na grade, só não coube manter{' '}
+                                                {totalGeminacoesSoltas === 1 ? '1 geminação pedida' : `${totalGeminacoesSoltas} geminações pedidas`}{' '}
+                                                — elas ficaram soltas ao longo da semana em vez de em bloco. Gerar de novo
+                                                (a busca é aleatória) costuma fechar parte; o resto dá pra ajustar direto no Refino.
+                                            </p>
+                                            {avisosGeminacaoPorTurno.map(({ turno, total, porTurma }) => (
+                                                <div
+                                                    key={turno}
+                                                    className="rounded-xl border-2 border-amber-300/60 dark:border-amber-900/60 bg-background/90 p-4 shadow-inner space-y-3"
+                                                >
+                                                    {avisosGeminacaoPorTurno.length > 1 && (
+                                                        <p className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                                                            Turno {turno} — {total} {total === 1 ? 'geminação separada' : 'geminações separadas'}
+                                                        </p>
+                                                    )}
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                                                        {porTurma.map(({ turma, itens }) => (
+                                                            <div key={turma} className="flex flex-wrap items-baseline gap-x-1.5 text-xs leading-relaxed">
+                                                                <span className="font-bold shrink-0">{turma}</span>
+                                                                {itens.map((it, i) => (
+                                                                    <span key={i} className="text-muted-foreground">
+                                                                        {it.componente}{' '}
+                                                                        <span className="text-amber-700 dark:text-amber-400 font-semibold">{it.tamanho}x</span>
+                                                                        {i < itens.length - 1 && <span className="text-muted-foreground/50">,</span>}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className={cn(
+                                            'text-sm bg-background/90 p-5 rounded-xl border-2 shadow-inner whitespace-pre-line leading-relaxed font-mono',
+                                            apenasAviso ? 'border-amber-300/60 dark:border-amber-900/60' : 'border-destructive/20'
+                                        )}>
+                                            {genError}
+                                        </div>
+                                    )
                                 )}
 
                                 {/*
@@ -891,15 +974,25 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                                             <Settings2 className="h-4 w-4" /> Ações Rápidas
                                         </p>
                                         <p className="text-xs text-muted-foreground leading-relaxed">
-                                            Acesse as áreas do sistema recomendadas para corrigir os bloqueios antes de tentar gerar novamente.
+                                            {avisosGeminacaoPorTurno.length > 0
+                                                ? 'A grade já está salva. Ajuste as aulas soltas direto no Refino, ou gere de novo — a busca é aleatória e pode fechar o par.'
+                                                : 'Acesse as áreas do sistema recomendadas para corrigir os bloqueios antes de tentar gerar novamente.'}
                                         </p>
                                         <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-                                            <Link href="/professores" className="flex-1">
-                                                <Button variant="outline" size="sm" className="w-full h-9 text-xs">Menu Professores</Button>
-                                            </Link>
-                                            <Link href="/serie" className="flex-1">
-                                                <Button variant="outline" size="sm" className="w-full h-9 text-xs">Cargas / Séries</Button>
-                                            </Link>
+                                            {avisosGeminacaoPorTurno.length > 0 ? (
+                                                <Link href="/refinodehorario" className="flex-1">
+                                                    <Button variant="outline" size="sm" className="w-full h-9 text-xs">Refino de Horário</Button>
+                                                </Link>
+                                            ) : (
+                                                <>
+                                                    <Link href="/professores" className="flex-1">
+                                                        <Button variant="outline" size="sm" className="w-full h-9 text-xs">Menu Professores</Button>
+                                                    </Link>
+                                                    <Link href="/serie" className="flex-1">
+                                                        <Button variant="outline" size="sm" className="w-full h-9 text-xs">Cargas / Séries</Button>
+                                                    </Link>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -1479,8 +1572,17 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
             <Dialog open={isProcessing && !dialogProgressoOculto} onOpenChange={(aberto) => { if (!aberto) setDialogProgressoOculto(true); }}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader className="items-center text-center space-y-4">
-                        <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center animate-pulse">
-                            <Zap className="h-8 w-8 text-primary" />
+                        {/* Anéis de "radar" atrás do ícone, em vez do pulse plano de antes —
+                            o ícone fica parado e só o entorno pulsa, o que lê como "ainda
+                            trabalhando" sem competir com o número que muda ao lado.
+                            `motion-safe` porque é só decoração: quem pediu menos animação
+                            não perde informação nenhuma sem ela. */}
+                        <div className="relative h-16 w-16 flex items-center justify-center">
+                            <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/20" />
+                            <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/10 [animation-delay:600ms]" />
+                            <div className="relative h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center">
+                                <Zap className="h-8 w-8 text-primary" />
+                            </div>
                         </div>
                         <DialogTitle className="text-xl font-black">Processando Grade Horária</DialogTitle>
                         <DialogDescription className="text-sm">
@@ -1493,25 +1595,32 @@ export function GeradorHorarioClient({ escolaId, turnosAtivos }: GeradorHorarioC
                     </DialogHeader>
 
                     <div className="py-6 space-y-6">
-                        <div className="flex justify-between items-baseline mb-2">
-                            <span className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Tentativa Atual</span>
-                            <span className="text-lg font-black text-primary">
-                                {(geracao?.tentativas ?? 0).toLocaleString()} / {(geracao?.orcamento ?? 0).toLocaleString()}
-                            </span>
+                        <div>
+                            <div className="flex justify-between items-baseline mb-2">
+                                <span className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Tentativa Atual</span>
+                                <span className="text-lg font-black text-primary tabular-nums">
+                                    {(geracao?.tentativas ?? 0).toLocaleString()} / {(geracao?.orcamento ?? 0).toLocaleString()}
+                                </span>
+                            </div>
+                            <Progress value={geracao?.orcamento ? (geracao.tentativas / geracao.orcamento) * 100 : 0} className="h-3" />
+                            <p className="text-[11px] text-muted-foreground text-right mt-1.5 tabular-nums">
+                                {Math.round(progressoRelativo * 100)}% do orçamento de tentativas
+                            </p>
                         </div>
-                        <Progress value={geracao?.orcamento ? (geracao.tentativas / geracao.orcamento) * 100 : 0} className="h-3" />
 
-                        <div className="bg-muted/50 border border-slate-100 dark:border-slate-700 p-4 rounded-xl space-y-2">
+                        <div className="bg-muted/50 border border-slate-100 dark:border-slate-700 p-4 rounded-xl space-y-2 overflow-hidden">
                             <div className="flex items-center gap-2 text-[10px] font-black uppercase text-muted-foreground">
                                 <Loader2 className="h-3 w-3 animate-spin" />
                                 Status do Motor Lógico:
                             </div>
-                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed italic">
-                                {progressoRelativo < 0.15
-                                    ? "Analisando disponibilidade ideal dos professores..."
-                                    : progressoRelativo < 0.70
-                                        ? "Otimizando janelas e horários de planejamento..."
-                                        : "Relaxando restrições secundárias para garantir carga horária total..."}
+                            {/* `key` pela fase, não pelo texto: força o React a remontar o
+                                parágrafo quando a fase muda, e é a remontagem que faz o
+                                fade+slide de entrada tocar de novo a cada troca. */}
+                            <p
+                                key={faseDoMotor}
+                                className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed italic animate-in fade-in slide-in-from-bottom-1 duration-300"
+                            >
+                                {TEXTO_FASE_MOTOR[faseDoMotor]}
                             </p>
                         </div>
                     </div>

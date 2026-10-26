@@ -63,8 +63,8 @@ const formSchema = z.object({
     .record(
       z.string(),
       z.object({
-        max_consecutivas: z.union([z.literal(2), z.literal(3)]),
-        max_no_dia: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+        max_consecutivas: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+        max_no_dia: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
       }),
     )
     .nullable()
@@ -444,6 +444,10 @@ export function EditProfessorSheet({
                                                   key={n}
                                                   type="button"
                                                   size="sm"
+                                                  // Com "no mesmo dia" travado em 1x não há geminação possível
+                                                  // (um bloco de 2 já estoura esse teto) — trava aqui também, em
+                                                  // vez de deixar o clique subir o teto em silêncio.
+                                                  disabled={n > 1 && regra.max_no_dia === 1}
                                                   variant={regra.max_consecutivas === n ? 'default' : 'outline'}
                                                   className="h-8 px-4"
                                                   onClick={() =>
@@ -453,7 +457,7 @@ export function EditProfessorSheet({
                                                         // O teto do dia nunca fica abaixo da emenda: bloco
                                                         // de 3 com teto 2 é pedido impossível, e o motor
                                                         // corrigiria em silêncio — melhor a tela já subir.
-                                                        max_no_dia: Math.max(n, regra.max_no_dia) as 2 | 3 | 4 | 5,
+                                                        max_no_dia: Math.max(n, regra.max_no_dia) as 1 | 2 | 3 | 4,
                                                       }),
                                                     )
                                                   }
@@ -465,6 +469,11 @@ export function EditProfessorSheet({
                                             <p className="text-[11px] text-muted-foreground">
                                               Bloco de aulas seguidas, no mesmo dia.
                                             </p>
+                                            {regra.max_no_dia === 1 && (
+                                              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                                                Travado em 1x: com no máximo 1 aula no dia, não há geminação possível.
+                                              </p>
+                                            )}
                                           </div>
 
                                           <div className="space-y-2">
@@ -494,6 +503,11 @@ export function EditProfessorSheet({
                                             <p className="text-[11px] text-muted-foreground">
                                               Total no dia, somando o bloco e as aulas avulsas.
                                             </p>
+                                            {regra.max_consecutivas > 1 && (
+                                              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                                                Para marcar 1x aqui, desative a geminação (consecutivas em 1x).
+                                              </p>
+                                            )}
                                           </div>
                                         </div>
                                       ) : (

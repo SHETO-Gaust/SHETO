@@ -87,13 +87,14 @@ function montarTurno(id, nome, aulasPorDia, horaBase) {
   };
 }
 
-function montarProfessor(id, restricoes) {
+function montarProfessor(id, restricoes, geminacaoPersonalizada) {
   return {
     id, escola_id: 'e1', cpf: null, nome_completo: id, nome_horario: id,
     turnos_ids: ['t1', 't2'], aulas_disponiveis: 40, aulas_planejamento: 0,
     restricoes: restricoes || {}, livre_docencia: [],
     sem_preferencia_livre_docencia: true,
     componentes: [], turnos: [], created_at: '',
+    geminacao_personalizada: geminacaoPersonalizada || null,
   };
 }
 
@@ -774,6 +775,57 @@ function cenario7() {
     `success=${rApertado.success} com ${rApertado.aulas.length} aula(s) de 3`);
 }
 
+// ─── Cenario 8: geminacao personalizada e TETO, nao piso ────────────────────
+//
+// O defeito relatado por uma escola: um professor combina "no maximo 3 de
+// Matematica por dia" e a grade sai com 4. A causa era o `Math.max` em
+// `tetoDeAulasNoDia` deixando o piso aritmetico (carga semanal / dias do
+// turno) e o default de dia longo (`TETO_DIA_LONGO`) LEVANTAREM o teto
+// pessoal em vez de respeita-lo.
+//
+// 16 aulas de MAT numa semana de 5 dias so cabem, em media, acima de 3 por
+// dia — o que prova que o cenario e genuinamente inviavel sob um teto de 3.
+// E exatamente por isso que ele e o teste certo: o contrato pedido e "o teto
+// pessoal NUNCA e violado, mesmo que a grade fique incompleta por causa
+// disso" — o oposto do comportamento antigo, que preferia fechar a grade a
+// respeitar o combinado.
+function cenario8() {
+  console.log('\n8. geminacao personalizada e TETO, nao piso');
+
+  const grade = [['MAT', 16]];
+  // Dia longo (9 aulas): e onde o default antigo (TETO_DIA_LONGO = 4) mais
+  // se impunha sobre o teto pessoal de 3.
+  const turno = montarTurno('t1', 'Integral', 9, 7);
+  const t2 = montarTurno('t2', 'Vespertino', 5, 13);
+  const geminacaoPersonalizada = { c_MAT: { max_consecutivas: 2, max_no_dia: 3 } };
+  const professores = [montarProfessor('p_MAT', null, geminacaoPersonalizada)];
+  const turmas = [montarTurma(1, 'A', grade, () => 'p_MAT')];
+
+  const r = rodar(turno, turmas, professores, [turno, t2], montarConfig(grade, {}), 800);
+
+  const porDia = indicesPorGrupoEDia(r.aulas).get('turma1|c_MAT|presencial') || new Map();
+  let piorDia = 0;
+  let ondePiorDia = '';
+  for (const [dia, indices] of porDia) {
+    const n = new Set(indices).size;
+    if (n > piorDia) { piorDia = n; ondePiorDia = dia; }
+  }
+
+  checar(
+    `nenhum dia passa dos 3/dia combinados (pior foi ${ondePiorDia || 'nenhum'}=${piorDia})`,
+    piorDia <= 3,
+  );
+
+  // 5 dias x 3/dia = 15 < 16: e matematicamente impossivel alocar as 16 sem
+  // estourar o teto em algum dia. Uma grade completa (16 aulas) so existiria
+  // estourando o combinado — o que a verificacao acima ja provaria falso.
+  // Aqui confirmamos que o motor prefere ficar incompleto a quebrar a regra.
+  checar(
+    `a grade nao força as 16 aulas so' pra fechar (saiu com ${r.aulas.length})`,
+    r.aulas.length <= 15,
+  );
+}
+
 // ─── Execucao ───────────────────────────────────────────────────────────────
 
 console.log('=== verificacao do contrato de geminacao ===');
@@ -785,6 +837,7 @@ cenario4();
 cenario5();
 cenario6();
 cenario7();
+cenario8();
 
 console.log('');
 if (falhas === 0) {

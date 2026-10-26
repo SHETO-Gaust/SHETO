@@ -74,10 +74,10 @@ export type LivreDocenciaItem = {
  * professores da mesma matéria podem sair com regras diferentes na mesma grade.
  */
 export type GeminacaoPersonalizada = {
-    /** Maior emenda de aulas seguidas da disciplina, e tamanho do bloco pedido. */
-    max_consecutivas: 2 | 3;
-    /** Quantas aulas da disciplina cabem no dia, no total. Nunca menor que `max_consecutivas`. */
-    max_no_dia: 2 | 3 | 4 | 5;
+    /** Maior emenda de aulas seguidas da disciplina, e tamanho do bloco pedido. `1` = sem geminação. */
+    max_consecutivas: 1 | 2 | 3;
+    /** Quantas aulas da disciplina cabem no dia, no total — teto, não piso. Nunca menor que `max_consecutivas`. */
+    max_no_dia: 1 | 2 | 3 | 4;
 };
 
 /**

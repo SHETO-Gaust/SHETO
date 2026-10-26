@@ -50,8 +50,8 @@ const upsertProfessorSchema = z.object({
     .record(
       z.string(),
       z.object({
-        max_consecutivas: z.union([z.literal(2), z.literal(3)]),
-        max_no_dia: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+        max_consecutivas: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+        max_no_dia: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
       }),
     )
     .nullable()
