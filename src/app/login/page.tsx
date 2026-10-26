@@ -6,14 +6,20 @@ import { createClient } from '@/lib/db/server';
 import { redirect } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const db = await createClient();
   const {
     data: { user },
   } = await db.auth.getUser();
 
   if (user) {
-    redirect('/dashboard');
+    const { next } = await searchParams;
+    // Ja logado e com destino interno (link de e-mail aberto com sessao ativa): vai direto.
+    redirect(next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/dashboard');
   }
 
   return (

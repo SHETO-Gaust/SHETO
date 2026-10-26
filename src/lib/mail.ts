@@ -552,3 +552,201 @@ export async function sendMassCommunicationEmail(data: MassCommunicationData) {
     return { error: 'Falha no disparo em lote. Verifique o servidor SMTP.' };
   }
 }
+
+// ─── Chamados de suporte ─────────────────────────────────────────────────────
+
+/** Caixa da equipe do SHETO que recebe os chamados. */
+function getEmailSuporte() {
+  return process.env.SUPORTE_EMAIL || 'sheto@seduc.to.gov.br';
+}
+
+const PRIORIDADE_ROTULO: Record<string, { texto: string; cor: string }> = {
+  alta: { texto: 'ALTA', cor: '#dc2626' },
+  media: { texto: 'MÉDIA', cor: '#d97706' },
+  baixa: { texto: 'BAIXA', cor: '#16a34a' },
+};
+
+/** Quebras de linha do texto digitado viram <br> depois de escapar o HTML. */
+function textoParaHtml(texto: string) {
+  return escaparHtml(texto).replace(/\r?\n/g, '<br/>');
+}
+
+export type ChamadoEmailData = {
+  id: string;
+  protocolo: number;
+  tipo: 'duvida' | 'erro';
+  prioridade: 'alta' | 'media' | 'baixa';
+  mensagem: string;
+  userNome: string | null;
+  userEmail: string;
+  escolaNome: string | null;
+  tela: string;
+  conversa: { papel: 'usuario' | 'ia'; texto: string }[];
+  anexos: { nome: string; mime: string; dados: Buffer }[];
+};
+
+export async function sendChamadoEmail(data: ChamadoEmailData) {
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.error('ERRO: Variáveis SMTP não configuradas no .env');
+    return { error: 'Serviço de e-mail não configurado.' };
+  }
+
+  const responderUrl = `${getBaseUrl()}/chamados/${data.id}`;
+  const prioridade = PRIORIDADE_ROTULO[data.prioridade];
+  const tipo = data.tipo === 'erro' ? 'Relato de erro' : 'Dúvida';
+
+  const conversaHtml = data.conversa.length
+    ? data.conversa.map(m => `
+          <div style="margin: 6px 0; padding: 8px 12px; border-radius: 6px; font-size: 13px; ${m.papel === 'ia' ? 'background:#eef2ff;' : 'background:#fff;border:1px solid #e2e8f0;'}">
+            <strong style="font-size: 11px; color: #64748b;">${m.papel === 'ia' ? 'ASSISTENTE (IA)' : 'USUÁRIO'}</strong><br/>
+            ${textoParaHtml(m.texto)}
+          </div>`).join('')
+    : '<p style="font-size: 13px; color: #64748b;"><em>O chamado foi aberto sem conversa com a IA.</em></p>';
+
+  const anexosHtml = data.anexos.length
+    ? `<p style="font-size: 13px; color: #475569;">📎 ${data.anexos.length} foto(s) em anexo neste e-mail.</p>`
+    : '';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'PT Sans', sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 640px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .content { background-color: #f8fafc; padding: 20px; border-radius: 8px; }
+        .info { border-left: 4px solid #1e3a8a; padding-left: 15px; margin: 16px 0; font-size: 14px; }
+        .mensagem { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; margin: 12px 0; }
+        .button { display: inline-block; padding: 14px 28px; background-color: #1e3a8a; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+        .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 25px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2 style="color: #1e3a8a; margin: 0 0 4px;">Chamado #${data.protocolo} — ${tipo}</h2>
+        <span style="display: inline-block; padding: 3px 12px; border-radius: 999px; background: ${prioridade.cor}; color: #fff; font-size: 12px; font-weight: bold;">
+          PRIORIDADE ${prioridade.texto}
+        </span>
+
+        <div class="content" style="margin-top: 16px;">
+          <div class="info">
+            <p style="margin: 0;"><strong>Usuário:</strong> ${escaparHtml(data.userNome || 'Não informado')}</p>
+            <p style="margin: 0;"><strong>E-mail:</strong> ${escaparHtml(data.userEmail)}</p>
+            <p style="margin: 0;"><strong>Escola:</strong> ${escaparHtml(data.escolaNome || 'Sem escola selecionada')}</p>
+            <p style="margin: 0;"><strong>Tela:</strong> ${escaparHtml(data.tela)}</p>
+          </div>
+
+          <p style="margin: 16px 0 0; font-weight: bold;">Mensagem</p>
+          <div class="mensagem">${textoParaHtml(data.mensagem)}</div>
+          ${anexosHtml}
+
+          <div style="text-align: center;">
+            <a href="${responderUrl}" class="button">Responder chamado</a>
+          </div>
+
+          <p style="margin: 16px 0 4px; font-weight: bold;">Conversa com a IA antes da abertura</p>
+          ${conversaHtml}
+        </div>
+
+        <div class="footer">
+          <p>Suporte do Sistema de Horário Escolar — SEDUC/TO</p>
+          <p style="margin: 4px 0 0;">A resposta dada pelo botão aparece para o usuário dentro do sistema e por e-mail.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const resumo = data.mensagem.replace(/\s+/g, ' ').slice(0, 60);
+
+  try {
+    await transporter.sendMail({
+      from: getFrom(),
+      to: getEmailSuporte(),
+      // "Responder" no cliente de e-mail vai direto para quem abriu o chamado.
+      replyTo: data.userEmail,
+      subject: `[SHE Suporte][${prioridade.texto}] #${data.protocolo} — ${tipo}: ${resumo}`,
+      html,
+      attachments: data.anexos.map(a => ({ filename: a.nome, content: a.dados, contentType: a.mime })),
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao enviar e-mail do chamado:', error);
+    return { error: 'Falha no envio do e-mail do chamado.' };
+  }
+}
+
+export type RespostaChamadoEmailData = {
+  to: string;
+  nome: string | null;
+  protocolo: number;
+  mensagem: string;
+  resposta: string;
+  correcao: string | null;
+};
+
+export async function sendRespostaChamadoEmail(data: RespostaChamadoEmailData) {
+  const transporter = getTransporter();
+  if (!transporter) return { error: 'Serviço de e-mail não configurado.' };
+
+  const correcaoHtml = data.correcao
+    ? `
+          <p style="margin: 16px 0 0; font-weight: bold;">O que foi corrigido</p>
+          <div class="bloco" style="border-left: 4px solid #16a34a;">${textoParaHtml(data.correcao)}</div>`
+    : '';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'PT Sans', sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .content { background-color: #f8fafc; padding: 20px; border-radius: 8px; }
+        .bloco { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; margin: 8px 0; }
+        .button { display: inline-block; padding: 12px 24px; background-color: #1e3a8a; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 20px; }
+        .footer { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 25px; border-top: 1px solid #f1f5f9; padding-top: 15px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2 style="color: #1e3a8a; margin: 0;">Seu chamado #${data.protocolo} foi respondido</h2>
+        <p style="color: #64748b; margin-top: 4px;">Sistema de Horário Escolar (SHE)</p>
+
+        <div class="content">
+          <p>Olá, <strong>${escaparHtml(data.nome || 'Usuário(a)')}</strong>!</p>
+          <p style="margin: 16px 0 0; font-weight: bold;">Você escreveu</p>
+          <div class="bloco" style="color: #64748b;">${textoParaHtml(data.mensagem)}</div>
+
+          <p style="margin: 16px 0 0; font-weight: bold;">Resposta da equipe do SHE</p>
+          <div class="bloco" style="border-left: 4px solid #1e3a8a;">${textoParaHtml(data.resposta)}</div>
+          ${correcaoHtml}
+
+          <div style="text-align: center;">
+            <a href="${getBaseUrl()}/dashboard" class="button">Abrir o SHE</a>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>Secretaria da Educação do Estado do Tocantins</p>
+          <p style="margin: 4px 0 0;">Se precisar de mais ajuda, abra um novo chamado pelo botão "Suporte" no sistema.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: getFrom(),
+      to: data.to,
+      subject: `Resposta ao seu chamado #${data.protocolo} - SHE`,
+      html,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Erro ao enviar resposta do chamado:', error);
+    return { error: 'Falha no envio do e-mail de resposta.' };
+  }
+}

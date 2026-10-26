@@ -21,6 +21,8 @@ import Link from 'next/link';
 import { SchoolSelector } from '@/components/school-selector';
 import { TutorialProvider } from '@/components/tutorial/tutorial-provider';
 import { TutorialButton } from '@/components/tutorial/tutorial-button';
+import { SuporteButton } from '@/components/suporte/suporte-button';
+import { RespostaChamadoModal } from '@/components/suporte/resposta-chamado-modal';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/login/actions';
@@ -48,6 +50,8 @@ const moduleMap: { [key: string]: string } = {
     '/serie': 'serie',
     '/auditoria': 'auditoria',
     '/substituicoes': 'horarios',
+    // Nenhum perfil recebe este modulo: so admin (bypass) entra.
+    '/chamados': 'chamados',
 };
 
 export default async function AppLayout({
@@ -64,7 +68,10 @@ export default async function AppLayout({
   // Se não houver usuário, manda para o login. 
   // Isso não gera loop porque o login não redireciona usuários nulos.
   if (!user) {
-    return redirect('/login');
+    // Leva o caminho pedido para o login devolver a pessoa ao mesmo lugar -
+    // e o que faz o botao "Responder chamado" do e-mail funcionar deslogado.
+    const pedido = (await headers()).get('x-next-url');
+    return redirect(pedido && pedido !== '/dashboard' ? `/login?next=${encodeURIComponent(pedido)}` : '/login');
   }
 
   const { data: profileData } = await db
@@ -182,7 +189,11 @@ export default async function AppLayout({
             <SchoolSelector userProfile={userProfile as any} allEscolas={allEscolas} />
           </div>
           <div className="ml-auto flex items-center gap-4 shrink-0">
-            <TutorialButton />
+            <div className="flex items-center gap-1">
+              <TutorialButton />
+              <SuporteButton />
+            </div>
+            <RespostaChamadoModal />
             <UserNav user={user} profile={userProfile as any} />
           </div>
         </header>

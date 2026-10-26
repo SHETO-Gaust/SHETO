@@ -12,6 +12,8 @@ export function AuthForm() {
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
+  // Pagina pedida antes do login (ex.: link "Responder chamado" do e-mail). O servidor valida.
+  const next = searchParams.get('next') ?? '';
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,6 +34,7 @@ export function AuthForm() {
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
+        <input type="hidden" name="next" value={next} />
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
           <Input

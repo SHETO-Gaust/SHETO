@@ -16,6 +16,23 @@ deixa de soar como liberação de acesso.
 
 ### Adicionado
 
+- **Suporte com IA e chamados.** Botão "Suporte" no topo, ao lado do tutorial,
+  abre um chat com o Gemini, instruído com os textos dos tutoriais de cada
+  tela. A IA tenta orientar até 3 vezes; em relato de erro (ou na 3ª
+  tentativa sem sucesso) oferece abrir chamado: mensagem, prioridade
+  alta/média/baixa e até 3 fotos (comprimidas no navegador; Ctrl+V cola um
+  print). O chamado vai por e-mail para `sheto@seduc.to.gov.br` (ou
+  `SUPORTE_EMAIL`) com o botão "Responder chamado", que leva à página
+  `/chamados/[id]` — só admin. A resposta (e a correção aplicada, opcional)
+  aparece uma única vez num modal para quem abriu, e também por e-mail. Lista
+  de chamados em Gestão → Chamados. Chaves em `GEMINI_API_KEY_1`, `_2`, `_3`,
+  usadas em rodízio; modelos em cadeia (`gemini-3.8-flash` → `3.5-flash` →
+  `3.1-flash-lite`, trocável por `GEMINI_MODELOS`), porque o 2.5 não aceita
+  mais chave nova e o 3.8 passa períodos em "alta demanda". Modelo que falha
+  vai para o fim da fila por 2 minutos. Sem chave ou com tudo fora, o chat
+  oferece o chamado direto. Exige a migration `20261026_chamados_suporte.sql`.
+- **Login devolve à página pedida** (`/login?next=...`), para o link do e-mail
+  funcionar com a sessão expirada.
 - **Regional do usuário** (`profiles.regional`). Usuário com escola herda a
   regional da escola (as actions gravam a dela, não a digitada); sem escola —
   admin da sede, equipe de regional — vale a informada no cadastro. Coluna nova
