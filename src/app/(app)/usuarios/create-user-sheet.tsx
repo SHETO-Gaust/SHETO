@@ -123,6 +123,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
         const result = await createUser({
             ...data,
             ue: isAdmin ? null : selectedEscola,
+            regional: selectedRegional || null,
             escolas_favoritas: isAdmin ? escolasFavoritas : [],
         } as any);
         setLoading(false);
@@ -229,29 +230,34 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                             )}
                         />
 
+                        <div className="space-y-2">
+                            <Label>Regional</Label>
+                            <Select
+                                onValueChange={(value) => {
+                                    const regional = value === '_todas' ? '' : value;
+                                    setSelectedRegional(regional);
+                                    const escola = allEscolas.find(e => e.id === selectedEscola);
+                                    if (escola && escola.regional !== regional) setSelectedEscola(null);
+                                }}
+                                value={selectedRegional || '_todas'}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Sem regional" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="_todas">{isAdmin ? 'Sem regional' : 'Sem regional (todas as escolas)'}</SelectItem>
+                                    {regionais.map(regional => (
+                                        <SelectItem key={regional} value={regional!}>{regional}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                {isAdmin ? 'Regional à qual o administrador responde, se houver.' : 'Ao escolher a escola, a regional passa a ser a dela.'}
+                            </p>
+                        </div>
+
                         {!isAdmin && (
                             <>
-                                <div className="space-y-2">
-                                    <Label>Regional</Label>
-                                    <Select
-                                        onValueChange={(value) => {
-                                            setSelectedRegional(value === '_todas' ? '' : value);
-                                            setSelectedEscola(null);
-                                        }}
-                                        value={selectedRegional || '_todas'}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Todas as regionais" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="_todas">Todas as regionais</SelectItem>
-                                            {regionais.map(regional => (
-                                                <SelectItem key={regional} value={regional!}>{regional}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
                                 <div className="space-y-2">
                                     <Label>Escola Vinculada</Label>
                                     <Popover modal open={escolaPopoverOpen} onOpenChange={setEscolaPopoverOpen}>
@@ -290,6 +296,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                                                                 value={escola.escolar}
                                                                 onSelect={() => {
                                                                     setSelectedEscola(escola.id);
+                                                                    if (escola.regional) setSelectedRegional(escola.regional);
                                                                     setEscolaPopoverOpen(false);
                                                                 }}
                                                             >

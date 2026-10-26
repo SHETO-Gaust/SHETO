@@ -13,6 +13,8 @@ export default async function UsuariosPage() {
         .select('*')
         .order('escolar', { ascending: true });
     const allEscolas = allEscolasData as Escola[] || [];
+    // Para a lista nao oferecer "Excluir"/"Suspender" na propria conta.
+    const { data: { user: currentUser } } = await db.auth.getUser();
 
 
     return (
@@ -27,7 +29,7 @@ export default async function UsuariosPage() {
             </Card>
             <Card>
                  <CardContent className="pt-6">
-                    <UsersClient initialUsers={users} allEscolas={allEscolas} />
+                    <UsersClient initialUsers={users} allEscolas={allEscolas} currentUserId={currentUser?.id ?? null} />
                  </CardContent>
             </Card>
         </div>

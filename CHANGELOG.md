@@ -8,6 +8,72 @@ O projeto ainda não tem versões publicadas; esta seção cobre o que a branch
 
 ---
 
+## [Não lançado] — `All_In`, rodada de 26/10/2026
+
+Gestão de usuários para o lançamento oficial: regional por usuário, busca e
+filtros, exclusão e cadastro em lote por planilha. O e-mail de boas-vindas
+deixa de soar como liberação de acesso.
+
+### Adicionado
+
+- **Regional do usuário** (`profiles.regional`). Usuário com escola herda a
+  regional da escola (as actions gravam a dela, não a digitada); sem escola —
+  admin da sede, equipe de regional — vale a informada no cadastro. Coluna nova
+  na lista e campo nas telas de criar e editar, para todas as funções.
+- **Busca e filtros na aba Usuários.** Busca por nome, regional, escola ou
+  e-mail, sem diferenciar acento nem maiúscula; filtros por regional (inclusive
+  "Sem regional"), função e status, com contador e "Limpar filtros".
+- **Menu de ações (⋯)** em cada linha: Permissões, Suspender/Ativar e
+  **Excluir usuário**. A exclusão pede confirmação e apaga conta (`auth.users`)
+  e perfil numa transação só — sem FK entre as duas tabelas, apagar um lado
+  deixaria login sem perfil. Horários e cadastros da escola não são tocados.
+- **Cadastro em lote por planilha** (.xlsx/.xls/.csv, até 500 linhas).
+  Modelo para baixar com aba de instruções e a lista de regionais válidas;
+  prévia validada no servidor linha a linha (e-mail duplicado no banco ou na
+  própria planilha, escola por INEP ou nome, regional, módulos, senha curta);
+  linhas com erro são puladas, as demais importadas. Senha em branco é gerada
+  pelo sistema; o envio do e-mail é opcional e o relatório final para baixar
+  traz as senhas geradas. Escolas favoritas de admin não entram pela planilha.
+
+### Alterado
+
+- **E-mail de boas-vindas** vira boas-vindas ao SHETO (assunto "Bem-vindo(a) ao
+  SHETO - Sistema de Horário Escolar"), com uma linha sobre o que o sistema faz.
+  Quem não tem escola não recebe mais o bloco fictício "Administração Central /
+  Seduc Sede" — só a regional, se houver. Campos passam a ser escapados no
+  HTML, já que agora podem vir de planilha.
+
+### Corrigido
+
+- `createUser` engolia falha ao gravar o perfil e respondia sucesso: a conta
+  existia, o usuário logava e não via nada. Agora a conta é desfeita e o erro
+  aparece.
+- E-mail já cadastrado chegava como "Erro no Auth: …" — o shim responde em
+  português e a action só procurava `already registered`.
+- O servidor passa a recusar que o admin exclua ou suspenda a própria conta
+  (antes só dependia de ninguém clicar).
+
+### ⚠️ Ao atualizar
+
+- **Rodar a migration antes de subir o código:**
+  `node scripts/aplicar-migration.js 20261026_profiles_regional.sql`.
+  Sem a coluna, criar e editar usuário falham (o `update`/`upsert` grava
+  `regional`). A migration já preenche a regional de quem tem escola.
+
+### Verificação
+
+- Leitura e validação da planilha testadas contra cabeçalhos variados
+  ("E-mail", "Perfil", "INEP"), linha de título acima do cabeçalho, INEP como
+  número, acento/caixa na regional e no nome da escola, duplicata no banco e
+  dentro do arquivo, linha vazia, admin com escola e módulos.
+- Select do shim conferido no banco local: `regional` e o join
+  `escolas(id, escolar, regional)` voltam preenchidos.
+- Build de produção (`scripts/build-check.js`) compila. Typecheck em 33 erros,
+  todos pré-existentes e fora dos arquivos tocados (eram 37).
+- **Não testado no navegador** — sem conta de teste local para logar.
+
+---
+
 ## [Não lançado] — `All_In`, rodada de 14/09/2026
 
 Commit `f776ff5`. Aula Não Presencial passa a poder ficar dentro do próprio

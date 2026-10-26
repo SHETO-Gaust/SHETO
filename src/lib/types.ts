@@ -15,6 +15,8 @@ export type Profile = {
   role?: ProfileRole;
   modules?: string[];
   ue?: string | null; // uuid da escola
+  /** Com escola, espelha escolas.regional; sem escola (admin, equipe de regional), e a informada no cadastro. */
+  regional?: string | null;
   escolas_favoritas?: string[];
   /** IDs dos tutoriais de tela ja concluidos. Vazio = ainda sera obrigado a ver. */
   tutoriais_vistos?: string[];

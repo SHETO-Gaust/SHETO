@@ -71,12 +71,8 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
             setSelectedRole(user.role || 'user');
             setSelectedSchool(user.ue);
             setEscolasFavoritas((user.escolas_favoritas || []).map(String));
-            const userSchool = allEscolas.find(e => e.id === user.ue);
-            if (userSchool?.regional) {
-                setSelectedRegional(userSchool.regional);
-            } else {
-                setSelectedRegional('');
-            }
+            const userSchool = allEscolas.find(e => String(e.id) === String(user.ue));
+            setSelectedRegional(userSchool?.regional || user.regional || '');
             setFavRegional('');
         }
     }, [user, allEscolas]);
@@ -96,7 +92,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
 
     const handleSave = async () => {
         setLoading(true);
-        const result = await updateUserPermissions(user.id, selectedModules, selectedRole, selectedSchool, escolasFavoritas);
+        const result = await updateUserPermissions(user.id, selectedModules, selectedRole, selectedSchool, escolasFavoritas, selectedRegional || null);
         setLoading(false);
 
         if (result.error) {
@@ -110,7 +106,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                 title: 'Permissões Atualizadas!',
                 description: `As permissões de ${user.name || user.email} foram salvas.`,
             });
-            onUserUpdate({ ...user, modules: selectedModules, role: selectedRole, ue: selectedSchool, escolas_favoritas: escolasFavoritas });
+            onUserUpdate({ ...user, modules: selectedModules, role: selectedRole, ue: selectedSchool, regional: selectedRegional || null, escolas_favoritas: escolasFavoritas });
             setIsOpen(false);
         }
     };
@@ -151,25 +147,31 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                         <p className="text-xs text-muted-foreground">Administradores têm acesso a todos os módulos.</p>
                     </div>
 
+                    <div className="space-y-2">
+                        <Label>Regional</Label>
+                        <Select value={selectedRegional || '_todas'} onValueChange={(value) => {
+                            const regional = value === '_todas' ? '' : value;
+                            setSelectedRegional(regional);
+                            const escola = allEscolas.find(e => String(e.id) === String(selectedSchool));
+                            if (escola && escola.regional !== regional) setSelectedSchool(null);
+                        }}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Sem regional" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="_todas">{isAdmin ? 'Sem regional' : 'Sem regional (todas as escolas)'}</SelectItem>
+                                {regionais.map(regional => (
+                                    <SelectItem key={regional} value={regional!}>{regional}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            {isAdmin ? 'Regional à qual o administrador responde, se houver.' : 'Ao escolher a escola, a regional passa a ser a dela.'}
+                        </p>
+                    </div>
+
                     {!isAdmin && (
                         <>
-                            <div className="space-y-2">
-                                <Label>Regional</Label>
-                                <Select value={selectedRegional} onValueChange={(value) => {
-                                    setSelectedRegional(value);
-                                    setSelectedSchool(null);
-                                }}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Selecione uma regional" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {regionais.map(regional => (
-                                            <SelectItem key={regional} value={regional!}>{regional}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
                             <div className="space-y-2">
                                 <Label>Escola Vinculada</Label>
                                 <Popover modal open={escolaPopoverOpen} onOpenChange={setEscolaPopoverOpen}>
@@ -208,6 +210,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                                                             value={escola.escolar}
                                                             onSelect={() => {
                                                                 setSelectedSchool(escola.id);
+                                                                if (escola.regional) setSelectedRegional(escola.regional);
                                                                 setEscolaPopoverOpen(false);
                                                             }}
                                                         >

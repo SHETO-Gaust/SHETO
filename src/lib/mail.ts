@@ -45,21 +45,49 @@ export type WelcomeEmailData = {
   to: string;
   name: string;
   password: string;
-  schoolName: string;
-  regional: string;
-  city: string;
-  inep: string;
+  /** Nulo quando o usuario nao tem escola vinculada (admin, equipe de regional). */
+  schoolName: string | null;
+  regional: string | null;
+  city: string | null;
+  inep: string | null;
 };
+
+/** Nome, escola e regional chegam de formulario e de planilha: nada entra cru no HTML. */
+function escaparHtml(texto: string) {
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 export async function sendWelcomeEmail(data: WelcomeEmailData) {
   const transporter = getTransporter();
-  
+
   if (!transporter) {
-    console.error('ERRO DE CONFIGURAÇÃO: GMAIL_EMAIL ou GMAIL_APP_PASSWORD não definidos no .env');
+    console.error('ERRO DE CONFIGURAÇÃO: SMTP_HOST, SMTP_USER ou SMTP_PASS não definidos no .env');
     return { error: 'Serviço de e-mail não configurado. Verifique as credenciais no .env' };
   }
 
   const loginUrl = `${getBaseUrl()}/login`;
+  const e = (v: string | null | undefined, padrao = 'Não informado') => escaparHtml(v || padrao);
+
+  const vinculo = data.schoolName
+    ? `
+          <p>Seu acesso está vinculado à seguinte unidade escolar:</p>
+          <div class="school-info">
+            <p style="margin: 0;"><strong>Escola:</strong> ${e(data.schoolName)}</p>
+            <p style="margin: 0;"><strong>Regional:</strong> ${e(data.regional, 'Não informada')}</p>
+            <p style="margin: 0;"><strong>Município:</strong> ${e(data.city)}</p>
+            <p style="margin: 0;"><strong>INEP:</strong> ${e(data.inep, 'N/A')}</p>
+          </div>`
+    : data.regional
+      ? `
+          <div class="school-info">
+            <p style="margin: 0;"><strong>Regional:</strong> ${e(data.regional)}</p>
+          </div>`
+      : '';
 
   const html = `
     <!DOCTYPE html>
@@ -80,28 +108,21 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
     <body>
       <div class="container">
         <div class="header">
-          <h1 style="color: #1e3a8a; margin: 0;">Bem-vindo(a) ao SHE</h1>
+          <h1 style="color: #1e3a8a; margin: 0;">Bem-vindo(a) ao SHETO</h1>
           <p style="margin-top: 5px;">Sistema de Horário Escolar - SEDUC Tocantins</p>
         </div>
-        
+
         <div class="content">
-          <p>Olá, <strong>${data.name}</strong>!</p>
-          <p>É com satisfação que informamos que seu acesso ao sistema <strong>SHE</strong> foi liberado.</p>
-          
-          <p>Você foi vinculado(a) à seguinte unidade escolar:</p>
-          
-          <div class="school-info">
-            <p style="margin: 0;"><strong>Escola:</strong> ${data.schoolName}</p>
-            <p style="margin: 0;"><strong>Regional:</strong> ${data.regional}</p>
-            <p style="margin: 0;"><strong>Município:</strong> ${data.city}</p>
-            <p style="margin: 0;"><strong>INEP:</strong> ${data.inep}</p>
-          </div>
+          <p>Olá, <strong>${e(data.name, 'Usuário(a)')}</strong>!</p>
+          <p>Seja bem-vindo(a) ao <strong>SHETO</strong>, o Sistema de Horário Escolar da Secretaria da Educação do Tocantins. Sua conta já está ativa.</p>
+          <p>No sistema você cadastra turnos, componentes curriculares, professores e turmas, gera o quadro de horários da unidade e faz os ajustes até chegar à versão final.</p>
+          ${vinculo}
 
           <p>Utilize as credenciais abaixo para seu primeiro acesso:</p>
-          
+
           <div class="credentials">
-            <p style="margin: 0;"><strong>Login (E-mail):</strong> ${data.to}</p>
-            <p style="margin: 0;"><strong>Senha Temporária:</strong> ${data.password}</p>
+            <p style="margin: 0;"><strong>Login (E-mail):</strong> ${e(data.to)}</p>
+            <p style="margin: 0;"><strong>Senha Temporária:</strong> ${e(data.password)}</p>
           </div>
 
           <div style="text-align: center;">
@@ -110,11 +131,12 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
         </div>
 
         <p style="font-size: 14px; color: #475569;">
-          <em>Recomendamos que você altere sua senha logo após o primeiro acesso clicando no seu perfil.</em>
+          <em>Por segurança, altere sua senha logo após o primeiro acesso, clicando no seu perfil.</em>
         </p>
 
         <div class="footer">
           <p>Secretaria da Educação do Estado do Tocantins</p>
+          <p style="margin: 4px 0 0;">Não responda a este e-mail.</p>
         </div>
       </div>
     </body>
@@ -125,7 +147,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData) {
     await transporter.sendMail({
       from: getFrom(),
       to: data.to,
-      subject: 'Acesso Liberado - Sistema de Horário Escolar (SHE)',
+      subject: 'Bem-vindo(a) ao SHETO - Sistema de Horário Escolar',
       html: html,
     });
     return { success: true };
