@@ -17,6 +17,7 @@ import {
   Wand2,
   ShieldCheck,
   Building2,
+  LifeBuoy,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -42,6 +43,8 @@ const allLinks = [
   { href: '/auditoria', label: 'Auditoria de Dados', icon: ShieldCheck, module: 'auditoria', group: 'management' },
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
   { href: '/unidades', label: 'Unidades', icon: Building2, module: 'unidades', group: 'management' },
+  // Modulo que nenhum perfil recebe: so admin ve, pelo bypass de hasAccess.
+  { href: '/chamados', label: 'Chamados', icon: LifeBuoy, module: 'chamados', group: 'management' },
 ];
 
 const linkGroups = [

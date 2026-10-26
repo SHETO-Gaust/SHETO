@@ -12,6 +12,15 @@ const nextConfig: NextConfig = {
    * pasta e deixa o dev server em paz. Sem a variável, nada muda.
    */
   distDir: process.env.NEXT_DIST_DIR || '.next',
+  experimental: {
+    serverActions: {
+      /*
+       * O padrão é 1 MB. Um chamado de suporte leva até 3 fotos em base64 —
+       * já comprimidas no navegador, mas o servidor aceita até 3 MB cada.
+       */
+      bodySizeLimit: '15mb',
+    },
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
