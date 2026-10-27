@@ -7,14 +7,6 @@
  */
 import type { Escola, ProfileRole } from '@/lib/types';
 
-/** Mesmos modulos da tela de usuarios (users-client.tsx). */
-export const MODULOS_USUARIO = [
-  { id: 'dashboard', label: 'Painel' },
-  { id: 'dados-horario', label: 'Dados do Horário' },
-  { id: 'horarios', label: 'Horários' },
-  { id: 'usuarios', label: 'Gestão de Usuários' },
-] as const;
-
 /** Cabecalhos do modelo, na ordem em que aparecem na planilha. */
 export const COLUNAS_LOTE = {
   nome: 'Nome',
@@ -23,10 +15,13 @@ export const COLUNAS_LOTE = {
   funcao: 'Função',
   regional: 'Regional',
   escola: 'Escola (INEP ou nome)',
-  modulos: 'Módulos',
 } as const;
 
-export type CampoLote = keyof typeof COLUNAS_LOTE;
+/**
+ * `modulos` saiu do modelo (o acesso agora vem so da Funcao), mas planilhas
+ * antigas ainda trazem a coluna: ela e lida so para avisar que foi ignorada.
+ */
+export type CampoLote = keyof typeof COLUNAS_LOTE | 'modulos';
 
 /** Linha crua, como saiu da planilha: tudo texto. */
 export type LinhaLoteBruta = Partial<Record<CampoLote, string>> & { linha: number };
@@ -41,7 +36,6 @@ export type LinhaLoteResolvida = {
   ue: string | null;
   escolaNome: string | null;
   regional: string | null;
-  modules: string[];
   erros: string[];
   avisos: string[];
 };
@@ -105,18 +99,6 @@ export function linhasDaPlanilha(matriz: unknown[][]): { linhas: LinhaLoteBruta[
   return { linhas };
 }
 
-function resolverModulos(texto: string | undefined, erros: string[]): string[] {
-  const modulos = new Set<string>(['dashboard']);
-  for (const parte of String(texto ?? '').split(/[,;|\n]/)) {
-    const p = normalizar(parte);
-    if (!p) continue;
-    const modulo = MODULOS_USUARIO.find(m => normalizar(m.id) === p || normalizar(m.label) === p);
-    if (modulo) modulos.add(modulo.id);
-    else erros.push(`Módulo desconhecido: "${parte.trim()}".`);
-  }
-  return [...modulos];
-}
-
 function resolverFuncao(texto: string | undefined, erros: string[]): ProfileRole {
   const f = normalizar(texto);
   if (!f || f === 'user' || f === 'usuario' || f === 'usuario(a)') return 'user';
@@ -149,7 +131,11 @@ export function resolverLinhaDeUsuario(
   if (senha && senha.length < 6) erros.push('A senha deve ter no mínimo 6 caracteres.');
 
   const role = resolverFuncao(bruta.funcao, erros);
-  const modules = resolverModulos(bruta.modulos, erros);
+  if (bruta.modulos) {
+    avisos.push(
+      'A coluna Módulos não é mais usada e foi ignorada: usuário acessa tudo, menos a Gestão. Para dar acesso à Gestão, use a função Administrador.'
+    );
+  }
 
   let ue: string | null = null;
   let escolaNome: string | null = null;
@@ -193,10 +179,6 @@ export function resolverLinhaDeUsuario(
     ue = null;
     escolaNome = null;
   }
-  if (role === 'admin' && bruta.modulos) {
-    avisos.push('Administrador acessa todos os módulos; a coluna Módulos foi ignorada.');
-  }
-
   return {
     linha: bruta.linha,
     nome: String(bruta.nome ?? '').trim(),
@@ -206,7 +188,6 @@ export function resolverLinhaDeUsuario(
     ue,
     escolaNome,
     regional,
-    modules,
     erros,
     avisos,
   };

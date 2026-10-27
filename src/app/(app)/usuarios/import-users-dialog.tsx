@@ -27,7 +27,6 @@ import { Download, Upload, Loader2, AlertTriangle, CheckCircle2, XCircle, FileSp
 import {
   COLUNAS_LOTE,
   LIMITE_LINHAS_LOTE,
-  MODULOS_USUARIO,
   linhasDaPlanilha,
   type LinhaLoteBruta,
   type LinhaLoteResolvida,
@@ -42,8 +41,6 @@ type ImportUsersDialogProps = {
   regionais: string[];
   onImported?: () => void;
 };
-
-const rotuloModulo = (id: string) => MODULOS_USUARIO.find(m => m.id === id)?.label ?? id;
 
 export function ImportUsersDialog({ isOpen, setIsOpen, regionais, onImported }: ImportUsersDialogProps) {
   const { toast } = useToast();
@@ -86,15 +83,14 @@ export function ImportUsersDialog({ isOpen, setIsOpen, regionais, onImported }: 
       [COLUNAS_LOTE.nome, 'Não', 'Nome completo do usuário.'],
       [COLUNAS_LOTE.email, 'Sim', 'E-mail de login. Não pode já existir no sistema nem se repetir na planilha.'],
       [COLUNAS_LOTE.senha, 'Não', 'Mínimo de 6 caracteres. Se ficar em branco, o sistema gera uma senha e a envia no e-mail de boas-vindas.'],
-      [COLUNAS_LOTE.funcao, 'Não', '"Usuário" (padrão) ou "Administrador".'],
+      [COLUNAS_LOTE.funcao, 'Não', '"Usuário" (padrão): acessa tudo, menos a Gestão (usuários, auditoria, unidades e chamados). "Administrador": acessa tudo.'],
       [COLUNAS_LOTE.regional, 'Não', 'Uma das regionais listadas abaixo. Se a escola for informada, vale a regional da escola.'],
       [COLUNAS_LOTE.escola, 'Não', 'Código INEP da escola (recomendado) ou o nome exatamente como está cadastrado.'],
-      [COLUNAS_LOTE.modulos, 'Não', `Separados por vírgula: ${MODULOS_USUARIO.filter(m => m.id !== 'dashboard').map(m => m.label).join(', ')}. O Painel é sempre incluído. Administradores acessam tudo.`],
       [],
       ['Exemplos'],
       cabecalho,
-      ['Maria da Silva', 'maria.silva@seduc.to.gov.br', '', 'Usuário', '', '17000000', 'Dados do Horário, Horários'],
-      ['João Souza', 'joao.souza@seduc.to.gov.br', '', 'Administrador', regionais[0] ?? 'PALMAS', '', ''],
+      ['Maria da Silva', 'maria.silva@seduc.to.gov.br', '', 'Usuário', '', '17000000'],
+      ['João Souza', 'joao.souza@seduc.to.gov.br', '', 'Administrador', regionais[0] ?? 'PALMAS', ''],
       [],
       ['Regionais válidas'],
       ...regionais.map(r => [r]),
@@ -245,7 +241,6 @@ export function ImportUsersDialog({ isOpen, setIsOpen, regionais, onImported }: 
                     <TableHead>Função</TableHead>
                     <TableHead>Regional</TableHead>
                     <TableHead>Escola</TableHead>
-                    <TableHead>Módulos</TableHead>
                     <TableHead>Situação</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -260,7 +255,6 @@ export function ImportUsersDialog({ isOpen, setIsOpen, regionais, onImported }: 
                       <TableCell className="text-xs">{l.role === 'admin' ? 'Administrador' : 'Usuário'}</TableCell>
                       <TableCell className="text-xs uppercase">{l.regional || '—'}</TableCell>
                       <TableCell className="max-w-[220px] truncate text-xs uppercase" title={l.escolaNome ?? ''}>{l.escolaNome || '—'}</TableCell>
-                      <TableCell className="text-xs">{l.role === 'admin' ? 'Todos' : l.modules.map(rotuloModulo).join(', ')}</TableCell>
                       <TableCell className="max-w-[260px] text-xs">
                         {l.erros.length > 0 ? (
                           <span className="flex gap-1 text-destructive"><XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{l.erros.join(' ')}</span>

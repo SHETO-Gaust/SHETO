@@ -40,13 +40,6 @@ import { toggleUserStatus, deleteUser, getUsers } from './actions';
 import { useToast } from '@/hooks/use-toast';
 import { normalizar } from '@/lib/usuarios-lote';
 
-const allModules = [
-  { id: 'dashboard', label: 'Painel', description: 'Acesso padrão ao painel inicial.' },
-  { id: 'dados-horario', label: 'Dados do Horário', description: 'Permite gerenciar Turnos, Ensino, Disciplinas, Professores, Séries e Turmas.' },
-  { id: 'horarios', label: 'Horários', description: 'Permite gerar horários e visualizar relatórios.' },
-  { id: 'usuarios', label: 'Gestão de Usuários', description: 'Permite gerenciar usuários e suas permissões.' },
-];
-
 const TODOS = '_todos';
 const SEM_REGIONAL = '_sem';
 
@@ -323,7 +316,6 @@ export function UsersClient({ initialUsers, allEscolas, currentUserId }: { initi
                     isOpen={isEditSheetOpen}
                     setIsOpen={setIsEditSheetOpen}
                     user={selectedUser}
-                    allModules={allModules}
                     onUserUpdate={refreshList}
                     allEscolas={allEscolas}
                 />
@@ -331,7 +323,6 @@ export function UsersClient({ initialUsers, allEscolas, currentUserId }: { initi
              <CreateUserSheet
                 isOpen={isCreateSheetOpen}
                 setIsOpen={setIsCreateSheetOpen}
-                allModules={allModules}
                 allEscolas={allEscolas}
                 onUserCreated={refreshList}
             />

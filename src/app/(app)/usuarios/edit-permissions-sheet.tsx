@@ -12,7 +12,6 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,25 +22,17 @@ import { updateUserPermissions } from './actions';
 import { Loader2, Check, ChevronsUpDown, X, School } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type Module = {
-    id: string;
-    label: string;
-    description: string;
-}
-
 type EditUserPermissionsSheetProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   user: Profile;
-  allModules: Module[];
   onUserUpdate: (updatedUser: Profile) => void;
   allEscolas: Escola[];
 };
 
-export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, onUserUpdate, allEscolas }: EditUserPermissionsSheetProps) {
+export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, onUserUpdate, allEscolas }: EditUserPermissionsSheetProps) {
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
-    const [selectedModules, setSelectedModules] = useState<string[]>([]);
     const [selectedRole, setSelectedRole] = useState<'admin' | 'user'>('user');
     const [selectedSchool, setSelectedSchool] = useState<string | null | undefined>(null);
     const [selectedRegional, setSelectedRegional] = useState('');
@@ -67,7 +58,6 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
 
     useEffect(() => {
         if (user) {
-            setSelectedModules(user.modules || []);
             setSelectedRole(user.role || 'user');
             setSelectedSchool(user.ue);
             setEscolasFavoritas((user.escolas_favoritas || []).map(String));
@@ -76,12 +66,6 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
             setFavRegional('');
         }
     }, [user, allEscolas]);
-
-    const handleModuleToggle = (moduleId: string) => {
-        setSelectedModules(prev =>
-            prev.includes(moduleId) ? prev.filter(m => m !== moduleId) : [...prev, moduleId]
-        );
-    };
 
     const toggleFavorita = (escolaId: string) => {
         const id = String(escolaId);
@@ -92,7 +76,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
 
     const handleSave = async () => {
         setLoading(true);
-        const result = await updateUserPermissions(user.id, selectedModules, selectedRole, selectedSchool, escolasFavoritas, selectedRegional || null);
+        const result = await updateUserPermissions(user.id, selectedRole, selectedSchool, escolasFavoritas, selectedRegional || null);
         setLoading(false);
 
         if (result.error) {
@@ -106,7 +90,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                 title: 'Permissões Atualizadas!',
                 description: `As permissões de ${user.name || user.email} foram salvas.`,
             });
-            onUserUpdate({ ...user, modules: selectedModules, role: selectedRole, ue: selectedSchool, regional: selectedRegional || null, escolas_favoritas: escolasFavoritas });
+            onUserUpdate({ ...user, role: selectedRole, ue: selectedSchool, regional: selectedRegional || null, escolas_favoritas: escolasFavoritas });
             setIsOpen(false);
         }
     };
@@ -128,7 +112,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                 <SheetHeader>
                     <SheetTitle>Gerenciar Permissões</SheetTitle>
                     <SheetDescription>
-                        Defina a função e os módulos que <span className="font-semibold text-foreground">{user.name || user.email}</span> pode acessar.
+                        Defina a função e a escola de <span className="font-semibold text-foreground">{user.name || user.email}</span>.
                     </SheetDescription>
                 </SheetHeader>
 
@@ -144,7 +128,7 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                                 <SelectItem value="admin">Administrador</SelectItem>
                             </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">Administradores têm acesso a todos os módulos.</p>
+                        <p className="text-xs text-muted-foreground">Administrador acessa tudo. Usuário acessa tudo, menos a Gestão (usuários, auditoria, unidades e chamados).</p>
                     </div>
 
                     <div className="space-y-2">
@@ -312,29 +296,6 @@ export function EditUserPermissionsSheet({ isOpen, setIsOpen, user, allModules, 
                         </div>
                     )}
 
-                    <div className="space-y-2">
-                        <h4 className="font-medium">Módulos Acessíveis</h4>
-                        <div className="space-y-4 rounded-md border p-4">
-                            {allModules.map(module => (
-                                <div key={module.id} className="flex items-start space-x-3">
-                                    <Checkbox
-                                        id={module.id}
-                                        checked={isAdmin || selectedModules.includes(module.id)}
-                                        onCheckedChange={() => handleModuleToggle(module.id)}
-                                        disabled={isAdmin || module.id === 'dashboard'}
-                                        className="mt-1"
-                                    />
-                                    <div className="grid gap-1.5 leading-none">
-                                        <Label htmlFor={module.id} className="font-medium leading-snug">
-                                            {module.label}
-                                            {module.id === 'dashboard' && <span className="text-muted-foreground text-xs font-normal"> (acesso padrão)</span>}
-                                        </Label>
-                                        {module.description && <p className="text-xs text-muted-foreground">{module.description}</p>}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
                 </div>
 
                 <SheetFooter className="mt-auto border-t pt-4">
