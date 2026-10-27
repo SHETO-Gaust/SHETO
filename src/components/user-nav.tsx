@@ -38,7 +38,9 @@ export function UserNav({ user, profile }: UserNavProps) {
 
   return (
     <>
-      <DropdownMenu>
+      {/* modal={false}: "Alterar Senha" abre um painel a partir do menu; com o menu modal o
+          <body> fica com pointer-events:none ao fechar o painel e a página trava até o F5. */}
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-8 w-8 rounded-full">
             <Avatar className="h-9 w-9">
