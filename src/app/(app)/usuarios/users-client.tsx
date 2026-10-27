@@ -246,7 +246,10 @@ export function UsersClient({ initialUsers, allEscolas, currentUserId }: { initi
                                     </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                    <DropdownMenu>
+                                    {/* modal={false}: os itens abrem painel/diálogo (Permissões, Excluir). Com o menu
+                                        modal, ele deixa pointer-events:none no <body> e o painel, ao fechar, "restaura"
+                                        esse valor - a página para de responder até o F5. */}
+                                    <DropdownMenu modal={false}>
                                         <DropdownMenuTrigger asChild>
                                             <Button variant="ghost" size="icon" className="h-8 w-8" disabled={carregando}>
                                                 {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
