@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/types';
+import { podeAcessarModulo } from '@/lib/permissoes';
 
 const allLinks = [
   { href: '/dashboard', label: 'Painel', icon: LayoutDashboard, module: 'dashboard' },
@@ -43,7 +44,7 @@ const allLinks = [
   { href: '/auditoria', label: 'Auditoria de Dados', icon: ShieldCheck, module: 'auditoria', group: 'management' },
   { href: '/usuarios', label: 'Usuários', icon: Users, module: 'usuarios', group: 'management' },
   { href: '/unidades', label: 'Unidades', icon: Building2, module: 'unidades', group: 'management' },
-  // Modulo que nenhum perfil recebe: so admin ve, pelo bypass de hasAccess.
+  // Gestao (auditoria, usuarios, unidades, chamados): so admin ve.
   { href: '/chamados', label: 'Chamados', icon: LifeBuoy, module: 'chamados', group: 'management' },
 ];
 
@@ -57,25 +58,8 @@ const linkGroups = [
 export function MainNav({ profile }: { profile: Profile | null }) {
   const pathname = usePathname();
 
-  const hasAccess = (module: string) => {
-    if (profile?.role === 'admin') return true;
-    if (module === 'dashboard') return true;
-
-    const groupModules: { [key: string]: string[] } = {
-      'dados-horario': ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'],
-      'horarios': ['horarios'],
-      'detalhes': ['horarios'],
-      'usuarios': ['usuarios', 'auditoria', 'unidades']
-    };
-
-    for (const group in groupModules) {
-      if (groupModules[group].includes(module)) {
-        return profile?.modules?.includes(group) || false;
-      }
-    }
-
-    return profile?.modules?.includes(module) || false;
-  }
+  const hasAccess = (module: string) =>
+    profile ? podeAcessarModulo(profile.role, module) : module === 'dashboard';
 
   const visibleLinks = allLinks.filter(link => hasAccess(link.module));
   const mainLinks = visibleLinks.filter(l => !l.group);

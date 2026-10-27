@@ -27,6 +27,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from '@/components/ui/button';
 import { signOut } from '@/app/login/actions';
 import { headers } from 'next/headers';
+import { podeAcessarModulo } from '@/lib/permissoes';
 
 /**
  * Toda pagina sob (app) depende da sessao do usuario e do banco - nenhuma
@@ -50,7 +51,7 @@ const moduleMap: { [key: string]: string } = {
     '/serie': 'serie',
     '/auditoria': 'auditoria',
     '/substituicoes': 'horarios',
-    // Nenhum perfil recebe este modulo: so admin (bypass) entra.
+    // Gestao: so admin entra (ver src/lib/permissoes.ts).
     '/chamados': 'chamados',
 };
 
@@ -85,7 +86,6 @@ export default async function AppLayout({
       email: user.email!,
       role: 'user',
       active: true,
-      modules: ['dashboard'],
       name: user.user_metadata?.name || user.email?.split('@')[0]
   };
 
@@ -129,30 +129,9 @@ export default async function AppLayout({
   const pathname = headerList.get('x-next-url') || '/dashboard';
   
   const requiredModuleKey = Object.keys(moduleMap).find(key => pathname.startsWith(key));
-  let hasPermission = true;
-
-  if (requiredModuleKey) {
-      const moduleName = moduleMap[requiredModuleKey as keyof typeof moduleMap];
-      const isAdmin = userProfile?.role === 'admin';
-
-      if (isAdmin) {
-        hasPermission = true;
-      } else if (moduleName === 'dashboard') {
-        hasPermission = true;
-      } else {
-        const userModules = Array.isArray(userProfile?.modules) ? userProfile.modules : [];
-        const groupModule = ['turno', 'ensino', 'disciplinas', 'professores', 'serie', 'turmas'].includes(moduleName) ? 'dados-horario'
-                            : moduleName === 'horarios' ? 'horarios'
-                            : ['usuarios', 'auditoria', 'unidades'].includes(moduleName) ? 'usuarios'
-                            : null;
-
-        if(groupModule) {
-            hasPermission = userModules.includes(groupModule);
-        } else {
-            hasPermission = userModules.includes(moduleName);
-        }
-      }
-  }
+  const hasPermission = requiredModuleKey
+      ? podeAcessarModulo(userProfile?.role, moduleMap[requiredModuleKey as keyof typeof moduleMap])
+      : true;
 
   return (
     <SidebarProvider>

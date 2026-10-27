@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -35,18 +34,11 @@ import { Loader2, Check, ChevronsUpDown, X, School } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Escola } from '@/lib/types';
 
-type Module = {
-    id: string;
-    label: string;
-    description: string;
-}
-
 const createUserFormSchema = z.object({
   name: z.string().optional(),
   email: z.string().email({ message: "Email inválido." }),
   password: z.string().min(6, { message: "A senha deve ter no mínimo 6 caracteres." }),
   role: z.enum(['admin', 'user']),
-  modules: z.array(z.string()).optional(),
   ue: z.string().nullable().optional(),
 });
 
@@ -55,12 +47,11 @@ type CreateUserFormValues = z.infer<typeof createUserFormSchema>;
 type CreateUserSheetProps = {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  allModules: Module[];
   allEscolas: Escola[];
   onUserCreated?: () => void;
 };
 
-export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onUserCreated }: CreateUserSheetProps) {
+export function CreateUserSheet({ isOpen, setIsOpen, allEscolas, onUserCreated }: CreateUserSheetProps) {
     const { toast } = useToast();
     const [loading, setLoading] = useState(false);
 
@@ -71,7 +62,6 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
             email: '',
             password: '',
             role: 'user',
-            modules: ['dashboard'],
         }
     });
 
@@ -108,14 +98,6 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
         setEscolasFavoritas(prev =>
             prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
         );
-    };
-
-    const handleModuleToggle = (moduleId: string) => {
-        const currentModules = form.getValues('modules') || [];
-        const newModules = currentModules.includes(moduleId)
-            ? currentModules.filter(m => m !== moduleId)
-            : [...currentModules, moduleId];
-        form.setValue('modules', newModules, { shouldValidate: true });
     };
 
     const onSubmit = async (data: CreateUserFormValues) => {
@@ -224,7 +206,7 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                                             <SelectItem value="admin">Administrador</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                    <p className="text-xs text-muted-foreground">Administradores têm acesso a todos os módulos.</p>
+                                    <p className="text-xs text-muted-foreground">Administrador acessa tudo. Usuário acessa tudo, menos a Gestão (usuários, auditoria, unidades e chamados).</p>
                                     <FormMessage />
                                 </FormItem>
                             )}
@@ -397,29 +379,6 @@ export function CreateUserSheet({ isOpen, setIsOpen, allModules, allEscolas, onU
                             </div>
                         )}
 
-                        <div className="space-y-2">
-                            <h4 className="font-medium">Módulos Acessíveis</h4>
-                            <div className="space-y-4 rounded-md border p-4">
-                                {allModules.map(module => (
-                                    <div key={module.id} className="flex items-start space-x-3">
-                                        <Checkbox
-                                            id={`create-${module.id}`}
-                                            checked={isAdmin || (form.getValues('modules') || []).includes(module.id)}
-                                            onCheckedChange={() => handleModuleToggle(module.id)}
-                                            disabled={isAdmin || module.id === 'dashboard'}
-                                            className="mt-1"
-                                        />
-                                        <div className="grid gap-1.5 leading-none">
-                                            <Label htmlFor={`create-${module.id}`} className="font-medium leading-snug">
-                                                {module.label}
-                                                {module.id === 'dashboard' && <span className="text-muted-foreground text-xs font-normal"> (acesso padrão)</span>}
-                                            </Label>
-                                            {module.description && <p className="text-xs text-muted-foreground">{module.description}</p>}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
                     </form>
                 </Form>
 

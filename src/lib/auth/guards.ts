@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/db/server';
 import type { Profile } from '@/lib/types';
+import { podeAcessarModulo } from '@/lib/permissoes';
 
 /**
  * Guardas de autorizacao para Server Actions.
@@ -12,16 +13,6 @@ import type { Profile } from '@/lib/types';
  * Todas lancam excecao em caso de negativa (fail-closed): o Next.js
  * converte em erro generico no cliente, sem vazar detalhe interno.
  */
-
-/** Modulos-grupo, espelhando a logica de permissao de src/app/(app)/layout.tsx */
-const GRUPO_DADOS_HORARIO = ['turno', 'ensino', 'disciplinas', 'componentes', 'professores', 'serie', 'turmas'];
-const GRUPO_USUARIOS = ['usuarios', 'auditoria', 'unidades'];
-
-function grupoDoModulo(modulo: string): string {
-  if (GRUPO_DADOS_HORARIO.includes(modulo)) return 'dados-horario';
-  if (GRUPO_USUARIOS.includes(modulo)) return 'usuarios';
-  return modulo;
-}
 
 /** Exige sessao valida e perfil ativo. Retorna o perfil do usuario. */
 export async function requireAuth(): Promise<Profile> {
@@ -72,16 +63,12 @@ export async function requireEscola(escolaId: string | number): Promise<Profile>
 }
 
 /**
- * Exige que o usuario tenha o modulo liberado (mesma regra do layout).
- * Admin tem acesso total; 'dashboard' e liberado para todos.
+ * Exige que o perfil possa acessar o modulo (regra em src/lib/permissoes.ts):
+ * admin acessa tudo; usuario, tudo menos a Gestao.
  */
 export async function requireModulo(modulo: string): Promise<Profile> {
   const profile = await requireAuth();
-  if (profile.role === 'admin') return profile;
-  if (modulo === 'dashboard') return profile;
-
-  const modulos = Array.isArray(profile.modules) ? profile.modules : [];
-  if (!modulos.includes(grupoDoModulo(modulo))) {
+  if (!podeAcessarModulo(profile.role, modulo)) {
     throw new Error(`Acesso negado ao modulo "${modulo}".`);
   }
   return profile;

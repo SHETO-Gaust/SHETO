@@ -54,7 +54,6 @@ function regionalDoUsuario(escola: EscolaResumo | null, regionalInformada: strin
 
 export async function updateUserPermissions(
     userId: string,
-    modules: string[],
     role: 'admin' | 'user',
     ue: string | null | undefined,
     escolas_favoritas?: string[],
@@ -69,7 +68,6 @@ export async function updateUserPermissions(
     const { error } = await dbAdmin
         .from('profiles')
         .update({
-            modules,
             role,
             ue: ueFinal,
             regional: regionalDoUsuario(escola, regional),
@@ -128,7 +126,6 @@ const createUserSchema = z.object({
   email: z.string().email({ message: "Email inválido." }),
   password: z.string().min(6, { message: "A senha deve ter no mínimo 6 caracteres." }),
   role: z.enum(['admin', 'user']),
-  modules: z.array(z.string()),
   ue: z.string().nullable().optional(),
   regional: z.string().nullable().optional(),
   escolas_favoritas: z.array(z.string()).optional(),
@@ -139,7 +136,6 @@ type NovaConta = {
     password: string;
     name?: string;
     role: 'admin' | 'user';
-    modules: string[];
     escola: EscolaResumo | null;
     regional: string | null;
     escolas_favoritas?: string[];
@@ -171,7 +167,6 @@ async function criarConta(dbAdmin: DbAdmin, conta: NovaConta): Promise<{ error?:
             id: authData.user.id,
             name: conta.name,
             role: conta.role,
-            modules: conta.modules,
             email: conta.email,
             ue: isAdmin ? null : (conta.escola ? String(conta.escola.id) : null),
             regional: conta.regional,
@@ -213,11 +208,11 @@ export async function createUser(formData: z.infer<typeof createUserSchema>) {
         };
     }
 
-    const { email, password, name, role, modules, ue, regional, escolas_favoritas } = validatedFields.data;
+    const { email, password, name, role, ue, regional, escolas_favoritas } = validatedFields.data;
     const escola = role === 'admin' ? null : await buscarEscola(dbAdmin, ue);
 
     const conta: NovaConta = {
-        email, password, name, role, modules, escola,
+        email, password, name, role, escola,
         regional: regionalDoUsuario(escola, regional),
         escolas_favoritas,
     };
@@ -320,7 +315,6 @@ export async function importarLoteUsuarios(linhas: LinhaLoteBruta[], enviarEmail
             password: r.senha || senhaGerada!,
             name: r.nome || undefined,
             role: r.role,
-            modules: r.modules,
             escola: r.ue ? escolaPorId.get(r.ue) ?? null : null,
             regional: r.regional,
         };
