@@ -282,19 +282,24 @@ As demais `SHETO_*` que aparecem no código são ajustes finos do motor para tes
 
 ## 9. Atualizar a produção
 
-Na VM, a partir da pasta do projeto:
+A VM não usa Git. A versão que roda em produção é a da branch `All_In`, e a atualização é feita copiando os arquivos para a pasta do projeto na VM e fazendo o build lá.
+
+1. Num computador com acesso ao GitHub, deixe a pasta do projeto na versão atual da `All_In` (`git pull`).
+2. Leia a seção **Ao atualizar** do [CHANGELOG.md](CHANGELOG.md) para as entregas novas. Ali estão as migrations obrigatórias.
+3. Copie os arquivos para a pasta do projeto na VM. **Não sobrescreva o `.env.local` da VM**: ele tem as senhas e endereços de produção, diferentes dos de desenvolvimento. O `log.txt` também é só da VM.
+4. Na VM, a partir da pasta do projeto:
 
 ```bash
-git pull
-npm ci
-# aplique as migrations novas ANTES de reiniciar (ver seção 10)
+# se o package.json mudou: atualize as dependências (npm ci)
+# se houver migration nova: aplique ANTES do build (seção 10)
 npm run build
 pm2 restart <nome-do-processo>   # pm2 list mostra o nome
 ```
 
-- `npm run build` também recompila os workers da geração. Não pule.
-- Leia a seção **Ao atualizar** do [CHANGELOG.md](CHANGELOG.md) antes de subir: ali estão as migrations obrigatórias de cada entrega. Subir código que espera uma coluna que ainda não existe quebra a tela correspondente.
-- Para conferir o build sem derrubar um servidor de desenvolvimento em execução, use `npm run build:check`.
+- `npm run build` também recompila os workers da geração de horário. Não pule, mesmo que a mudança pareça só de tela.
+- Subir código que espera uma coluna que ainda não existe no banco quebra a tela correspondente. Por isso a migration vem antes.
+- O build reescreve a pasta `.next`, que o sistema em execução está usando, e as telas podem dar erro até o `pm2 restart`. Atualize fora do horário de uso. Se o build falhar, não reinicie: corrija e rode o build de novo.
+- Para conferir o build num computador de desenvolvimento sem derrubar o `npm run dev`, use `npm run build:check`.
 
 ## 10. Banco de dados e migrations
 
