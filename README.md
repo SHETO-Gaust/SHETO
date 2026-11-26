@@ -252,7 +252,7 @@ A geração de horário roda em threads separadas (`workers/`, compiladas de `sr
 
 ## 8. Variáveis de ambiente
 
-Ficam em `.env.local`, na raiz do projeto. Esse arquivo não é versionado e nunca deve ser.
+Ficam em `.env.local`, na raiz do projeto. Esse arquivo não é versionado e nunca deve ser. O modelo, sem valores, é o [.env.example](.env.example).
 
 **Obrigatórias**
 
@@ -370,7 +370,7 @@ Scripts em `scripts/`. Os `.js` rodam com `node`, os `.ts` com `npx tsx`. Todos 
 git clone https://github.com/SHETO-Gaust/SHETO.git
 cd SHETO
 npm install
-# crie o .env.local (seção 8) apontando para o banco local
+cp .env.example .env.local   # e preencha (seção 8)
 npm run dev        # http://localhost:9002
 ```
 
