@@ -44,9 +44,9 @@ Contas só são criadas por um administrador (ver [Gestão de usuários](#51-usu
 
 ## 2. Entrar no sistema
 
-- O login é o e-mail institucional e a senha recebida por e-mail.
+- O login é o e-mail institucional. A senha inicial vem no e-mail de boas-vindas; nas contas de escola, é o INEP da escola.
 - **Esqueci minha senha**, na tela de entrada, envia um link de redefinição. O link vale por 60 minutos e só pode ser usado uma vez.
-- Para trocar a senha estando logado: menu do usuário, **Perfil**, **Alterar Senha**. A senha precisa ter pelo menos 8 caracteres.
+- Para trocar a senha estando logado: menu do usuário, **Perfil**, **Alterar Senha** (mínimo de 6 caracteres; pelo link de redefinição, mínimo de 8).
 - O nome da escola em que se está trabalhando aparece sempre no alto da tela. O administrador troca de escola pelo seletor ali mesmo, e pode marcar escolas favoritas para encontrá-las mais rápido.
 - Cada tela tem um tutorial curto que abre na primeira visita e pode ser reaberto pelo botão de ajuda no topo. O botão **Suporte**, ao lado, abre um chat que tira dúvidas sobre o uso e, se não resolver, abre um chamado para a equipe técnica (até 3 fotos; Ctrl+V cola um print).
 
@@ -171,9 +171,15 @@ Na mesma tela: exportar para Excel, gerar PDF ou imprimir.
 
 **Gestão > Usuários.** Lista com busca por nome, e-mail, escola ou regional (ignora acento e maiúscula) e filtros por regional, função e status.
 
-**Criar um usuário:** nome, e-mail, senha, função (Administrador ou Usuário) e regional. Para *Usuário*, vincule a escola; a regional passa a ser a da escola. Para *Administrador*, a escola é opcional e é possível marcar escolas favoritas. A pessoa recebe um e-mail de boas-vindas com o login e uma senha temporária, que deve ser trocada no primeiro acesso.
+**Criar um usuário:** nome, e-mail, senha, função (Administrador ou Usuário) e regional. Para *Usuário*, vincule a escola; a regional passa a ser a da escola. Para *Administrador*, a escola é opcional e é possível marcar escolas favoritas. A pessoa recebe um e-mail de boas-vindas com o login e a senha.
 
-**Cadastro em lote:** botão de importação na mesma tela. Baixe o modelo (traz uma aba de instruções e a lista de regionais válidas), preencha e envie um `.xlsx`, `.xls` ou `.csv` com até 500 linhas. A escola pode ser informada pelo INEP ou pelo nome. O sistema mostra uma prévia linha a linha antes de gravar; linhas com erro (e-mail repetido, escola não encontrada, senha curta) são puladas e as demais são importadas. Senha em branco é gerada pelo sistema, e o relatório final, para baixar, traz as senhas geradas. O envio de e-mail é opcional.
+**Senha inicial.** Quem define é o administrador que cria a conta, seja na tela ou na planilha:
+- usuário vinculado a uma escola: o INEP da escola;
+- usuário sem escola (sede, regional): uma senha criada pelo administrador.
+
+A senha é temporária. O e-mail recomenda trocá-la pelo Perfil, mas a troca não é obrigatória.
+
+**Cadastro em lote:** botão de importação na mesma tela. Baixe o modelo (traz uma aba de instruções e a lista de regionais válidas), preencha e envie um `.xlsx`, `.xls` ou `.csv` com até 500 linhas. A escola pode ser informada pelo INEP ou pelo nome. O sistema mostra uma prévia linha a linha antes de gravar; linhas com erro (e-mail repetido, escola não encontrada, senha curta) são puladas e as demais são importadas. A coluna de senha segue a mesma regra: INEP para usuários de escola, senha definida pelo administrador para os demais. Se ficar em branco, o sistema gera uma aleatória, que aparece no relatório final para baixar. O envio de e-mail é opcional.
 
 **Menu de cada linha (...):**
 - *Permissões*: trocar função, escola, regional e favoritas;
