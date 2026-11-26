@@ -2,7 +2,7 @@
  * Verifica (e opcionalmente repara) as colunas jsonb que guardam LISTA e que
  * podem ter sido gravadas como objeto vazio.
  *
- * Contexto: antes do commit ff6935e o shim entregava um array JS cru ao
+ * Contexto: antes do commit afb5312 o shim entregava um array JS cru ao
  * node-postgres, que o convertia para o literal de array do Postgres (`{}`).
  * O jsonb aceita isso sem reclamar, como OBJETO vazio. Onde deveria haver
  * `[]` ficou `{}` - sem erro e sem log. O codigo foi corrigido, mas linha ja

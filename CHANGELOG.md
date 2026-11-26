@@ -93,7 +93,7 @@ deixa de soar como liberação de acesso.
 
 ## [Não lançado] — `All_In`, rodada de 14/09/2026
 
-Commit `f776ff5`. Aula Não Presencial passa a poder ficar dentro do próprio
+Commit `184bbf0`. Aula Não Presencial passa a poder ficar dentro do próprio
 turno da série, e o Noturno destrava contraturno.
 
 ### Adicionado
@@ -211,7 +211,7 @@ verdade, e o controle ganhou 1x nos dois lados.
 
 ## [Não lançado] — `All_In`, rodada de 04/09/2026
 
-Nove commits (`a7c83f1`..`4ab85e7`). Geminação combinada com cada professor,
+Nove commits (`ab091c7`..`9400be5`). Geminação combinada com cada professor,
 regeração de uma grade a partir de outra, e a saída do que restava do Supabase.
 
 ### ⚠️ Ao atualizar
